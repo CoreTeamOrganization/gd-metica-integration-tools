@@ -54,6 +54,11 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Loaded by name at runtime, so it has to sit in a Resources folder.</summary>
         public const string StandaloneConfigAsset = "Assets/Resources/MeticaAdsConfig.asset";
 
+        // ── Genre Creator ────────────────────────────────────────────────────────
+
+        /// <summary>Where the Genre Creator writes generated genre files.</summary>
+        public const string GenresRoot = "Assets/MeticaGenres";
+
         public static void ForgetCache()
         {
             _gdRoot = null;

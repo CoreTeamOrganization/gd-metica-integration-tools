@@ -32,3 +32,31 @@
   - **Known gap, not yet fixed:** `PerformanceTrackerPrompt`'s `[InitializeOnLoad]` popup
     now fires for Ads-only projects too, not just Genre Creator ones. Fold into a Genre
     wizard step when the window is rebuilt (next phase), instead of a package-wide prompt.
+
+- Genre Creator's window rebuilt as wizard steps, matching Ads Integration's UX.
+  - Extracted `MeticaStepWizardWindow` (`Editor/Shared/`) from `MeticaIntegrationWindow` —
+    the generic verify/sign-off/review-gate/log engine, unchanged in behavior. Both windows
+    are now this shell plus their own step list and header; `MeticaIntegrationWindow` itself
+    was refactored onto it (mechanical extraction, not a rewrite — the Ads flow's own logic,
+    including the GDSDK/standalone step-list switch, is unchanged).
+  - New `GenreWizardWindow`, at `GameDistrict/Metica/Genre Creator...` (moved off
+    `GenreCreatorWindow`, which keeps its logic but lost its menu item — it opens only from
+    the wizard's last step now): `GradleVersionStep`, `GradleJdkStep` (new), `KotlinTemplateStep`
+    — all shared with Ads — then `PerformanceTrackerStep`, then `GenreDefinitionStep`.
+  - New `GradleJdkStep` (`Editor/Shared/Gradle/`): points `gradleTemplate.properties`'
+    `org.gradle.java.home` at a JDK 17+ install, enabling Custom Gradle Properties Template
+    the same way `KotlinTemplateStep` enables Custom Base Gradle Template — by copying
+    Unity's own default rather than guessing `android.useAndroidX`/`enableJetifier`. Reads a
+    JDK's version from its own `release` file, mirroring how `GradleVersionStep` reads
+    Gradle's version from `gradle-launcher-*.jar` rather than invoking a binary.
+  - **Fixed the known gap above:** `PerformanceTrackerPrompt`'s package-wide
+    `[InitializeOnLoad]` popup is gone, replaced by `PerformanceTrackerStep` (Genre wizard
+    only, explicit Verify/Apply, `Client.Add` deferred and progress-barred like
+    `RemoveToolStep`'s `Client.Remove`).
+  - New `GenreDefinitionStep`: not a one-time setup step like the ones before it (there is no
+    "wrong" number of genres) — always verifies, and its button opens `GenreCreatorWindow`
+    for as long as the game keeps adding genres.
+  - **New known gap:** `MeticaSymbolInstaller` still runs as a package-wide
+    `[InitializeOnLoad]` installer rather than a step — left alone since, unlike the
+    performance-tracker prompt, it never shows a dialog and only adds scripting defines, so
+    it does not actually bother an Ads-only project. Worth converting later for consistency.

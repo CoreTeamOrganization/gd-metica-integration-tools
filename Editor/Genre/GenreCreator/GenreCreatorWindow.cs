@@ -22,8 +22,15 @@ namespace GameDistrict.MeticaIntegrationTools
         private List<string> _sheetNames    = new();
         private int          _selectedSheet = 0;
 
-        // ── Menu ──────────────────────────────────────────────────────────────
-        [MenuItem("GameDistrict/Metica/Genre Creator...", false, 20)]
+        // ── Opening ───────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// No menu item of its own — reached through the Genre Creator wizard's
+        /// "Create genres" step (GenreDefinitionStep), which is the one thing under
+        /// GameDistrict/Metica/Genre Creator... . This window is content authoring, not
+        /// setup, so it stays one level in rather than sitting at the top menu twice for
+        /// two different meanings of "Genre Creator".
+        /// </summary>
         public static void ShowWindow()
         {
             var w = GetWindow<GenreCreatorWindow>("Genre Creator");

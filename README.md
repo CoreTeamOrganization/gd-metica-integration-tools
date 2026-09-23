@@ -5,9 +5,10 @@ time from **GameDistrict → Metica**:
 
 - **Ads Integration…** — gets Metica ads into a project, standalone or wired into the GD
   Monetization SDK. See [Editor/Ads/README.md](Editor/Ads/README.md).
-- **Genre Creator…** — generates type-safe Metica analytics genre files. Moved in from
-  `gd-analytics-genre-creator`; still the original ad-hoc window for now, not yet rebuilt
-  as wizard steps. See [Editor/Genre/README.md](Editor/Genre/README.md).
+- **Genre Creator…** — a setup wizard (Android toolchain, scripting define, optional
+  Performance Tracker package), whose last step opens the actual genre-authoring window —
+  moved in from `gd-analytics-genre-creator`, unchanged. See
+  [Editor/Genre/README.md](Editor/Genre/README.md).
 
 Both flows share one Gradle/Kotlin/AGP layer (`Editor/Shared/Gradle/`), so there is a
 single place that owns `baseProjectTemplate.gradle`, not two.
@@ -38,13 +39,20 @@ change. One versioned package fixes that: every project points at the same sourc
 ```
 Editor/
   GameDistrict.MeticaIntegrationTools.Editor.asmdef   references GameDistrict.MeticaAnalytics.Runtime
-  Shared/            MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress
-                      stores, and Gradle/ (GradleVersionStep, KotlinTemplateStep,
-                      GradleTemplateEditor) — used by both flows
-  Ads/               the Ads Integration wizard and its steps/templates
-  Genre/             the Genre Creator wizard: GenreCreator/ (the codegen engine, untouched),
-                      MeticaSymbolInstaller, PerformanceTrackerPrompt — still the original
-                      window, not yet wizard steps
+  Shared/
+    MeticaStepWizardWindow   the generic wizard shell (verify, sign off, review gate, log) —
+                             both windows below are this plus their own step list and header
+    MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress stores
+    Gradle/                GradleVersionStep, KotlinTemplateStep, GradleTemplateEditor,
+                            GradleJdkStep — used by both flows, so one place owns
+                            baseProjectTemplate.gradle and gradleTemplate.properties, not two
+  Ads/                     MeticaIntegrationWindow + its steps/templates
+  Genre/
+    GenreWizardWindow      the setup wizard: shared Gradle steps, MeticaSymbolInstaller
+                           (still an [InitializeOnLoad] installer, not a step — see below),
+                           PerformanceTrackerStep, GenreDefinitionStep
+    GenreCreator/          the actual genre-authoring window and codegen engine, unchanged —
+                           opened by GenreDefinitionStep, no menu item of its own
 Runtime/
   GameDistrict.MeticaAnalytics.Runtime.asmdef   Genre Creator's base classes (AnalyticsEventData,
                                                  GDMeticaAnalytics) — name, namespace and script
@@ -67,11 +75,12 @@ every one of those on update. `GenreCodeGenerator` also still emits `GameDistric
 into newly generated genre files — a hardcoded string constant, unaffected by anything the
 *editor* side is called.
 
-## Known gap from the move (not yet addressed)
+## Known gap, not yet addressed
 
-`PerformanceTrackerPrompt` runs on every Editor load (`[InitializeOnLoad]`) and offers to
-install GD Performance Tracker if it's missing. That was fine as a genre-creator-only
-package; now that Ads Integration ships in the same package, a project using *only* the Ads
-flow gets this prompt too, for a dependency it has no use for. Planned fix: fold this into
-a proper Genre wizard step (see CHANGELOG.md) instead of a package-wide auto-prompt, when
-the Genre Creator window gets rebuilt as steps.
+`MeticaSymbolInstaller` still runs on every Editor load (`[InitializeOnLoad]`) and silently
+sets `METICA_ANALYTICS` / `GD_PERFORMANCE_TRACKER` scripting defines once it detects the
+matching SDK. Unlike the old `PerformanceTrackerPrompt` (now `PerformanceTrackerStep`, fixed
+in the move to Genre wizard steps), this one never shows a dialog and only ever adds a
+define — harmless for an Ads-only project, just not yet made explicit the way everything
+else in this package is. Left alone for now since it does not actually bother anyone; worth
+converting to a step later for consistency.
