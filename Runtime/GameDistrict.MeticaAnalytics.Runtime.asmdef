@@ -1,0 +1,18 @@
+{
+    "name": "GameDistrict.MeticaAnalytics.Runtime",
+    "rootNamespace": "GameDistrict.MeticaAnalytics",
+    "references": [
+        "Metica.SDK",
+        "MeticaAnalyticsAbstractions",
+        "GDPerformanceTracker.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

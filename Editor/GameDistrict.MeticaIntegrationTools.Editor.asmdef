@@ -1,7 +1,9 @@
 {
     "name": "GameDistrict.MeticaIntegrationTools.Editor",
     "rootNamespace": "GameDistrict.MeticaIntegrationTools",
-    "references": [],
+    "references": [
+        "GameDistrict.MeticaAnalytics.Runtime"
+    ],
     "includePlatforms": [
         "Editor"
     ],

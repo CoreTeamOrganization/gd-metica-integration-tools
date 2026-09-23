@@ -16,4 +16,19 @@
   - `GradleVersionStep`, `KotlinTemplateStep`, `GradleTemplateEditor` moved to
     `Editor/Shared/Gradle/` — shared with the Genre Creator flow once it lands, so only one
     place owns `baseProjectTemplate.gradle`.
-- Genre Creator (from `gd-analytics-genre-creator`) not yet moved in.
+- Genre Creator moved in from `gd-analytics-genre-creator`, verbatim — still its original
+  ad-hoc window, not yet rebuilt as wizard steps.
+  - `Runtime/` (`AnalyticsEventData`, `GDMeticaAnalytics`, and their asmdef) kept their
+    exact original name, namespace (`GameDistrict.MeticaAnalytics`) and script GUIDs —
+    existing games already have generated code and saved references against them.
+  - Editor-only genre code (`GenreCreator/`, `MeticaSymbolInstaller`, `PerformanceTrackerPrompt`)
+    renamed into the shared `GameDistrict.MeticaIntegrationTools` namespace — safe, since
+    nothing outside the package references an editor script by name.
+  - Added `GameDistrict.MeticaAnalytics.Runtime` to the Editor asmdef's references
+    (`GenreExcelParser` reflects on `typeof(GDMeticaAnalytics)`), and
+    `com.unity.nuget.newtonsoft-json` to `package.json`.
+  - Menu moved from `GameDistrict/Metica Analytics/Create New Genre...` to
+    `GameDistrict/Metica/Genre Creator...`, alongside Ads Integration.
+  - **Known gap, not yet fixed:** `PerformanceTrackerPrompt`'s `[InitializeOnLoad]` popup
+    now fires for Ads-only projects too, not just Genre Creator ones. Fold into a Genre
+    wizard step when the window is rebuilt (next phase), instead of a package-wide prompt.
