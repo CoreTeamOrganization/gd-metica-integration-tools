@@ -1,0 +1,64 @@
+using UnityEngine;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// The remote switch that decides whether Metica runs at all — a kill switch you can
+    /// throw from your backend without shipping a build.
+    ///
+    /// <para>The awkward part, and the reason this is not just a bool: remote config arrives
+    /// well after the point where Metica has to be initialized. Waiting for the fetch would
+    /// delay every ad in the session, and initializing first would make the switch useless.
+    /// So the value is <b>persisted</b>: <see cref="Apply"/> writes what your remote config
+    /// says, and the next session reads it at boot. The same trade the GD Monetization SDK
+    /// makes — a change takes effect on the session after the one that received it.</para>
+    ///
+    /// <para>Off by default. A game that leaves <c>UseRemoteSwitch</c> unticked in
+    /// MeticaAdsConfig never touches any of this, and Metica simply always initializes.</para>
+    /// </summary>
+    public static class MeticaRemoteConfig
+    {
+        private const string Key = "Metica_UseMetica";
+
+        /// <summary>True once a remote value has ever been stored on this device.</summary>
+        public static bool HasStoredValue => PlayerPrefs.HasKey(Key);
+
+        /// <summary>
+        /// Records what your remote config says. Call it whenever a fetch completes — the
+        /// value is for the next session, not this one.
+        /// </summary>
+        public static void Apply(bool useMetica)
+        {
+            var changed = !HasStoredValue || Stored(false) != useMetica;
+
+            PlayerPrefs.SetInt(Key, useMetica ? 1 : 0);
+            PlayerPrefs.Save();
+
+            MeticaAdsLog.Log(changed
+                ? $"Remote switch stored: UseMetica = {useMetica}. It takes effect next session."
+                : $"Remote switch unchanged: UseMetica = {useMetica}");
+        }
+
+        /// <summary>Forgets the stored value, so the next session falls back to the default.</summary>
+        public static void Clear()
+        {
+            PlayerPrefs.DeleteKey(Key);
+            PlayerPrefs.Save();
+            MeticaAdsLog.Log("Remote switch cleared");
+        }
+
+        /// <summary>
+        /// Whether Metica should come up this session. With the switch off this is always
+        /// true; with it on it is the value stored last session, or the config's default
+        /// until a fetch has ever landed.
+        /// </summary>
+        public static bool ShouldInitialize(MeticaAdsConfig config)
+        {
+            if (config == null || !config.UseRemoteSwitch) return true;
+
+            return HasStoredValue ? Stored(config.DefaultUseMetica) : config.DefaultUseMetica;
+        }
+
+        private static bool Stored(bool fallback) => PlayerPrefs.GetInt(Key, fallback ? 1 : 0) == 1;
+    }
+}

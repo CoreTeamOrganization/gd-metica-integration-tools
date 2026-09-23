@@ -1,0 +1,214 @@
+using Metica;
+using Metica.Ads;
+
+namespace MeticaIntegration
+{
+    public sealed class MeticaBanner : BannerAdUnit
+    {
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (IsAdUnitEmpty)
+            {
+                MeticaAdsLog.LogError("Initialize: Banner ad unit is empty");
+                return;
+            }
+            ListenEvents();
+            CreateBanner();
+        }
+
+        private void ListenEvents()
+        {
+            MeticaAdsCallbacks.Banner.OnAdLoadSuccess += OnBannerLoadedEvent;
+            MeticaAdsCallbacks.Banner.OnAdLoadFailed += OnBannerLoadFailedEvent;
+            MeticaAdsCallbacks.Banner.OnAdRevenuePaid += OnBannerRevenuePaidEvent;
+            MeticaAdsCallbacks.Banner.OnAdClicked += OnBannerClickedEvent;
+        }
+
+        private void CreateBanner()
+        {
+            isLoading = true;
+            SetBannerAutoRefreshStatus(AutoRefresh.Enabled);
+            MeticaSdk.Ads.CreateBanner(adUnitId, new MeticaAdViewConfiguration(ConvertToMeticaBannerPos()));
+            MeticaSdk.Ads.SetBannerWidth(adUnitId, 320);
+            MeticaAdsLog.Log(
+                $"Banner is creating with size {bannerInfo.bannerSize} at {bannerInfo.BannerPosition}");
+        }
+
+        public override bool HasBanner()
+        {
+            if (!hasBanner)
+            {
+                LoadBanner();
+                return false;
+            }
+
+            return true;
+        }
+
+        public override void LoadBanner()
+        {
+            if (isLoading)
+            {
+                MeticaAdsLog.LogWarning("Banner is already loading");
+                return;
+            }
+
+            isLoading = true;
+            MeticaAdsLog.Log("Banner is loading");
+            MeticaSdk.Ads.LoadBanner(adUnitId);
+        }
+
+        public override bool IsBannerActive()
+        {
+            return _isBannerActive;
+        }
+
+        public override void ShowBanner()
+        {
+            MeticaAdsLog.Log("Banner is showing");
+            _isBannerActive = true;
+            MeticaSdk.Ads.ShowBanner(adUnitId);
+        }
+
+        public override void HideBanner()
+        {
+            MeticaAdsLog.Log("Banner is hidden");
+            _isBannerActive = false;
+            MeticaSdk.Ads.HideBanner(adUnitId);
+        }
+
+        public override void DestroyBanner()
+        {
+            MeticaAdsLog.Log("Banner is destroyed");
+            MeticaSdk.Ads.HideBanner(adUnitId);
+        }
+
+        public override void RepositionBanner(BannerPosition newPosition)
+        {
+            bannerInfo.BannerPosition = newPosition;
+            if (!IsAdUnitEmpty)
+            {
+                MeticaAdsLog.Log($"Banner is repositioned to {newPosition}");
+                MeticaSdk.Ads.UpdateBannerPosition(adUnitId, ConvertToMeticaBannerPos());
+            }
+        }
+
+        private MeticaAdViewPosition ConvertToMeticaBannerPos()
+        {
+            switch (bannerInfo.BannerPosition)
+            {
+                case BannerPosition.Top:
+                    return MeticaAdViewPosition.TopCenter;
+                case BannerPosition.TopLeft:
+                    return MeticaAdViewPosition.TopLeft;
+                case BannerPosition.TopRight:
+                    return MeticaAdViewPosition.TopRight;
+                case BannerPosition.Center:
+                    return MeticaAdViewPosition.Centered;
+                case BannerPosition.Bottom:
+                    return MeticaAdViewPosition.BottomCenter;
+                case BannerPosition.BottomLeft:
+                    return MeticaAdViewPosition.BottomLeft;
+                case BannerPosition.BottomRight:
+                    return MeticaAdViewPosition.BottomRight;
+                default:
+                    return MeticaAdViewPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void OnBannerLoadedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasBanner = true;
+                MeticaAdsLog.Log("Banner loaded");
+                SetBannerAutoRefreshStatus(AutoRefresh.Enabled);
+                if (MeticaAdsManager.BannerStatus)
+                {
+                    MeticaAdsManager.ShowBanner();
+                    return;
+                }
+                HideBanner();
+            });
+        }
+
+        private void OnBannerLoadFailedEvent(MeticaAdError meticaAdError)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasBanner = false;
+                _isBannerActive = false;
+                SetBannerAutoRefreshStatus(AutoRefresh.Disabled);
+                HideBanner();
+                MeticaAdsLog.LogError("Banner failed to load");
+
+                DelayedActionManager.Add(() =>
+                {
+                    if (MeticaAdsManager.BannerStatus)
+                    {
+                        MeticaAdsManager.ShowBanner();
+                    }
+                }, 3f, "Retry Metica banner");
+            });
+        }
+
+        private void OnBannerRevenuePaidEvent(MeticaAd meticaAd)
+        {
+            double revenue = meticaAd.revenue ?? 0.0;
+            string networkName = meticaAd.networkName ?? "Unknown";
+            string adUnitIdentifier = meticaAd.adUnitId;
+
+            MeticaAdsLog.Log(
+                $"Banner revenue paid - AdUnit: {adUnitIdentifier}, Revenue: {revenue}, Network: {networkName}");
+
+            AdRevenueInfo revInfo = new(AdFormat.Banner, AdNetworkMetica.Platform, networkName,
+                adUnitIdentifier, "USD", revenue, bannerInfo.bannerSize.ToString(), AdNetworkMetica.RevenuePayload);
+
+            ThreadDispatcher.Enqueue(() => MeticaAdsHooks.ReportRevenue(revInfo));
+        }
+
+        private void OnBannerClickedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(MeticaAdsHooks.ReportAdClicked);
+            MeticaAdsLog.Log("Banner clicked");
+        }
+
+        #endregion
+
+        #region AutoRefreshStatus
+
+        private AutoRefresh refreshStatus = AutoRefresh.NotSet;
+
+        void SetBannerAutoRefreshStatus(AutoRefresh value)
+        {
+            if (refreshStatus == AutoRefresh.NotSet || refreshStatus != value)
+            {
+                refreshStatus = value;
+                if (refreshStatus == AutoRefresh.Enabled)
+                {
+                    MeticaAdsLog.LogWarning("BANNER REFRESH : " + value.ToString());
+                    MeticaSdk.Ads.StartBannerAutoRefresh(adUnitId);
+                }
+                else
+                {
+                    MeticaAdsLog.LogWarning("BANNER REFRESH : " + value.ToString());
+                    MeticaSdk.Ads.StopBannerAutoRefresh(adUnitId);
+                }
+            }
+        }
+
+        public enum AutoRefresh
+        {
+            NotSet,
+            Enabled,
+            Disabled
+        }
+
+        #endregion
+    }
+}

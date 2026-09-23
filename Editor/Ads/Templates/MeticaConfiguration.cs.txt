@@ -1,0 +1,42 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "MeticaConfig", menuName = "GDMonetization/MeticaConfig")]
+    public sealed class MeticaConfiguration : ScriptableObject
+    {
+        [Header("API Key")]
+        [SerializeField] private string AndroidApiKey = "";
+        [SerializeField] private string iOSApiKey = "";
+        public string ApiKey
+        {
+            get
+            {
+                #if UNITY_ANDROID
+                    return AndroidApiKey;
+                #elif UNITY_IOS
+                    return iOSApiKey;
+                #else
+                    return string.Empty;
+                #endif
+            }
+        }
+
+        [Header("App ID")]
+        [SerializeField] private string AndroidAppID = "";
+        [SerializeField] private string iOSAppID = "";
+        public string AppID
+        {
+            get
+            {
+                #if UNITY_ANDROID
+                    return AndroidAppID;
+                #elif UNITY_IOS
+                    return iOSAppID;
+                #else
+                    return string.Empty;
+                #endif
+            }
+        }
+    }
+}

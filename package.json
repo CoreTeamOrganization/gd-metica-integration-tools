@@ -1,0 +1,8 @@
+{
+  "name": "com.gamedistrict.metica-integration-tools",
+  "version": "0.1.0",
+  "displayName": "GameDistrict Metica Integration Tools",
+  "description": "Editor wizards for integrating Metica: ads mediation setup (standalone or into the GD Monetization SDK) and the Metica Genre analytics creator, as two separate flows in one package.",
+  "unity": "2021.3",
+  "dependencies": {}
+}

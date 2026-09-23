@@ -1,0 +1,109 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// The one MonoBehaviour the Metica ads code needs: it pumps work back onto the Unity
+    /// main thread and runs delayed retries.
+    ///
+    /// <para>Both matter because Metica delivers fullscreen revenue and load callbacks on a
+    /// native thread, where nearly every Unity API throws. It is created before the first
+    /// scene loads, so a callback arriving from any thread always has somewhere to queue
+    /// onto and never has to create anything itself.</para>
+    /// </summary>
+    internal sealed class MeticaAdsRunner : MonoBehaviour
+    {
+        private static MeticaAdsRunner _instance;
+        private static readonly Queue<Action> Pending = new Queue<Action>();
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void Bootstrap()
+        {
+            if (_instance != null) return;
+
+            var host = new GameObject("MeticaAds");
+            DontDestroyOnLoad(host);
+            _instance = host.AddComponent<MeticaAdsRunner>();
+        }
+
+        /// <summary>Queues work for the next Update. Safe from any thread.</summary>
+        internal static void Post(Action action)
+        {
+            if (action == null) return;
+
+            lock (Pending) Pending.Enqueue(action);
+        }
+
+        /// <summary>Runs an action after a delay. Main thread only — go through DelayedActionManager.</summary>
+        internal static void RunAfter(Action action, float seconds)
+        {
+            if (action == null) return;
+
+            if (_instance == null)
+            {
+                // No runner yet (a callback before BeforeSceneLoad); losing the delay beats
+                // losing the action.
+                action();
+                return;
+            }
+
+            _instance.StartCoroutine(After(action, seconds));
+        }
+
+        private static IEnumerator After(Action action, float seconds)
+        {
+            yield return new WaitForSeconds(seconds);
+            Run(action);
+        }
+
+        private void Update()
+        {
+            while (true)
+            {
+                Action next;
+                lock (Pending)
+                {
+                    if (Pending.Count == 0) return;
+                    next = Pending.Dequeue();
+                }
+
+                Run(next);
+            }
+        }
+
+        /// <summary>
+        /// One failing callback must not stop the ones queued behind it, so every action runs
+        /// inside its own try.
+        /// </summary>
+        private static void Run(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+        }
+    }
+
+    /// <summary>Moves work from a Metica callback thread onto the Unity main thread.</summary>
+    public static class ThreadDispatcher
+    {
+        public static void Enqueue(Action action) => MeticaAdsRunner.Post(action);
+    }
+
+    /// <summary>
+    /// Runs something later — the retry backoff after a failed load. Callers may be on a
+    /// native thread, so the wait is always started from the main thread.
+    /// </summary>
+    public static class DelayedActionManager
+    {
+        public static void Add(Action action, float delay, string label = null) =>
+            MeticaAdsRunner.Post(() => MeticaAdsRunner.RunAfter(action, delay));
+    }
+}

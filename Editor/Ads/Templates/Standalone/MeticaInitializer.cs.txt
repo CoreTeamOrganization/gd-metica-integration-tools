@@ -1,0 +1,149 @@
+using System;
+using System.Threading.Tasks;
+using Metica;
+using Metica.Ads;
+using UnityEngine;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// Single gate for bringing the Metica SDK up for ads. Metica must be initialized
+    /// exactly once per session — a second call causes undefined behaviour and missed
+    /// callbacks — so both entry points below share one guard.
+    ///
+    /// <para><see cref="InitializeAdsWithCallback"/> is the one the ads stack uses: it maps
+    /// onto <c>IAdNetworkService.Initialize(string, Action)</c>, so Metica needs no async
+    /// ad-network interface. <see cref="InitializeAds"/> is kept for callers that want a
+    /// Task; both resolve to the same underlying initialization.</para>
+    /// </summary>
+    public static class MeticaInitializer
+    {
+        private static Task<MeticaInitResponse> _initTask;
+
+        /// <summary>Set once initialization completes, so late callers get an answer immediately.</summary>
+        private static MeticaInitResponse _response;
+
+        /// <summary>Callers that arrived while initialization was still in flight.</summary>
+        private static Action<MeticaInitResponse> _pending;
+
+        public static bool IsInitialized => MeticaSdk.ApiKey != null;
+
+        public static string UserId { get; } = SystemInfo.deviceUniqueIdentifier;
+
+        /// <summary>Fires once when Metica SDK initialization completes.</summary>
+        public static event Action OnInitialized;
+
+        /// <summary>
+        /// Callback-based initialization. <paramref name="onComplete"/> runs on whichever
+        /// thread Metica delivers the response to — it captures the SynchronizationContext of
+        /// this call, so initializing from the Unity main thread means the callback lands
+        /// there too.
+        /// </summary>
+        public static void InitializeAdsWithCallback(MeticaMediationInfo mediationInfo,
+            Action<MeticaInitResponse> onComplete)
+        {
+            // Already finished: answer straight away rather than scheduling a continuation.
+            if (_response != null)
+            {
+                onComplete?.Invoke(_response);
+                return;
+            }
+
+            // Still in flight: queue up behind the call that started it.
+            if (_initTask != null)
+            {
+                _pending += onComplete;
+                return;
+            }
+
+            if (!TryBuildConfig(out var config)) return;
+
+            MeticaAdsLog.Log("MeticaInitializer: Initializing Metica SDK with mediation (Ads, callback-based)");
+
+            // Matches MAX's default: fullscreen revenue on the native thread, banner/MREC on Unity main.
+            MeticaAds.RevenueCallbackDelivery = CallbackDelivery.NativeThread;
+
+            // The task is published before Initialize so a synchronous callback — the editor
+            // and UnityPlayer delegates fire inline — still sees the guard in place.
+            var completion = new TaskCompletionSource<MeticaInitResponse>();
+            _initTask = completion.Task;
+            _pending += onComplete;
+
+            MeticaSdk.Initialize(config, mediationInfo, response =>
+            {
+                _response = response;
+                completion.TrySetResult(response);
+
+                OnInitialized?.Invoke();
+
+                var waiting = _pending;
+                _pending = null;
+                waiting?.Invoke(response);
+            });
+        }
+
+        /// <summary>
+        /// Analytics-only initialization. Nothing in the ads path calls this — it is kept so a
+        /// project that later wants Metica analytics has the entry point already in place.
+        ///
+        /// <para>Adding analytics is more than calling this: it needs the METICA_ANALYTICS
+        /// define, the MeticaAnalyticsAbstractions assembly and the analytics network wiring.
+        /// This method compiles without any of that, because MeticaSdk.InitializeAnalytics is
+        /// not itself gated by the define — only MeticaSdk.Analytics is.</para>
+        /// </summary>
+        public static void InitializeAnalytics()
+        {
+            if (!TryBuildConfig(out var config)) return;
+
+            MeticaSdk.InitializeAnalytics(config);
+            MeticaAdsLog.Log("MeticaInitializer: Initializing Metica Analytics");
+        }
+
+        /// <summary>
+        /// Task-based initialization, for callers that prefer to await. Shares the guard with
+        /// <see cref="InitializeAdsWithCallback"/>, so whichever runs first wins and the other
+        /// awaits the same result.
+        /// </summary>
+        public static Task<MeticaInitResponse> InitializeAds(MeticaMediationInfo mediationInfo)
+        {
+            if (_initTask != null) return _initTask;
+
+            var completion = new TaskCompletionSource<MeticaInitResponse>();
+            _initTask = completion.Task;
+
+            InitializeAdsWithCallback(mediationInfo, response => completion.TrySetResult(response));
+            return _initTask;
+        }
+
+        public static void Reset()
+        {
+            _initTask = null;
+            _response = null;
+            _pending = null;
+        }
+
+        private static bool TryBuildConfig(out MeticaInitConfig config)
+        {
+            config = null;
+
+            var settings = MeticaAdsConfig.Load();
+            if (settings == null)
+            {
+                MeticaAdsLog.LogError(
+                    $"{MeticaAdsConfig.AssetName} not found under a Resources folder. Metica will not " +
+                    "initialize, so no Metica ads will serve.");
+                return false;
+            }
+
+            if (!settings.IsUsable(out var problem))
+            {
+                MeticaAdsLog.LogError($"{MeticaAdsConfig.AssetName}: {problem}. Metica will not initialize.");
+                return false;
+            }
+
+            MeticaSdk.SetLogEnabled(settings.MeticaSdkLogging);
+            config = new MeticaInitConfig(settings.ApiKey, settings.AppId, UserId);
+            return true;
+        }
+    }
+}

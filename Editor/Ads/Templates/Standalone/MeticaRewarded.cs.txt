@@ -1,0 +1,116 @@
+using System;
+using Metica;
+using Metica.Ads;
+
+namespace MeticaIntegration
+{
+    public sealed class MeticaRewarded : RewardedAdUnit
+    {
+        private int retryAttempt;
+        private bool requestAdOnFail = true;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (IsAdUnitEmpty)
+                return;
+
+            ListenEvents();
+            LoadRewarded();
+        }
+
+        private void ListenEvents()
+        {
+            MeticaAdsCallbacks.Rewarded.OnAdHidden += OnRewardedHiddenEvent;
+            MeticaAdsCallbacks.Rewarded.OnAdLoadFailed += OnRewardedLoadFailedEvent;
+            MeticaAdsCallbacks.Rewarded.OnAdRevenuePaid += OnRewardedRevenuePaidEvent;
+            MeticaAdsCallbacks.Rewarded.OnAdRewarded += OnRewardedRewardedEvent;
+
+            MeticaAdsCallbacks.Rewarded.OnAdLoadSuccess += OnRewardedLoadedEvent;
+            MeticaAdsCallbacks.Rewarded.OnAdShowFailed += OnRewardedShowFailedEvent;
+        }
+
+        public override bool HasRewarded(bool doRequest)
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            bool isReady = MeticaSdk.Ads.IsRewardedReady(adUnitId);
+            if (!isReady && doRequest)
+                LoadRewarded();
+
+            return isReady;
+        }
+
+        public override void ShowRewarded(string placementName, Action onRewardedCallback)
+        {
+            this.placementName = placementName;
+            this.onRewardComplete = onRewardedCallback;
+            MeticaSdk.Ads.ShowRewarded(adUnitId, placementName);
+        }
+
+        public override void LoadRewarded()
+        {
+            if (IsAdUnitEmpty)
+                return;
+
+            MeticaSdk.Ads.LoadRewarded(adUnitId);
+        }
+
+        #region Callbacks
+
+        private void OnRewardedLoadedEvent(MeticaAd meticaAd)
+        {
+            retryAttempt = 0;
+            requestAdOnFail = true;
+            MeticaAdsLog.Log("Rewarded ad loaded");
+        }
+
+        private void OnRewardedLoadFailedEvent(MeticaAdError meticaAdError)
+        {
+            if (requestAdOnFail)
+            {
+                requestAdOnFail = false;
+                retryAttempt++;
+                float retryDelay = UnityEngine.Mathf.Pow(2, UnityEngine.Mathf.Min(6, retryAttempt));
+                DelayedActionManager.Add(LoadRewarded, retryDelay);
+                MeticaAdsLog.LogWarning($"Rewarded ad failed to load. Retrying in {retryDelay:0.##}s");
+            }
+        }
+
+        private void OnRewardedShowFailedEvent(MeticaAd meticaAd, MeticaAdError meticaAdError)
+        {
+            ThreadDispatcher.Enqueue(LoadRewarded);
+        }
+
+        private void OnRewardedHiddenEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(LoadRewarded);
+            MeticaAdsLog.Log("Rewarded_Ad hidden");
+        }
+
+        private void OnRewardedRewardedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(() => { onRewardComplete?.Invoke(); });
+            MeticaAdsLog.Log("Rewarded-Ad-Reward rewarded");
+        }
+
+        private void OnRewardedRevenuePaidEvent(MeticaAd meticaAd)
+        {
+            double revenue = meticaAd.revenue ?? 0.0;
+            string networkName = meticaAd.networkName ?? "Unknown";
+            string adUnitIdentifier = meticaAd.adUnitId;
+            string placement = meticaAd.placementTag ?? placementName;
+
+            MeticaAdsLog.Log(
+                $"Rewarded revenue paid - AdUnit: {adUnitIdentifier}, Revenue: {revenue}, Network: {networkName}, Placement: {placement}");
+
+            AdRevenueInfo revInfo = new(AdFormat.Rewarded, AdNetworkMetica.Platform, networkName,
+                adUnitIdentifier, "USD", revenue, placement, AdNetworkMetica.RevenuePayload);
+
+            ThreadDispatcher.Enqueue(() => MeticaAdsHooks.ReportRevenue(revInfo));
+        }
+
+        #endregion
+    }
+}

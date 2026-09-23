@@ -1,0 +1,25 @@
+using UnityEngine;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// Logging for the Metica ad units, prefixed so it is findable in a noisy console and
+    /// silenceable in one place. Stands in for the GD SDK's Message / Tag pair.
+    /// </summary>
+    public static class MeticaAdsLog
+    {
+        /// <summary>Turn the ordinary log off in release. Warnings and errors always print.</summary>
+        public static bool Enabled = true;
+
+        private const string Prefix = "[Metica] ";
+
+        public static void Log(string message)
+        {
+            if (Enabled) Debug.Log(Prefix + message);
+        }
+
+        public static void LogWarning(string message) => Debug.LogWarning(Prefix + message);
+
+        public static void LogError(string message) => Debug.LogError(Prefix + message);
+    }
+}

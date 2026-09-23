@@ -1,0 +1,18 @@
+using Metica;
+using Monetization.Runtime.Logger;
+
+namespace Monetization.Runtime.Consent
+{
+    public class MeticaConsentSettings : IConsentSettingsService
+    {
+        public void ApplySettings(ConsentInfo consentInfo)
+        {
+            bool personalized = consentInfo.IsPersonalized;
+            MeticaSdk.Ads.SetDoNotSell(!personalized);
+            MeticaSdk.Ads.SetHasUserConsent(personalized);
+
+            Message.Log(Tag.Metica, $"DoNotSell : {!personalized}");
+            Message.Log(Tag.Metica, $"HasUserConsent : {personalized}");
+        }
+    }
+}

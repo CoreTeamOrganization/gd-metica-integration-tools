@@ -1,0 +1,200 @@
+using System;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// The front door. A game talks to this and to <see cref="MeticaAdsHooks"/>, and to
+    /// nothing else in this folder.
+    ///
+    /// <para>Call <see cref="Initialize"/> once at startup. Everything before that is a
+    /// no-op that logs rather than throws, so an ad call on a cold stack cannot crash a
+    /// game — it simply does not show an ad.</para>
+    /// </summary>
+    public static class MeticaAdsManager
+    {
+        private static MeticaAdsConfig _config;
+        private static AdNetworkMetica _network;
+
+        private static MeticaInterstitial _interstitial;
+        private static MeticaRewarded _rewarded;
+        private static MeticaBanner _banner;
+        private static MeticaMRec _mrec;
+
+        /// <summary>True once Metica has initialized and the ad units have been created.</summary>
+        public static bool IsReady { get; private set; }
+
+        /// <summary>
+        /// Whether the remote switch let Metica start this session. False with no ad units
+        /// created — every show call below is a no-op that reports back false.
+        /// </summary>
+        public static bool IsEnabled => _network != null;
+
+        /// <summary>Whether the game wants a banner on screen. The banner obeys this as it reloads.</summary>
+        public static bool BannerStatus { get; private set; }
+
+        /// <summary>Whether the game wants an MREC on screen.</summary>
+        public static bool MRecStatus { get; private set; }
+
+        /// <summary>Fires once the ad units are live, or immediately if they already are.</summary>
+        public static event Action OnReady;
+
+        // ── Lifecycle ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Brings Metica up and creates the ad units. Safe to call more than once; the
+        /// second call does nothing.
+        /// </summary>
+        public static void Initialize()
+        {
+            if (_network != null) return;
+
+            _config = MeticaAdsConfig.Load();
+            if (_config == null)
+            {
+                MeticaAdsLog.LogError(
+                    $"No {MeticaAdsConfig.AssetName} in a Resources folder — no Metica ads will serve. " +
+                    "Create one with Assets → Create → Metica → Ads Config.");
+                return;
+            }
+
+            MeticaAdsLog.Enabled = _config.Logging;
+
+            // Checked before the keys, because a game with the switch off has no reason to
+            // be told its Metica keys are blank.
+            if (!MeticaRemoteConfig.ShouldInitialize(_config))
+            {
+                MeticaAdsLog.Log("Remote switch is off — Metica will not initialize this session.");
+                return;
+            }
+
+            if (!_config.IsUsable(out var problem))
+            {
+                MeticaAdsLog.LogError($"{MeticaAdsConfig.AssetName}: {problem} — no Metica ads will serve.");
+                return;
+            }
+
+            _network = new AdNetworkMetica();
+            _network.Initialize(_config.MaxSdkKey, CreateAdUnits);
+        }
+
+        /// <summary>
+        /// Runs once Metica reports initialized. Each unit loads its first ad as it is
+        /// created, so an empty id is how you turn a format off.
+        /// </summary>
+        private static void CreateAdUnits()
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                _interstitial = new MeticaInterstitial();
+                _interstitial.Initialize(_config.Interstitial);
+
+                _rewarded = new MeticaRewarded();
+                _rewarded.Initialize(_config.Rewarded);
+
+                if (!string.IsNullOrEmpty(_config.Banner))
+                {
+                    _banner = new MeticaBanner();
+                    _banner.Initialize(_config.Banner);
+                }
+
+                if (!string.IsNullOrEmpty(_config.MRec))
+                {
+                    _mrec = new MeticaMRec();
+                    _mrec.Initialize(_config.MRec);
+                }
+
+                IsReady = true;
+                MeticaAdsLog.Log("Metica ads ready");
+
+                OnReady?.Invoke();
+            });
+        }
+
+        // ── Interstitial ───────────────────────────────────────────────────────
+
+        public static bool HasInterstitial(bool doRequest = true) =>
+            _interstitial != null && _interstitial.HasInterstitial(doRequest);
+
+        /// <summary>
+        /// Shows an interstitial if one is ready. <paramref name="onClosed"/> runs when the ad
+        /// is dismissed — and immediately when there was no ad, so a caller that gates
+        /// gameplay on it never stalls. The bool says whether an ad was actually shown.
+        /// </summary>
+        public static void ShowInterstitial(string placement, Action<bool> onClosed = null)
+        {
+            if (!HasInterstitial())
+            {
+                MeticaAdsLog.Log($"No interstitial ready for '{placement}'");
+                onClosed?.Invoke(false);
+                return;
+            }
+
+            _interstitial.ShowInterstitial(placement, () => onClosed?.Invoke(true));
+        }
+
+        // ── Rewarded ───────────────────────────────────────────────────────────
+
+        public static bool HasRewarded(bool doRequest = true) =>
+            _rewarded != null && _rewarded.HasRewarded(doRequest);
+
+        /// <summary>
+        /// Shows a rewarded ad. <paramref name="onComplete"/> gets true only if the user
+        /// earned the reward — grant on true, never on false.
+        /// </summary>
+        public static void ShowRewarded(string placement, Action<bool> onComplete)
+        {
+            if (!HasRewarded())
+            {
+                MeticaAdsLog.Log($"No rewarded ad ready for '{placement}'");
+                onComplete?.Invoke(false);
+                return;
+            }
+
+            _rewarded.ShowRewarded(placement, () => onComplete?.Invoke(true));
+        }
+
+        // ── Banner ─────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Asks for the banner. The request is remembered, so a banner that is still loading
+        /// shows itself as soon as it arrives.
+        /// </summary>
+        public static void ShowBanner()
+        {
+            BannerStatus = true;
+
+            if (_banner == null) return;
+
+            if (_banner.HasBanner()) _banner.ShowBanner();
+        }
+
+        public static void HideBanner()
+        {
+            BannerStatus = false;
+            _banner?.HideBanner();
+        }
+
+        public static bool IsBannerActive() => _banner != null && _banner.IsBannerActive();
+
+        public static void RepositionBanner(BannerPosition position) => _banner?.RepositionBanner(position);
+
+        // ── MREC ───────────────────────────────────────────────────────────────
+
+        public static void ShowMRec()
+        {
+            MRecStatus = true;
+
+            if (_mrec == null) return;
+
+            if (_mrec.HasMRec()) _mrec.ShowMRec();
+        }
+
+        public static void HideMRec()
+        {
+            MRecStatus = false;
+            _mrec?.HideMRec();
+        }
+
+        public static void RepositionMRec(MRecPosition position) => _mrec?.RepositionMRec(position);
+    }
+}

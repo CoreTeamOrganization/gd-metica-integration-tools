@@ -1,0 +1,209 @@
+using Metica;
+using Metica.Ads;
+
+namespace MeticaIntegration
+{
+    public sealed class MeticaMRec : MRecAdUnit
+    {
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (IsAdUnitEmpty)
+            {
+                MeticaAdsLog.LogError("Initialize: MRec ad unit is empty");
+                return;
+            }
+            ListenEvents();
+            CreateMRec();
+        }
+
+        public void ListenEvents()
+        {
+            MeticaAdsCallbacks.Mrec.OnAdLoadSuccess += MRec_OnAdLoadedEvent;
+            MeticaAdsCallbacks.Mrec.OnAdLoadFailed += MRec_OnAdLoadFailedEvent;
+            MeticaAdsCallbacks.Mrec.OnAdRevenuePaid += MRec_OnAdRevenuePaidEvent;
+            MeticaAdsCallbacks.Mrec.OnAdClicked += MRec_OnAdClickedEvent;
+        }
+
+        public void CreateMRec()
+        {
+            MeticaSdk.Ads.CreateMrec(adUnitId, new MeticaAdViewConfiguration(ConvertToMeticaMRecPos()));
+            SetMRecAutoRefreshStatus(AutoRefresh.Enabled);
+            MeticaAdsLog.Log("MRec IS CREATED & LOADING");
+            isLoading = true;
+        }
+
+        public override bool HasMRec()
+        {
+            if (!hasMrec)
+            {
+                LoadMRec();
+                return false;
+            }
+
+            return true;
+        }
+
+        public override void LoadMRec()
+        {
+            if (isLoading)
+            {
+                MeticaAdsLog.LogWarning("MRec IS ALREADY LOADING");
+                return;
+            }
+
+            isLoading = true;
+            MeticaAdsLog.LogWarning("MRec IS LOADING");
+            MeticaSdk.Ads.LoadMrec(adUnitId);
+        }
+
+        public override void ShowMRec()
+        {
+            MeticaAdsLog.Log("MRec IS SHOWING");
+            MeticaSdk.Ads.ShowMrec(adUnitId);
+        }
+
+        public override void HideMRec()
+        {
+            MeticaAdsLog.Log("MRec IS HIDDEN");
+            MeticaSdk.Ads.HideMrec(adUnitId);
+        }
+
+        public override void DestroyMRec()
+        {
+            MeticaAdsLog.Log("MRec IS DESTROYED");
+            HideMRec();
+        }
+
+        public override void RepositionMRec(MRecPosition newPosition)
+        {
+            bannerInfo.MrecPosition = newPosition;
+            if (!IsAdUnitEmpty)
+            {
+                MeticaAdsLog.Log($"MRec is repositioned to {newPosition}");
+                MeticaSdk.Ads.UpdateMrecPosition(adUnitId, ConvertToMeticaMRecPos());
+            }
+        }
+
+        MeticaAdViewPosition ConvertToMeticaMRecPos()
+        {
+            switch (bannerInfo.MrecPosition)
+            {
+                case MRecPosition.Top:
+                    return MeticaAdViewPosition.TopCenter;
+                case MRecPosition.TopLeft:
+                    return MeticaAdViewPosition.TopLeft;
+                case MRecPosition.TopRight:
+                    return MeticaAdViewPosition.TopRight;
+                case MRecPosition.Center:
+                    return MeticaAdViewPosition.Centered;
+                case MRecPosition.CenterLeft:
+                    return MeticaAdViewPosition.CenterLeft;
+                case MRecPosition.CenterRight:
+                    return MeticaAdViewPosition.CenterRight;
+                case MRecPosition.Bottom:
+                    return MeticaAdViewPosition.BottomCenter;
+                case MRecPosition.BottomLeft:
+                    return MeticaAdViewPosition.BottomLeft;
+                case MRecPosition.BottomRight:
+                    return MeticaAdViewPosition.BottomRight;
+                default:
+                    return MeticaAdViewPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void MRec_OnAdLoadedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasMrec = true;
+                MeticaAdsLog.Log("MRec IS LOADED");
+                SetMRecAutoRefreshStatus(AutoRefresh.Enabled);
+                if (MeticaAdsManager.MRecStatus)
+                {
+                    MeticaAdsManager.ShowMRec();
+                    return;
+                }
+
+                HideMRec();
+            });
+        }
+
+        private void MRec_OnAdLoadFailedEvent(MeticaAdError meticaAdError)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasMrec = false;
+                SetMRecAutoRefreshStatus(AutoRefresh.Disabled);
+                HideMRec();
+                MeticaAdsLog.LogError("MRec failed to load");
+
+                DelayedActionManager.Add(() =>
+                {
+                    if (MeticaAdsManager.MRecStatus)
+                    {
+                        MeticaAdsManager.ShowMRec();
+                    }
+                }, 3f, "Retry Metica MRec");
+            });
+        }
+
+        private void MRec_OnAdRevenuePaidEvent(MeticaAd meticaAd)
+        {
+            double revenue = meticaAd.revenue ?? 0.0;
+            string networkName = meticaAd.networkName ?? "Unknown";
+            string adUnitIdentifier = meticaAd.adUnitId;
+
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.MRec, AdNetworkMetica.Platform, networkName,
+                adUnitIdentifier, "USD", revenue, "none", AdNetworkMetica.RevenuePayload);
+
+            MeticaAdsLog.Log(
+                $"MRec revenue paid - AdUnit: {adUnitIdentifier}, Revenue: {revenue}, Network: {networkName}");
+
+            ThreadDispatcher.Enqueue(() => MeticaAdsHooks.ReportRevenue(revInfo));
+        }
+
+        private void MRec_OnAdClickedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(MeticaAdsHooks.ReportAdClicked);
+            MeticaAdsLog.Log("MRec ad clicked");
+        }
+
+        #endregion
+
+        #region AutoRefreshStatus
+
+        private AutoRefresh refreshStatus = AutoRefresh.NotSet;
+
+        void SetMRecAutoRefreshStatus(AutoRefresh value)
+        {
+            if (refreshStatus == AutoRefresh.NotSet || refreshStatus != value)
+            {
+                refreshStatus = value;
+                if (refreshStatus == AutoRefresh.Enabled)
+                {
+                    MeticaAdsLog.LogWarning("MRec REFRESH : " + value.ToString());
+                    MeticaSdk.Ads.StartMrecAutoRefresh(adUnitId);
+                }
+                else
+                {
+                    MeticaAdsLog.LogWarning("MRec REFRESH : " + value.ToString());
+                    MeticaSdk.Ads.StopMrecAutoRefresh(adUnitId);
+                }
+            }
+        }
+
+        public enum AutoRefresh
+        {
+            NotSet,
+            Enabled,
+            Disabled
+        }
+
+        #endregion
+    }
+}

@@ -1,0 +1,70 @@
+using System;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// What every ad unit shares: which ad unit id it serves, and the placement it was last
+    /// asked to show. The four bases below add only what their format needs, which is what
+    /// keeps each Metica unit free to be about Metica and nothing else.
+    /// </summary>
+    public abstract class AdUnitBase
+    {
+        protected string adUnitId;
+        protected string placementName;
+
+        /// <summary>No id configured. Every unit checks this before talking to the SDK.</summary>
+        public bool IsAdUnitEmpty => string.IsNullOrEmpty(adUnitId);
+
+        public abstract void Initialize(string adUnitId);
+    }
+
+    public abstract class InterstitialAdUnit : AdUnitBase
+    {
+        protected Action onAdClosed;
+
+        public abstract bool HasInterstitial(bool doRequest);
+        public abstract void ShowInterstitial(string placementName, Action onClosed);
+        public abstract void LoadInterstitial();
+    }
+
+    public abstract class RewardedAdUnit : AdUnitBase
+    {
+        protected Action onRewardComplete;
+
+        public abstract bool HasRewarded(bool doRequest);
+        public abstract void ShowRewarded(string placementName, Action onRewardedCallback);
+        public abstract void LoadRewarded();
+    }
+
+    public abstract class BannerAdUnit : AdUnitBase
+    {
+        protected readonly AdViewInfo bannerInfo = new AdViewInfo();
+
+        protected bool hasBanner;
+        protected bool isLoading;
+        protected bool _isBannerActive;
+
+        public abstract bool HasBanner();
+        public abstract void LoadBanner();
+        public abstract bool IsBannerActive();
+        public abstract void ShowBanner();
+        public abstract void HideBanner();
+        public abstract void DestroyBanner();
+        public abstract void RepositionBanner(BannerPosition newPosition);
+    }
+
+    public abstract class MRecAdUnit : AdUnitBase
+    {
+        protected readonly AdViewInfo bannerInfo = new AdViewInfo();
+
+        protected bool hasMrec;
+        protected bool isLoading;
+
+        public abstract bool HasMRec();
+        public abstract void LoadMRec();
+        public abstract void ShowMRec();
+        public abstract void HideMRec();
+        public abstract void DestroyMRec();
+        public abstract void RepositionMRec(MRecPosition newPosition);
+    }
+}

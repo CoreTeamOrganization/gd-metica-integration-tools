@@ -1,0 +1,107 @@
+using System;
+using System.Collections.Generic;
+using Metica;
+using Metica.Ads;
+using UnityEngine;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// Metica as a plain <see cref="IAdNetworkService"/>. Metica's callback-based
+    /// initialization maps directly onto <c>Initialize(string sdkKey, Action onInitialized)</c>,
+    /// so the manager can bring it up without any async plumbing.
+    /// </summary>
+    public sealed class AdNetworkMetica : IAdNetworkService
+    {
+        /// <summary>The ad platform name carried on every revenue event.</summary>
+        public const string Platform = "METICA";
+
+        /// <summary>
+        /// Smart Floors assignment: "TRIAL", "HOLDOUT", "HOLDOUT_WITH_ERROR", or
+        /// "Initializing" until the callback lands.
+        /// </summary>
+        public static string GetUserGroup
+        {
+            get
+            {
+                if (SmartFloorsResult == null) return _initializationFinished ? HoldoutWithError : Initializing;
+
+                return SmartFloorsResult.IsForcedHoldout
+                    ? HoldoutWithError
+                    : SmartFloorsResult.UserGroup == MeticaUserGroup.TRIAL ? "TRIAL" : "HOLDOUT";
+            }
+        }
+
+        /// <summary>Extra dimensions attached to every Metica ad-revenue event.</summary>
+        public static IReadOnlyDictionary<string, object> RevenuePayload { get; private set; }
+
+        private const string Initializing = "Initializing";
+        private const string HoldoutWithError = "HOLDOUT_WITH_ERROR";
+
+        private static MeticaSmartFloors SmartFloorsResult;
+        private static bool _initializationFinished;
+
+        public void Initialize(string maxSdkKey, Action onInitialized)
+        {
+            SmartFloorsResult = null;
+            RevenuePayload = null;
+            _initializationFinished = false;
+
+            MeticaAdsLog.Log($"Initializing Metica SDK v{MeticaSdk.Version}...");
+
+            var mediationInfo = new MeticaMediationInfo(MeticaMediationInfo.MeticaMediationType.MAX, maxSdkKey);
+            var initStartTime = Time.realtimeSinceStartup;
+
+            MeticaInitializer.InitializeAdsWithCallback(mediationInfo, result =>
+            {
+                MeticaAdsLog.Log(
+                    $"Metica SDK initialization took {Time.realtimeSinceStartup - initStartTime:F3} seconds.");
+
+                ApplyConsent();
+
+                // SmartFloors is nullable, and GetUserGroup reads it — assign before use.
+                SmartFloorsResult = result?.SmartFloors;
+                _initializationFinished = true;
+
+                RevenuePayload = new Dictionary<string, object> { { "Metica_UserGroup", GetUserGroup } };
+
+                MeticaAdsLog.Log($"Current user is part of {GetUserGroup}");
+                SendDetailsEvent(GetUserGroup);
+                MeticaAdsLog.Log("Successfully initialized");
+
+                onInitialized?.Invoke();
+            });
+        }
+
+        /// <summary>
+        /// Tells Metica what the game knows about consent. Unset hook means no consent, which
+        /// is the safe answer — Metica serves non-personalized ads rather than none.
+        /// </summary>
+        private static void ApplyConsent()
+        {
+            var personalized = MeticaAdsHooks.ReadConsent();
+
+            MeticaSdk.Ads.SetDoNotSell(!personalized);
+            MeticaSdk.Ads.SetHasUserConsent(personalized);
+
+            MeticaAdsLog.Log($"DoNotSell : {!personalized}");
+            MeticaAdsLog.Log($"HasUserConsent : {personalized}");
+        }
+
+        private void SendDetailsEvent(string meticaUserGroup)
+        {
+            MeticaAdsLog.Log($"Sending Metica user-group and sdk-version to analytics: {meticaUserGroup}");
+
+            var info = new Dictionary<string, object>
+            {
+                { "UserGroup", meticaUserGroup },
+                { "SdkVersion", MeticaSdk.Version }
+            };
+
+            MeticaAdsHooks.ReportEvent("Monetization", new Dictionary<string, object>
+            {
+                { "Metica", info }
+            });
+        }
+    }
+}

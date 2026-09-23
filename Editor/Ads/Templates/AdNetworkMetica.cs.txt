@@ -1,0 +1,94 @@
+using System;
+using System.Collections.Generic;
+using Metica;
+using Metica.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    /// <summary>
+    /// Metica as a plain <see cref="IAdNetworkService"/>, the same contract Admob and
+    /// AppLovin use. Metica's callback-based initialization maps directly onto
+    /// <c>Initialize(string appID, Action onInitialized)</c>, so AdNetworkController needs
+    /// no async path and AdsManager keeps initializing its networks synchronously.
+    /// </summary>
+    internal sealed class AdNetworkMetica : IAdNetworkService
+    {
+        /// <summary>
+        /// Smart Floors assignment: "TRIAL", "HOLDOUT", "HOLDOUT_WITH_ERROR", or
+        /// "Initializing" until the callback lands.
+        /// </summary>
+        public static string GetUserGroup
+        {
+            get
+            {
+                if (SmartFloorsResult == null) return _initializationFinished ? HoldoutWithError : Initializing;
+
+                return SmartFloorsResult.IsForcedHoldout
+                    ? HoldoutWithError
+                    : SmartFloorsResult.UserGroup == MeticaUserGroup.TRIAL ? "TRIAL" : "HOLDOUT";
+            }
+        }
+
+        /// <summary>Extra dimensions attached to every Metica ad-revenue event.</summary>
+        public static IReadOnlyDictionary<string, object> RevenuePayload { get; private set; }
+
+        private const string Initializing = "Initializing";
+        private const string HoldoutWithError = "HOLDOUT_WITH_ERROR";
+
+        private static MeticaSmartFloors SmartFloorsResult;
+        private static bool _initializationFinished;
+
+        public void Initialize(string maxSdkKey, Action onInitialized)
+        {
+            SmartFloorsResult = null;
+            RevenuePayload = null;
+            _initializationFinished = false;
+
+            Message.Log(Tag.Metica, $"Initializing Metica SDK v{MeticaSdk.Version}...");
+
+            var mediationInfo = new MeticaMediationInfo(MeticaMediationInfo.MeticaMediationType.MAX, maxSdkKey);
+            var initStartTime = Time.realtimeSinceStartup;
+
+            MeticaInitializer.InitializeAdsWithCallback(mediationInfo, result =>
+            {
+                Message.Log(Tag.Metica,
+                    $"Metica SDK initialization took {Time.realtimeSinceStartup - initStartTime:F3} seconds.");
+
+                ConsentManager.AddAndUpdateConsentService(new MeticaConsentSettings());
+
+                // SmartFloors is nullable, and GetUserGroup reads it — assign before use.
+                SmartFloorsResult = result?.SmartFloors;
+                _initializationFinished = true;
+
+                RevenuePayload = new Dictionary<string, object> { { "Metica_UserGroup", GetUserGroup } };
+
+                Message.Log(Tag.Metica, $"Current user is part of {GetUserGroup}");
+                SendDetailsEvent(GetUserGroup);
+                Message.Log(Tag.Metica, "Successfully initialized");
+
+                onInitialized?.Invoke();
+            });
+        }
+
+        private void SendDetailsEvent(string meticaUserGroup)
+        {
+            Message.Log(Tag.Metica,
+                $"Sending Metica user-group and sdk-version to Analytics: {meticaUserGroup}");
+
+            var info = new Dictionary<string, object>
+            {
+                { "UserGroup", meticaUserGroup },
+                { "SdkVersion", MeticaSdk.Version }
+            };
+
+            AnalyticsManager.SendEvent("Monetization", new Dictionary<string, object>
+            {
+                { "Metica", info }
+            });
+        }
+    }
+}

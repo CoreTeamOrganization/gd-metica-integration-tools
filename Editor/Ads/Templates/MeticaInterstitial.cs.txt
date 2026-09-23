@@ -1,0 +1,112 @@
+using System;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+using Metica.Ads;
+using Metica;
+using Monetization.Runtime.Logger;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class MeticaInterstitial : IntersitialAdUnit
+    {
+        int retryAttempt = 0;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                ListenEvents();
+                LoadInterstitial();
+            }
+        }
+
+        void ListenEvents()
+        {
+            MeticaAdsCallbacks.Interstitial.OnAdLoadSuccess += OnInterstitialLoadedEvent;
+            MeticaAdsCallbacks.Interstitial.OnAdLoadFailed += OnInterstitialFailedEvent;
+            MeticaAdsCallbacks.Interstitial.OnAdHidden += OnInterstitialDismissedEvent;
+            MeticaAdsCallbacks.Interstitial.OnAdRevenuePaid += OnInterstitialRevenuePaidEvent;
+        }
+
+        public override bool HasInterstitial(bool doRequest)
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            bool isReady = MeticaSdk.Ads.IsInterstitialReady(adUnitId);
+
+            // if (isReady)
+            //     requestAdOnFail = true;
+
+            if (!isReady && doRequest)
+                LoadInterstitial();
+
+            return isReady;
+        }
+
+        public override void ShowInterstitial(string placementName, Action onClosed)
+        {
+            this.onAdClosed = onClosed;
+            this.placementName = placementName;
+            MeticaSdk.Ads.ShowInterstitial(adUnitId);
+        }
+
+        public override void LoadInterstitial()
+        {
+            if (IsAdUnitEmpty)
+                return;
+
+            MeticaSdk.Ads.LoadInterstitial(adUnitId);
+        }
+
+        #region Callbacks
+        private void OnInterstitialLoadedEvent(MeticaAd meticaAd)
+        {
+            // Reset retry attempt
+            retryAttempt = 0;
+            Message.Log(Tag.Metica, "Interstitial loaded");
+        }
+
+        private void OnInterstitialFailedEvent(MeticaAdError meticaAdError)
+        {
+            // Interstitial ad failed to load. Retry with exponentially higher delays up to a maximum delay
+            retryAttempt++;
+            float retryDelay = Mathf.Pow(2, Mathf.Min(6, retryAttempt));
+            
+            DelayedActionManager.Add(LoadInterstitial, (float)retryDelay);
+            Message.LogError(Tag.Metica, "Interstitial failed to load");
+        }
+
+        private void OnInterstitialDismissedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                LoadInterstitial();
+                onAdClosed?.Invoke();
+            });
+            Message.Log(Tag.Metica, "Interstitial dismissed");
+        }
+
+        private void OnInterstitialRevenuePaidEvent(MeticaAd meticaAd)
+        {
+            // Ad revenue
+            double revenue = meticaAd.revenue ?? 0.0;
+
+            // Miscellaneous data
+            string networkName = meticaAd.networkName; // Display name of the network that showed the ad
+            string adUnitIdentifier = meticaAd.adUnitId; // The Ad Unit ID
+            string placement = meticaAd.placementTag; // The placement this ad's postbacks are tied to
+
+            Message.Log(Tag.Metica,
+                $"Interstitial revenue paid - AdUnit: {adUnitIdentifier}, Revenue: {revenue}, Network: {networkName}, Placement: {placement}");
+
+            AdRevenueInfo revInfo = new (AdFormat.Interstitial, AdPlatforms.METICA, networkName,
+                adUnitIdentifier, "USD", revenue, placement, AdNetworkMetica.RevenuePayload);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+        #endregion
+    }
+}

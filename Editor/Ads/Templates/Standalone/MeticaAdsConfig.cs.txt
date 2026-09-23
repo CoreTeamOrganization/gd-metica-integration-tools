@@ -1,0 +1,90 @@
+using UnityEngine;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// Every id Metica ads need, in one asset. Nothing here is code — it is the one place a
+    /// developer edits, and the one place to look when an ad will not serve.
+    ///
+    /// <para>Lives at <c>Assets/Resources/MeticaAdsConfig.asset</c> because it is loaded by
+    /// name at runtime. Ad unit ids differ per platform, so each has an Android and an iOS
+    /// field, and <see cref="Interstitial"/> and friends resolve against the build target.</para>
+    /// </summary>
+    [CreateAssetMenu(fileName = AssetName, menuName = "Metica/Ads Config")]
+    public sealed class MeticaAdsConfig : ScriptableObject
+    {
+        public const string AssetName = "MeticaAdsConfig";
+
+        [Header("Metica")]
+        [Tooltip("Metica App ID, from the Metica dashboard.")]
+        public string AppId;
+
+        [Tooltip("Metica API key, from the Metica dashboard.")]
+        public string ApiKey;
+
+        [Header("AppLovin MAX")]
+        [Tooltip("MAX SDK key. Metica serves through MAX, so this is your existing MAX key.")]
+        public string MaxSdkKey;
+
+        [Header("Ad unit ids — Android")]
+        public string AndroidInterstitial;
+        public string AndroidRewarded;
+        public string AndroidBanner;
+        public string AndroidMRec;
+
+        [Header("Ad unit ids — iOS")]
+        public string IosInterstitial;
+        public string IosRewarded;
+        public string IosBanner;
+        public string IosMRec;
+
+        [Header("Remote switch")]
+        [Tooltip("Gate Metica on a value from your own remote config. Off means Metica always " +
+                 "initializes, and MeticaRemoteConfig is never consulted.")]
+        public bool UseRemoteSwitch;
+
+        [Tooltip("What the switch reads until your remote config has landed once on this device. " +
+                 "Off is the cautious choice: Metica stays dark until the backend says otherwise.")]
+        public bool DefaultUseMetica;
+
+        [Header("Behaviour")]
+        [Tooltip("Print Metica's own SDK logs. Leave off in release.")]
+        public bool MeticaSdkLogging;
+
+        [Tooltip("Print this integration's logs. Warnings and errors print either way.")]
+        public bool Logging = true;
+
+        // ── The ids for the platform actually being built ──────────────────────
+
+        // Chosen by build target rather than RuntimePlatform, so the editor uses the ids of
+        // the platform you are actually building for.
+#if UNITY_IOS
+        public string Interstitial => IosInterstitial;
+        public string Rewarded => IosRewarded;
+        public string Banner => IosBanner;
+        public string MRec => IosMRec;
+#else
+        public string Interstitial => AndroidInterstitial;
+        public string Rewarded => AndroidRewarded;
+        public string Banner => AndroidBanner;
+        public string MRec => AndroidMRec;
+#endif
+
+        /// <summary>Loads the asset from Resources. Null when it has not been created yet.</summary>
+        public static MeticaAdsConfig Load() => Resources.Load<MeticaAdsConfig>(AssetName);
+
+        /// <summary>
+        /// The ids that must be present for initialization to be worth attempting. Ad unit
+        /// ids are not included — a game with no banner is a perfectly ordinary game.
+        /// </summary>
+        public bool IsUsable(out string problem)
+        {
+            if (string.IsNullOrEmpty(ApiKey)) { problem = "ApiKey is empty"; return false; }
+            if (string.IsNullOrEmpty(AppId)) { problem = "AppId is empty"; return false; }
+            if (string.IsNullOrEmpty(MaxSdkKey)) { problem = "MaxSdkKey is empty"; return false; }
+
+            problem = null;
+            return true;
+        }
+    }
+}

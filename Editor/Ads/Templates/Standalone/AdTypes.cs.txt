@@ -1,0 +1,103 @@
+using System;
+using System.Collections.Generic;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// The small types the Metica ad units need, which in the GD Monetization SDK come from
+    /// the surrounding ads layer. Same names and same shapes, so the ad unit code below reads
+    /// the same in both places.
+    /// </summary>
+    public enum AdFormat
+    {
+        Interstitial,
+        Rewarded,
+        Banner,
+        MRec
+    }
+
+    public enum BannerPosition
+    {
+        Top,
+        TopLeft,
+        TopRight,
+        Center,
+        Bottom,
+        BottomLeft,
+        BottomRight
+    }
+
+    public enum MRecPosition
+    {
+        Top,
+        TopLeft,
+        TopRight,
+        Center,
+        CenterLeft,
+        CenterRight,
+        Bottom,
+        BottomLeft,
+        BottomRight
+    }
+
+    public enum BannerSize
+    {
+        Banner,
+        Leaderboard
+    }
+
+    /// <summary>Where a banner or MREC sits, and how big it is.</summary>
+    public sealed class AdViewInfo
+    {
+        public BannerPosition BannerPosition = BannerPosition.Bottom;
+        public MRecPosition MrecPosition = MRecPosition.Center;
+        public BannerSize bannerSize = BannerSize.Banner;
+    }
+
+    /// <summary>
+    /// One ad impression's revenue, handed to <see cref="MeticaAdsHooks.OnAdRevenue"/> so the
+    /// game can forward it to whatever analytics it already has.
+    ///
+    /// <para>The ad platform is a plain string rather than an enum: a standalone install has
+    /// only ever one platform, and a string is one less type for the game to learn.</para>
+    /// </summary>
+    public sealed class AdRevenueInfo
+    {
+        public readonly AdFormat Format;
+        public readonly string Platform;
+        public readonly string NetworkName;
+        public readonly string AdUnitId;
+        public readonly string Currency;
+        public readonly double Revenue;
+        public readonly string Placement;
+
+        /// <summary>Extra dimensions Metica attaches to every impression, such as the user group.</summary>
+        public readonly IReadOnlyDictionary<string, object> Payload;
+
+        public AdRevenueInfo(AdFormat format, string platform, string networkName, string adUnitId,
+            string currency, double revenue, string placement,
+            IReadOnlyDictionary<string, object> payload)
+        {
+            Format = format;
+            Platform = platform;
+            NetworkName = networkName;
+            AdUnitId = adUnitId;
+            Currency = currency;
+            Revenue = revenue;
+            Placement = placement;
+            Payload = payload;
+        }
+
+        public override string ToString() =>
+            $"{Format} {Revenue:F6} {Currency} via {NetworkName} ({AdUnitId})";
+    }
+
+    /// <summary>
+    /// What an ad network has to offer the manager. One method, because that is all Metica
+    /// needs: its callback-based initialization maps straight onto it.
+    /// </summary>
+    public interface IAdNetworkService
+    {
+        void Initialize(string sdkKey, Action onInitialized);
+    }
+}

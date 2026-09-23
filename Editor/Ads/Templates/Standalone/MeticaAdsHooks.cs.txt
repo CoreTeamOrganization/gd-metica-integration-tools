@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+
+namespace MeticaIntegration
+{
+    /// <summary>
+    /// Where this integration meets the rest of your game.
+    ///
+    /// <para>Everything else here is self-contained and needs no editing. These four hooks
+    /// are the exception, because only your project knows what its analytics and consent
+    /// look like. All four are optional: leave them unset and ads still serve — you simply
+    /// get no revenue events and Metica is told nothing about consent.</para>
+    ///
+    /// <para>Set them once, before <c>MeticaAdsManager.Initialize()</c>. A
+    /// <c>RuntimeInitializeOnLoadMethod</c> or your existing bootstrap is the usual place.</para>
+    /// </summary>
+    public static class MeticaAdsHooks
+    {
+        /// <summary>
+        /// Called for every ad impression that earns revenue, on the Unity main thread.
+        /// Forward it to whatever ad-revenue reporting you already have.
+        /// </summary>
+        public static Action<AdRevenueInfo> OnAdRevenue;
+
+        /// <summary>
+        /// Whether the user has consented to personalized ads. Called once, just after
+        /// Metica initializes. Unset is treated as no consent, which is the safe default.
+        /// </summary>
+        public static Func<bool> HasUserConsent;
+
+        /// <summary>
+        /// A named event with parameters, for your analytics. Used once, to report the
+        /// Smart Floors user group and the Metica SDK version after initialization.
+        /// </summary>
+        public static Action<string, IDictionary<string, object>> OnEvent;
+
+        /// <summary>
+        /// The user clicked an ad and is probably about to leave the app. If you have an
+        /// app-open ad or a session timer, this is where to hold it off.
+        /// </summary>
+        public static Action OnAdClicked;
+
+        // ── Example wiring ─────────────────────────────────────────────────────
+        //
+        // Put something like this in your own bootstrap — not in this file, so it survives
+        // the tool being run again:
+        //
+        //  [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        //  private static void WireMeticaAds()
+        //  {
+        //      MeticaAdsHooks.OnAdRevenue = info =>
+        //          MyAnalytics.LogAdRevenue(info.NetworkName, info.Revenue, info.Currency);
+        //
+        //      MeticaAdsHooks.HasUserConsent = () => MyConsent.PersonalizedAdsAllowed;
+        //
+        //      MeticaAdsHooks.OnEvent = (name, parameters) =>
+        //          MyAnalytics.LogEvent(name, parameters);
+        //
+        //      MeticaAdsHooks.OnAdClicked = () => MyAppOpenAd.PostponeNextShow();
+        //  }
+
+        // ── Called by the integration ──────────────────────────────────────────
+
+        /// <summary>A hook belongs to the game, so it must never take the ads stack down with it.</summary>
+        internal static void ReportRevenue(AdRevenueInfo info)
+        {
+            if (OnAdRevenue == null) return;
+
+            try { OnAdRevenue(info); }
+            catch (Exception e) { MeticaAdsLog.LogError($"OnAdRevenue threw: {e}"); }
+        }
+
+        internal static void ReportEvent(string name, IDictionary<string, object> parameters)
+        {
+            if (OnEvent == null) return;
+
+            try { OnEvent(name, parameters); }
+            catch (Exception e) { MeticaAdsLog.LogError($"OnEvent threw: {e}"); }
+        }
+
+        internal static void ReportAdClicked()
+        {
+            if (OnAdClicked == null) return;
+
+            try { OnAdClicked(); }
+            catch (Exception e) { MeticaAdsLog.LogError($"OnAdClicked threw: {e}"); }
+        }
+
+        internal static bool ReadConsent()
+        {
+            if (HasUserConsent == null) return false;
+
+            try { return HasUserConsent(); }
+            catch (Exception e)
+            {
+                MeticaAdsLog.LogError($"HasUserConsent threw: {e}");
+                return false;
+            }
+        }
+    }
+}
