@@ -1,6 +1,4 @@
 using System;
-using System.Threading;
-using UnityEditor;
 using UnityEditor.PackageManager;
 
 namespace GameDistrict.MeticaIntegrationTools
@@ -23,24 +21,25 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override bool Optional => true;
 
-        public override string Summary =>
-            "GDMeticaAnalytics can log \"perfStats\" and \"loadTime\" events using the GD Performance " +
-            "Tracker package. Only needed if you log those two events — skip it otherwise.";
+        public override string Summary => "Add GD Performance Tracker — only for perfStats / loadTime events.";
+
+        public override string Why =>
+            $"Adds {GitUrl} by git URL. GDMeticaAnalytics uses it for the perfStats and loadTime events " +
+            "(ConfigurePerformanceTracking, MarkGameInteractive, LogPerfStatsEvent, LogLoadTimeEvent). " +
+            "Skip this step if you don't log those two.";
 
         public override string ActionLabel => "Add GD Performance Tracker";
 
-        public override string ReviewHint =>
-            "Check Packages/manifest.json gained com.gamedistrict.performance-tracker.";
+        public override string ReviewHint => "Packages/manifest.json gains com.gamedistrict.performance-tracker.";
 
         public override VerifyResult Verify()
         {
             var result = new VerifyResult();
 
             if (IsInstalled())
-                result.Note("GD Performance Tracker installed");
+                result.Note("Installed");
             else
-                result.Problem("GD Performance Tracker is not installed. Only needed for the perfStats " +
-                               "and loadTime events — skip this step if you are not logging those.");
+                result.Problem("Not installed.");
 
             return result.Seal();
         }
@@ -53,32 +52,10 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
-            var request = Client.Add(GitUrl);
-
-            try
-            {
-                EditorUtility.DisplayProgressBar(Title, GitUrl, 0.5f);
-                while (!request.IsCompleted)
-                    Thread.Sleep(50);
-            }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-            }
-
-            MeticaIntegrationLog.Record(Title, request.Status == StatusCode.Failure
-                ? $"Could not add the package: {request.Error?.message}"
-                : "Added GD Performance Tracker");
-        }
-
-        public override void DrawBody(VerifyResult result)
-        {
-            EditorGUILayout.HelpBox(
-                $"Adds {GitUrl} via git URL. GDMeticaAnalytics already calls its API once installed — " +
-                "see ConfigurePerformanceTracking, MarkGameInteractive, LogPerfStatsEvent and " +
-                "LogLoadTimeEvent.\n\n" +
-                "Skip this step if you are not logging perfStats or loadTime.",
-                MessageType.Info);
+            PackageRequests.Track(Client.Add(GitUrl), Title, request =>
+                MeticaIntegrationLog.Record(Title, request.Status == StatusCode.Failure
+                    ? $"Could not add the package: {request.Error?.message}"
+                    : "Added GD Performance Tracker"));
         }
 
         private static bool IsInstalled()

@@ -38,16 +38,17 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override bool Optional => true;
 
-        public override string Summary =>
-            "Metica's Android SDK needs JDK 17+. Points gradleTemplate.properties' " +
-            "org.gradle.java.home at one — a project file, but a local machine path, so it is " +
-            "not something to commit.";
+        public override string Summary => "Point Gradle at JDK 17+.";
+
+        public override string Why =>
+            "Metica's Android SDK needs JDK 17+ (AWS Corretto or Adoptium). This sets " +
+            "org.gradle.java.home in gradleTemplate.properties, turning on Custom Gradle Properties " +
+            "Template first if needed. The path is this machine's — don't commit it as-is. Skip this " +
+            "if your Android build already works.";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.GradleProperties };
 
-        public override string ReviewHint =>
-            "Check gradleTemplate.properties gained org.gradle.java.home pointing at your JDK 17+ " +
-            "install. Do not commit that line as-is — it is this machine's path.";
+        public override string ReviewHint => "org.gradle.java.home is this machine's path — don't commit it as-is.";
 
         public override VerifyResult Verify()
         {
@@ -55,9 +56,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!MeticaPaths.FileExists(MeticaPaths.GradleProperties))
             {
-                result.Problem("gradleTemplate.properties does not exist. Enable Player Settings → " +
-                               "Publishing Settings → Custom Gradle Properties Template, then set the " +
-                               "JDK path — or just press the button below, which does both.");
+                result.Problem("No JDK set — pick one below.");
                 return result.Seal();
             }
 
@@ -66,46 +65,34 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!match.Success || string.IsNullOrWhiteSpace(match.Groups[1].Value))
             {
-                result.Problem("gradleTemplate.properties has no org.gradle.java.home. Metica's Android " +
-                               "SDK needs a JDK 17+ Gradle actually builds with, not whatever Unity finds " +
-                               "on its own.");
+                result.Problem("No JDK set — pick one below.");
                 return result.Seal();
             }
 
             var jdkHome = match.Groups[1].Value.Trim();
             if (!Directory.Exists(jdkHome))
             {
-                result.Problem($"org.gradle.java.home points at {jdkHome}, which does not exist on this " +
-                               "machine. Every machine that builds Android sets its own — this line is " +
-                               "not meant to travel between them as-is.");
+                result.Problem($"JDK folder not found: {jdkHome}");
                 return result.Seal();
             }
 
             var found = VersionAt(jdkHome);
             if (found == null)
             {
-                result.Note($"org.gradle.java.home is {jdkHome}, but its version could not be read. Make " +
-                            $"sure it is {Required} or later.");
+                result.Note($"JDK at {jdkHome} (version unknown)");
                 return result.Seal();
             }
 
             if (found < Required)
-                result.Problem($"JDK {found} at {jdkHome} is below the {Required} Metica needs.");
+                result.Problem($"JDK {found} is below {Required}.");
             else
-                result.Note($"JDK {found} at {jdkHome}");
+                result.Note($"JDK {found}");
 
             return result.Seal();
         }
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "Install JDK 17+ (AWS Corretto or Adoptium both work) if you have not already, then point " +
-                "Gradle at it below. This edits a project file, but the path itself is local to this " +
-                "machine — every machine building Android sets its own, so do not commit it as a real path.\n\n" +
-                "Skip this step if your Android build already works.",
-                MessageType.Info);
-
             if (GUILayout.Button("Choose a JDK folder…", GUILayout.Height(24)))
                 ChooseJdkFolder();
         }

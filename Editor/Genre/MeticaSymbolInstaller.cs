@@ -15,7 +15,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
         static MeticaSymbolInstaller()
         {
-            if (IsAssemblyLoaded("Metica.SDK"))
+            // The Metica SDK alone is not enough: its own analytics code is gated on this same
+            // define and needs the analytics abstractions assembly, so an ads-only project (Metica
+            // SDK, no abstractions) would stop compiling the moment this define appeared.
+            if (IsAssemblyLoaded("Metica.SDK") && IsAssemblyLoaded("MeticaAnalyticsAbstractions"))
             {
                 AddSymbol(NamedBuildTarget.Android, MeticaSymbol);
                 AddSymbol(NamedBuildTarget.iOS, MeticaSymbol);

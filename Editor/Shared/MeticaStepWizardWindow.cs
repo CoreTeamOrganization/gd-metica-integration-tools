@@ -17,7 +17,7 @@ namespace GameDistrict.MeticaIntegrationTools
     /// real project, and a step stays locked until the one before it verifies. So it is safe
     /// to close the window, let Unity recompile, or come back tomorrow.</para>
     /// </summary>
-    public abstract class MeticaStepWizardWindow : EditorWindow
+    public abstract class MeticaStepWizardWindow : EditorWindow, IHasCustomMenu
     {
         /// <summary>
         /// The steps this run shows, in order. Read fresh each time rather than cached once,
@@ -28,6 +28,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private VerifyResult[] _results = Array.Empty<VerifyResult>();
         private bool[] _expanded = Array.Empty<bool>();
+        private bool[] _whyOpen = Array.Empty<bool>();
 
         private Vector2 _scroll;
         private bool _showLog;
@@ -50,6 +51,16 @@ namespace GameDistrict.MeticaIntegrationTools
         protected virtual void OnDisable() => AssemblyReloadEvents.afterAssemblyReload -= RefreshAll;
 
         private void OnFocus() => QueueRefresh();
+
+        /// <summary>
+        /// Unity's own ⋮ menu on the window tab (beside Maximize / Close Tab). Removing the
+        /// tool lives here and under GameDistrict/Metica rather than as a wizard step, so it is
+        /// the same one action from either window.
+        /// </summary>
+        public void AddItemsToMenu(GenericMenu menu)
+        {
+            menu.AddItem(new GUIContent("Remove Metica Integration Tools…"), false, ToolRemover.Remove);
+        }
 
         /// <summary>Queues a re-check for the next editor tick, outside the GUI pass.</summary>
         protected void QueueRefresh()
@@ -100,6 +111,7 @@ namespace GameDistrict.MeticaIntegrationTools
             {
                 _results = new VerifyResult[steps.Length];
                 _expanded = new bool[steps.Length];
+                _whyOpen = new bool[steps.Length];
             }
 
             for (var i = 0; i < steps.Length; i++)
@@ -222,10 +234,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
                 EditorGUILayout.HelpBox(
                     names.Length == 0
-                        ? "Every step verifies. Build to a device and confirm the Metica logs before shipping."
-                        : "Build to a device and confirm the Metica logs before shipping.\n\n" +
-                          "Skipped, so never verified — come back to these if the build complains:\n" +
-                          string.Join("\n", names),
+                        ? "All done. Build to a device and check the Metica logs."
+                        : "All done. Build to a device and check the Metica logs.\n" +
+                          "Skipped: " + string.Join(", ", names),
                     MessageType.Info);
             }
         }
@@ -270,19 +281,27 @@ namespace GameDistrict.MeticaIntegrationTools
             }
 
             // ── Body ───────────────────────────────────────────────────────────
-            EditorGUILayout.LabelField(step.Summary, EditorStyles.wordWrappedLabel);
-            EditorGUILayout.Space(2);
+            // One problem at a time: the first is what to fix now, and the rest are listed
+            // under "Why?" rather than stacked up as a wall of red.
+            EditorGUILayout.LabelField(step.Summary, EditorStyles.wordWrappedMiniLabel);
 
+            var extraProblems = 0;
             if (result != null)
             {
-                foreach (var problem in result.Problems)
-                    EditorGUILayout.HelpBox(problem, MessageType.Error);
+                if (result.Problems.Count > 0)
+                {
+                    extraProblems = result.Problems.Count - 1;
+                    EditorGUILayout.HelpBox(
+                        extraProblems == 0
+                            ? result.Problems[0]
+                            : $"{result.Problems[0]}  (+{extraProblems} more under Why?)",
+                        MessageType.Error);
+                }
 
                 foreach (var note in result.Notes)
                     EditorGUILayout.LabelField("• " + note, EditorStyles.wordWrappedMiniLabel);
             }
 
-            EditorGUILayout.Space(2);
             step.DrawBody(result);
 
             EditorGUILayout.Space(4);
@@ -303,8 +322,29 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!skipped && verified && !reviewed) DrawReviewGate(step);
 
+            DrawWhy(index, step, result, extraProblems);
+
             EditorGUILayout.EndVertical();
             EditorGUILayout.Space(2);
+        }
+
+        /// <summary>
+        /// The step's longer explanation plus any problems beyond the first, behind a foldout
+        /// that starts closed. Drawn only when there is something to put in it.
+        /// </summary>
+        private void DrawWhy(int index, MeticaStep step, VerifyResult result, int extraProblems)
+        {
+            if (step.Why == null && extraProblems == 0) return;
+
+            _whyOpen[index] = EditorGUILayout.Foldout(_whyOpen[index], "Why?", true);
+            if (!_whyOpen[index]) return;
+
+            if (extraProblems > 0)
+                for (var i = 1; i < result.Problems.Count; i++)
+                    EditorGUILayout.HelpBox(result.Problems[i], MessageType.Error);
+
+            if (step.Why != null)
+                EditorGUILayout.LabelField(step.Why, EditorStyles.wordWrappedMiniLabel);
         }
 
         /// <summary>
@@ -317,8 +357,6 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (skipped)
             {
-                EditorGUILayout.HelpBox("Skipped. Nothing was changed for this step.", MessageType.None);
-
                 if (GUILayout.Button("Un-skip this step"))
                 {
                     MeticaIntegrationProgress.ClearSkipped(step.Id);

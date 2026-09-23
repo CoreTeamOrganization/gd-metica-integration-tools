@@ -39,14 +39,8 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             EditorGUILayout.Space(6);
 
-            EditorGUILayout.LabelField("Metica Genre Creator setup", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(
-                "Gets Metica's Android toolchain in place, then opens the Genre Creator to author " +
-                "analytics genre files. Requires the Metica Unity SDK already installed — this wizard " +
-                "does not install it.\n" +
-                "Each step stops once it verifies and waits for you to sign it off, so you can read the " +
-                "diff before the next one runs. A step you have finished or skipped stays open — expand " +
-                "it any time to see where it stands now and run it again.",
+            EditorGUILayout.LabelField("Metica Genre Creator", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Needs the Metica SDK installed. Run each step, check its diff, sign it off.",
                 EditorStyles.wordWrappedMiniLabel);
 
             DrawProgressAndControls(current, GenreSteps.Select(step => step.Id));

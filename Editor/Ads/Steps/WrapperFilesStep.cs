@@ -13,9 +13,13 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public override string Title => "Wrapper files";
 
-        public override string Summary =>
-            "Adds AdNetworkMetica, MeticaInitializer, the Interstitial / Rewarded / Banner / MRec units, " +
-            "MeticaConfiguration and MeticaConsentSettings.";
+        public override string Summary => "Add the Metica ads wrapper scripts.";
+
+        public override string Why =>
+            "Eight new files: AdNetworkMetica, MeticaInitializer, the Interstitial / Rewarded / Banner / " +
+            "MRec units, MeticaConfiguration and MeticaConsentSettings. AdNetworkMetica implements the " +
+            "same IAdNetworkService Admob and AppLovin use, so those stay untouched. Compile errors right " +
+            "after this step are expected — the next step adds the symbols they use.";
 
         public override string ActionLabel => "Write wrapper files";
 
@@ -38,9 +42,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override IEnumerable<string> TouchedPaths => Files().Select(file => file.target);
 
-        public override string ReviewHint =>
-            "Eight new files, nothing modified. AdNetworkMetica should implement IAdNetworkService and " +
-            "go through MeticaInitializer.InitializeAdsWithCallback.";
+        public override string ReviewHint => "Eight new files, nothing modified.";
 
         public override VerifyResult Verify()
         {
@@ -48,17 +50,19 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (MeticaPaths.RuntimeScripts == null)
             {
-                result.Problem("GD Monetization SDK root not resolved — go back to the Metica SDK step.");
+                result.Problem("GD SDK not found.");
                 return result.Seal();
             }
 
-            foreach (var (_, target) in Files())
-                if (!MeticaPaths.FileExists(target))
-                    result.Problem($"Missing {target}");
+            var files = Files().ToList();
+            var missing = files.Count(file => !MeticaPaths.FileExists(file.target));
+            if (missing > 0)
+            {
+                result.Problem($"{missing} of {files.Count} wrapper files missing.");
+                return result.Seal();
+            }
 
-            if (result.Problems.Count > 0) return result.Seal();
-
-            result.Note("All 8 wrapper files present");
+            result.Note($"{files.Count} files present");
 
             // The wrapper cannot compile until the patch step supplies AdPlatforms.METICA, Tag.Metica
             // and MonetizationConfigurationsPath.Metica, so a missing type here is expected
@@ -66,9 +70,7 @@ namespace GameDistrict.MeticaIntegrationTools
             if (SourcePatcher.Contains(MeticaPaths.AdPlatforms, "METICA")
                 && !TemplateWriter.TypeIsLoaded("Monetization.Runtime.Configurations.MeticaConfiguration"))
             {
-                result.Problem("The wrapper files are in place but have not compiled. Check the Console — " +
-                               "if the errors mention AdPlatforms, Tag or MonetizationConfigurationsPath, " +
-                               "finish the patch step.");
+                result.Problem("Wrapper files haven't compiled — check the Console.");
             }
 
             return result.Seal();
@@ -82,15 +84,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "AdNetworkMetica implements the plain IAdNetworkService that Admob and AppLovin already " +
-                "use, so AdNetworkController and the two other ad networks stay untouched. " +
-                "MeticaInitializer is the single guard against initializing twice.\n\n" +
-                "Compile errors right after this step are expected — step 4 adds the symbols they use.",
-                MessageType.Info);
-
-            _overwrite = EditorGUILayout.ToggleLeft(
-                "Overwrite files that already exist (off keeps local edits)", _overwrite);
+            _overwrite = EditorGUILayout.ToggleLeft("Overwrite existing files", _overwrite);
         }
     }
 }

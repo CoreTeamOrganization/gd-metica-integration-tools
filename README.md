@@ -13,6 +13,9 @@ time from **GameDistrict → Metica**:
 Both flows share one Gradle/Kotlin/AGP layer (`Editor/Shared/Gradle/`), so there is a
 single place that owns `baseProjectTemplate.gradle`, not two.
 
+**Remove Integration Tools…** (same menu, and each window's ⋮ tab menu) removes the package.
+It refuses while the project has generated genres, since those inherit from `Runtime/`.
+
 ## Installing
 
 **Active development** (this project) — a local package reference, so edits here are
@@ -40,17 +43,20 @@ change. One versioned package fixes that: every project points at the same sourc
 Editor/
   GameDistrict.MeticaIntegrationTools.Editor.asmdef   references GameDistrict.MeticaAnalytics.Runtime
   Shared/
-    MeticaStepWizardWindow   the generic wizard shell (verify, sign off, review gate, log) —
-                             both windows below are this plus their own step list and header
+    MeticaStepWizardWindow   the generic wizard shell (verify, sign off, review gate, Why?
+                             foldout, log, ⋮ menu) — both windows below are this plus their
+                             own step list and header
     MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress stores
+    ToolRemover              removes the package (menu item + ⋮ menu)
+    PackageRequests          waits on Package Manager requests without blocking the editor
     Gradle/                GradleVersionStep, KotlinTemplateStep, GradleTemplateEditor,
                             GradleJdkStep — used by both flows, so one place owns
                             baseProjectTemplate.gradle and gradleTemplate.properties, not two
   Ads/                     MeticaIntegrationWindow + its steps/templates
   Genre/
-    GenreWizardWindow      the setup wizard: shared Gradle steps, MeticaSymbolInstaller
-                           (still an [InitializeOnLoad] installer, not a step — see below),
-                           PerformanceTrackerStep, GenreDefinitionStep
+    GenreWizardWindow      the setup wizard: shared Gradle steps, PerformanceTrackerStep,
+                           GenreDefinitionStep
+    MeticaSymbolInstaller  [InitializeOnLoad] define installer, not a step — see below
     GenreCreator/          the actual genre-authoring window and codegen engine, unchanged —
                            opened by GenreDefinitionStep, no menu item of its own
 Runtime/
@@ -75,12 +81,16 @@ every one of those on update. `GenreCodeGenerator` also still emits `GameDistric
 into newly generated genre files — a hardcoded string constant, unaffected by anything the
 *editor* side is called.
 
-## Known gap, not yet addressed
+## MeticaSymbolInstaller
 
-`MeticaSymbolInstaller` still runs on every Editor load (`[InitializeOnLoad]`) and silently
-sets `METICA_ANALYTICS` / `GD_PERFORMANCE_TRACKER` scripting defines once it detects the
-matching SDK. Unlike the old `PerformanceTrackerPrompt` (now `PerformanceTrackerStep`, fixed
-in the move to Genre wizard steps), this one never shows a dialog and only ever adds a
-define — harmless for an Ads-only project, just not yet made explicit the way everything
-else in this package is. Left alone for now since it does not actually bother anyone; worth
-converting to a step later for consistency.
+Runs on every Editor load (`[InitializeOnLoad]`) and adds scripting defines for Android and
+iOS:
+
+- `METICA_ANALYTICS` — only when **both** `Metica.SDK` and `MeticaAnalyticsAbstractions`
+  are loaded. The Metica SDK's own analytics code is gated on this define and needs the
+  abstractions assembly, so adding it to an Ads-only project (Metica SDK, no abstractions)
+  would stop the Metica SDK compiling. An earlier version checked `Metica.SDK` alone and did
+  exactly that.
+- `GD_PERFORMANCE_TRACKER` — when `GDPerformanceTracker.Runtime` is loaded.
+
+It never removes a define. Still not a wizard step; worth converting later for consistency.

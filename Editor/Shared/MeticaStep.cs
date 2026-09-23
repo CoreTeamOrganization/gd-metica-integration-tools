@@ -91,6 +91,13 @@ namespace GameDistrict.MeticaIntegrationTools
         public virtual void DrawBody(VerifyResult result) { }
 
         /// <summary>
+        /// The longer explanation — why the step exists, what it touches, when to skip it.
+        /// Shown behind a "Why?" foldout that starts closed, so the step itself stays down to
+        /// its summary, one problem line and its buttons. Null when there is nothing to add.
+        /// </summary>
+        public virtual string Why => null;
+
+        /// <summary>
         /// Project-relative paths this step creates or edits, for the review panel to build a
         /// diff command from. Empty for steps that only read the project.
         /// </summary>

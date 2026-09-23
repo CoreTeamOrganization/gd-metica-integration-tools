@@ -12,7 +12,7 @@
     install is the wrong place to hand-edit a per-project setting.
   - `RemoveToolStep` now removes the package via `Client.Remove(...)` (Package Manager)
     instead of `AssetDatabase.DeleteAsset` on its own folder — the old approach only made
-    sense when the tool was a plain Assets folder.
+    sense when the tool was a plain Assets folder. *(Since replaced by `ToolRemover`, below.)*
   - `GradleVersionStep`, `KotlinTemplateStep`, `GradleTemplateEditor` moved to
     `Editor/Shared/Gradle/` — shared with the Genre Creator flow once it lands, so only one
     place owns `baseProjectTemplate.gradle`.
@@ -57,6 +57,35 @@
     "wrong" number of genres) — always verifies, and its button opens `GenreCreatorWindow`
     for as long as the game keeps adding genres.
   - **New known gap:** `MeticaSymbolInstaller` still runs as a package-wide
-    `[InitializeOnLoad]` installer rather than a step — left alone since, unlike the
-    performance-tracker prompt, it never shows a dialog and only adds scripting defines, so
-    it does not actually bother an Ads-only project. Worth converting later for consistency.
+    `[InitializeOnLoad]` installer rather than a step. *(The claim first made here, that it
+    was harmless for an Ads-only project, was wrong — see the fix below.)*
+
+- Fixed: `MeticaSymbolInstaller` added `METICA_ANALYTICS` whenever `Metica.SDK` was loaded,
+  so in an Ads-only project it would switch on the Metica SDK's own analytics code without
+  the `MeticaAnalyticsAbstractions` assembly that code needs, and the Metica SDK stopped
+  compiling. It now requires both assemblies.
+- Fixed: `GenreExcelParser` lost its `using GameDistrict.MeticaAnalytics;` when editor code
+  moved to the `GameDistrict.MeticaIntegrationTools` namespace, so `typeof(GDMeticaAnalytics)`
+  no longer resolved and the whole Editor assembly failed to compile.
+- Step messages trimmed, in both windows:
+  - A step shows a one-line summary, its **first** problem only (with a "+N more" count),
+    and short status notes.
+  - New `MeticaStep.Why`: the longer explanation, shown with the remaining problems under a
+    **Why?** foldout that starts closed. Every step's explanatory `HelpBox` moved there, so
+    `DrawBody` is back to interactive controls only.
+  - Steps that checked many things (patch core files, ad units, standalone runtime) now report
+    one count line ("3 of 13 patches missing.") with the per-item lines under Why?.
+- Tool removal is no longer a step at the end of the Ads flow (`RemoveToolStep` deleted).
+  New `ToolRemover`: **GameDistrict → Metica → Remove Integration Tools…**, also in both
+  windows' ⋮ tab menu (`MeticaStepWizardWindow` implements `IHasCustomMenu`). Refuses while
+  `Assets/MeticaGenres/` has genres, since they inherit from `Runtime/`. Otherwise deletes
+  `Assets/MeticaIntegrationToolsSettings/` and calls `Client.Remove`.
+- New `PackageRequests.Track`: waits on a Package Manager request by polling from
+  `EditorApplication.update`, the documented pattern, instead of a `Thread.Sleep` loop on the
+  main thread. Used by `ToolRemover` and `PerformanceTrackerStep`.
+- `Editor/Ads/README.md` brought up to date: menu path, pinned target version, MAX 8.1.0+ /
+  Moloco 4.3.1+, the package location and tool removal.
+- Fixed: added the 68 missing `.meta` files (every Ads/Shared script, the templates, the
+  folders, `package.json`, the READMEs). A git-installed package is read-only, so Unity
+  ignores any asset without a committed `.meta` — the Ads window would not have existed in a
+  project that added this package by git URL. Fresh GUIDs; nothing references these by GUID.

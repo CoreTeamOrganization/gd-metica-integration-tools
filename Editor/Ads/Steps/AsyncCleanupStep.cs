@@ -22,11 +22,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Remove the unused async init path";
 
-        public override string Summary =>
-            "A project that previously used Metica's async initialization still carries " +
-            "IAsyncAdNetworkService and an AdNetworkController overload for it. Neither is used once " +
-            "Metica initializes through its callback API. On a project that never had them, this step " +
-            "has nothing to do.";
+        public override string Summary => "Remove the old async init path, if the project has one.";
+
+        public override string Why =>
+            "Projects that used Metica's older async init still carry IAsyncAdNetworkService and an " +
+            "AdNetworkController overload for it. Nothing uses them once Metica starts through its " +
+            "callback API. Leaving them is harmless. Nothing is removed while Admob or AppLovin still " +
+            "implement the interface — that would break the build.";
 
         public override string ActionLabel => "Remove the async init path";
 
@@ -37,9 +39,7 @@ namespace GameDistrict.MeticaIntegrationTools
         };
 
         public override string ReviewHint =>
-            "On a project that never had the async integration this changes nothing and the diff is " +
-            "empty. If it did remove something, check AdNetworkController still compiles and its " +
-            "Initialize() calls the synchronous path.";
+            "Often an empty diff. Otherwise, AdNetworkController.Initialize() should call the sync path only.";
 
         public override VerifyResult Verify()
         {
@@ -47,34 +47,32 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (MeticaPaths.RuntimeScripts == null)
             {
-                result.Problem("GD Monetization SDK root not resolved — go back to the Metica SDK step.");
+                result.Problem("GD SDK not found.");
                 return result.Seal();
             }
 
             if (!MeticaIntegrationMode.IsCallback)
             {
-                result.Note("Async mode — the async init path is in use, so there is nothing to clean up.");
+                result.Note("Async mode — nothing to clean up");
                 return result.Seal();
             }
 
             var leftovers = Leftovers().ToList();
             if (leftovers.Count == 0)
             {
-                result.Note("No async init leftovers — nothing to remove.");
+                result.Note("Nothing to remove");
                 return result.Seal();
             }
 
             var stillImplementing = StillImplementing().ToList();
             if (stillImplementing.Count > 0)
             {
-                result.Note($"{AsyncInterface} is still implemented by {string.Join(" and ", stillImplementing)}, " +
-                            "so the async path stays. That is fine — Metica does not use it. Revert those to " +
-                            "the synchronous IAdNetworkService first if you want it gone.");
+                result.Note($"Kept — {string.Join(" and ", stillImplementing)} still use it");
                 return result.Seal();
             }
 
             foreach (var leftover in leftovers)
-                result.Problem($"{leftover} is left over from the async integration and nothing uses it.");
+                result.Problem($"Unused: {leftover}.");
 
             return result.Seal();
         }
@@ -105,24 +103,16 @@ namespace GameDistrict.MeticaIntegrationTools
             AssetDatabase.Refresh();
         }
 
-        public override void DrawBody(VerifyResult result)
-        {
-            EditorGUILayout.HelpBox(
-                "Optional cleanup. Leaving the async path in place is harmless — Metica no longer uses " +
-                "it. Originals are backed up before any change.",
-                MessageType.Info);
-        }
-
         // ── Detection ──────────────────────────────────────────────────────────
 
         /// <summary>Async-only declarations that no longer have a user.</summary>
         private static IEnumerable<string> Leftovers()
         {
             if (SourcePatcher.Contains(MeticaPaths.IAdNetworkService, "interface " + AsyncInterface))
-                yield return $"The {AsyncInterface} interface";
+                yield return $"{AsyncInterface} interface";
 
             if (SourcePatcher.Contains(MeticaPaths.AdNetworkController, "asyncAdNetwork"))
-                yield return "The AdNetworkController async constructor and field";
+                yield return "AdNetworkController async constructor and field";
         }
 
         /// <summary>Ad networks that would stop compiling if the interface went away.</summary>

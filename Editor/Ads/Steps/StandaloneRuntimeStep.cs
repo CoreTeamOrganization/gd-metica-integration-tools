@@ -53,19 +53,21 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Metica ads runtime";
 
-        public override string Summary =>
-            "Writes a standalone Metica ads runtime to " + MeticaPaths.StandaloneRoot + ". The ad units " +
-            "and initializer are the GD SDK's; everything they leaned on the SDK for is written alongside, " +
-            "so the folder compiles on its own.";
+        public override string Summary => $"Write the Metica ads runtime to {MeticaPaths.StandaloneRoot}.";
+
+        public override string Why =>
+            "No GD SDK here, so Metica gets its own small runtime. The ad units and initializer are the GD " +
+            "SDK's; what they relied on the SDK for is written alongside, so the folder compiles on its " +
+            "own. Your game calls MeticaAdsManager only — e.g. MeticaAdsManager.Initialize(), " +
+            "ShowInterstitial(\"level_end\"), ShowRewarded(\"double_coins\", ok => …). Edit MeticaAdsHooks " +
+            "to plug in your analytics and consent; existing files are never overwritten.";
 
         public override string ActionLabel => "Write the Metica ads runtime";
 
         public override IEnumerable<string> TouchedPaths =>
             Files.Select(name => $"{MeticaPaths.StandaloneRoot}/{name}.cs");
 
-        public override string ReviewHint =>
-            "All new files, in one new folder — nothing existing is touched. MeticaAdsManager is the only " +
-            "class your game calls; MeticaAdsHooks is the only one you edit.";
+        public override string ReviewHint => "New files in one new folder. Nothing existing changes.";
 
         public override VerifyResult Verify()
         {
@@ -75,29 +77,32 @@ namespace GameDistrict.MeticaIntegrationTools
                 .Where(name => !MeticaPaths.FileExists($"{MeticaPaths.StandaloneRoot}/{name}.cs"))
                 .ToArray();
 
-            if (missing.Length > 0)
+            if (missing.Length == Files.Length)
             {
-                result.Problem(missing.Length == Files.Length
-                    ? $"Nothing written to {MeticaPaths.StandaloneRoot} yet."
-                    : $"Missing from {MeticaPaths.StandaloneRoot}: {string.Join(", ", missing)}");
+                result.Problem("Not written yet.");
                 return result.Seal();
             }
 
-            result.Note($"{Files.Length} files in {MeticaPaths.StandaloneRoot}");
+            if (missing.Length > 0)
+            {
+                result.Problem($"{missing.Length} of {Files.Length} files missing.");
+                foreach (var name in missing)
+                    result.Problem($"Missing: {name}.cs");
+                return result.Seal();
+            }
 
             // Present but not compiling is the failure that matters, and the only one that
             // can be seen from here.
             var uncompiled = MustCompile.Where(name => !TemplateWriter.TypeIsLoaded(name)).ToArray();
             if (uncompiled.Length > 0)
             {
-                result.Problem(
-                    "The files are there but have not compiled: " +
-                    string.Join(", ", uncompiled.Select(n => n.Split('.').Last())) + ". " +
-                    "Check the Console — a missing Metica SDK is the usual cause — then Re-check.");
+                result.Problem("Runtime hasn't compiled — check the Console.");
+                foreach (var name in uncompiled)
+                    result.Problem($"Not compiled: {name.Split('.').Last()}");
                 return result.Seal();
             }
 
-            result.Note("The runtime compiles");
+            result.Note($"{Files.Length} files, compiled");
             return result.Seal();
         }
 
@@ -114,19 +119,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "No GD Monetization SDK in this project, so Metica is installed on its own.\n\n" +
-                "Your game calls MeticaAdsManager and nothing else:\n" +
-                "    MeticaAdsManager.Initialize();\n" +
-                "    MeticaAdsManager.ShowInterstitial(\"level_end\");\n" +
-                "    MeticaAdsManager.ShowRewarded(\"double_coins\", ok => { if (ok) Grant(); });\n\n" +
-                "Existing files are never overwritten, so editing MeticaAdsHooks is safe — running " +
-                "this step again will not undo it.",
-                MessageType.Info);
-
             if (!MeticaPaths.DirectoryExists(MeticaPaths.StandaloneRoot)) return;
 
-            if (GUILayout.Button("Select the folder in the Project window"))
+            if (GUILayout.Button("Select the folder"))
                 Selection.activeObject =
                     AssetDatabase.LoadAssetAtPath<Object>(MeticaPaths.StandaloneRoot);
         }

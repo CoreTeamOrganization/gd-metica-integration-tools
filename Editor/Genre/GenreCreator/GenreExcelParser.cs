@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Xml;
+using GameDistrict.MeticaAnalytics;
 
 namespace GameDistrict.MeticaIntegrationTools
 {

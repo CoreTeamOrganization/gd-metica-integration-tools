@@ -20,9 +20,12 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public override string Title => "Metica SDK";
 
-        public override string Summary =>
-            "Downloads and imports a Metica SDK release, or confirms the one already installed matches " +
-            "the target version. Anything else is removed first.";
+        public override string Summary => "Install the Metica SDK version this tool targets.";
+
+        public override string Why =>
+            "Downloads the pinned Metica SDK release from GitHub and imports it. Any other installed " +
+            "version is removed first — importing over it would leave old files behind that still " +
+            "compile. Use Change target version to pin a different release for this project only.";
 
         public override string ActionLabel => ActionForState();
 
@@ -32,9 +35,7 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaPaths.MeticaSdkAsmdef
         };
 
-        public override string ReviewHint =>
-            "Expect a large diff — a whole SDK arrived. What matters is that nothing outside " +
-            "Assets/MeticaSdk changed.";
+        public override string ReviewHint => "Only Assets/MeticaSdk should change.";
 
         // ── Verify ─────────────────────────────────────────────────────────────
 
@@ -42,54 +43,39 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var result = new VerifyResult();
 
-            // No GD SDK is not a fault — it is the standalone install, and the wizard has
-            // already switched to the run that suits it.
-            if (MeticaPaths.HasGDSdk)
-                ReportSdkVersion(result);
-            else
-                result.Note("No GD Monetization SDK in this project — installing Metica on its own.");
+            if (MeticaPaths.HasGDSdk) ReportSdkVersion(result);
 
             if (!MeticaPaths.DirectoryExists("Assets/MaxSdk/Scripts"))
-                result.Problem("AppLovin MAX plugin not found at Assets/MaxSdk. Metica mediates through " +
-                               "MAX, and Metica.SDK.asmdef references MaxSdk.Scripts, so MAX has to be " +
-                               "installed first.");
+                result.Problem("Install the AppLovin MAX plugin first.");
 
             var installed = InstalledVersion();
 
             if (installed == null)
             {
-                result.Problem("No Metica SDK in the project. Press the button below to import the " +
-                               "target version.");
+                result.Problem("Metica SDK not installed.");
                 return result.Seal();
             }
-
-            result.Note($"Metica Unity SDK {installed} installed");
 
             if (IsStale(installed, out var target))
             {
-                result.Problem($"Metica {installed} does not match the target version {target}. Remove " +
-                               "it first — importing a different version over it leaves the old files " +
-                               "behind, and they still compile.");
+                result.Problem($"Metica {installed} installed — target is {target}.");
                 return result.Seal();
             }
 
-            Require(result, MeticaPaths.MeticaSdkAsmdef, "the Metica.SDK assembly definition");
-            Require(result, MeticaPaths.MeticaSdkRoot + "/Runtime/Sdk/MeticaSdk.cs", "the MeticaSdk entry point");
-            Require(result, MeticaPaths.MeticaDependencies, "the Android dependency declaration");
-            Require(result, MeticaPaths.MeticaSdkRoot + "/Editor/MeticaIOSBuildPostProcessor.cs",
-                "the iOS build post-processor");
+            Require(result, MeticaPaths.MeticaSdkAsmdef);
+            Require(result, MeticaPaths.MeticaSdkRoot + "/Runtime/Sdk/MeticaSdk.cs");
+            Require(result, MeticaPaths.MeticaDependencies);
+            Require(result, MeticaPaths.MeticaSdkRoot + "/Editor/MeticaIOSBuildPostProcessor.cs");
 
             if (!MeticaPaths.DirectoryExists(MeticaPaths.MeticaXcFramework))
-                result.Problem($"Missing {MeticaPaths.MeticaXcFramework} — the iOS binary did not import. " +
-                               "Re-import with every item selected.");
+                result.Problem("iOS framework missing — re-import with everything selected.");
 
             if (result.Problems.Count > 0) return result.Seal();
 
             if (!TemplateWriter.TypeIsLoaded("Metica.MeticaSdk"))
-                result.Problem("Metica.SDK has not compiled. Wait for Unity to finish compiling and " +
-                               "Re-check; if it stays red, the Console has the reason.");
+                result.Problem("Metica SDK hasn't compiled — check the Console.");
             else
-                result.Note("Metica.SDK compiled");
+                result.Note($"Metica {installed}");
 
             return result.Seal();
         }
@@ -113,66 +99,45 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var installed = InstalledVersion();
             if (installed != null && IsStale(installed, out _)) return $"Remove Metica {installed}";
+            if (installed != null) return "Re-import";
 
-            return installed == null ? "Download and import" : "Re-import the selected release";
+            var target = TargetVersion();
+            return target == null ? "Download and import" : $"Download and import {target}";
         }
 
         // ── UI ─────────────────────────────────────────────────────────────────
 
         public override void DrawBody(VerifyResult result)
         {
-            var installed = InstalledVersion();
-            if (installed != null && IsStale(installed, out _))
-            {
-                EditorGUILayout.HelpBox(
-                    $"Metica {installed} does not match the target version. The button deletes " +
-                    $"{MeticaPaths.MeticaSdkRoot}; after that, Download and import fetches the target " +
-                    "version.",
-                    MessageType.Warning);
-                return;
-            }
-
-            var target = TargetVersion();
-            EditorGUILayout.LabelField(
-                target == null
-                    ? "No target version set — the button has nothing to install."
-                    : $"Target version: Metica {target}. The button downloads and imports it from GitHub.",
-                EditorStyles.wordWrappedLabel);
-
-            if (MeticaPaths.FileExists(MeticaPaths.TargetVersionAsset))
-            {
-                if (GUILayout.Button("Open this project's target version override"))
-                    Selection.activeObject =
-                        AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.TargetVersionAsset);
-            }
-            else if (GUILayout.Button("Pin a different target version for this project"))
-            {
-                CreateLocalTargetVersionOverride();
-            }
+            if (GUILayout.Button("Change target version…")) OpenTargetVersionOverride();
         }
 
         /// <summary>
-        /// Copies the packaged default into the project so it can be edited — the packaged
-        /// asset itself is shared across every project on this package version and is often
-        /// read-only (git packages live in Library/PackageCache).
+        /// Selects this project's own target-version asset, copying the packaged default into
+        /// the project first if there is none yet — the packaged one is shared across every
+        /// project on this package version and is often read-only (git packages live in
+        /// Library/PackageCache).
         /// </summary>
-        private static void CreateLocalTargetVersionOverride()
+        private static void OpenTargetVersionOverride()
         {
-            if (MeticaPaths.PackagedTargetVersionAsset == null ||
-                !MeticaPaths.FileExists(MeticaPaths.PackagedTargetVersionAsset))
+            if (!MeticaPaths.FileExists(MeticaPaths.TargetVersionAsset))
             {
-                MeticaIntegrationLog.Record("Metica SDK", "Could not find the packaged default to copy.");
-                return;
+                if (MeticaPaths.PackagedTargetVersionAsset == null ||
+                    !MeticaPaths.FileExists(MeticaPaths.PackagedTargetVersionAsset))
+                {
+                    MeticaIntegrationLog.Record("Metica SDK", "Could not find the packaged default to copy.");
+                    return;
+                }
+
+                var folder = Path.GetDirectoryName(MeticaPaths.ToAbsolute(MeticaPaths.TargetVersionAsset));
+                Directory.CreateDirectory(folder ?? ".");
+                AssetDatabase.Refresh();
+
+                AssetDatabase.CopyAsset(MeticaPaths.PackagedTargetVersionAsset, MeticaPaths.TargetVersionAsset);
+                MeticaIntegrationLog.Record("Metica SDK", $"Created {MeticaPaths.TargetVersionAsset}");
             }
 
-            var folder = Path.GetDirectoryName(MeticaPaths.ToAbsolute(MeticaPaths.TargetVersionAsset));
-            Directory.CreateDirectory(folder ?? ".");
-            AssetDatabase.Refresh();
-
-            AssetDatabase.CopyAsset(MeticaPaths.PackagedTargetVersionAsset, MeticaPaths.TargetVersionAsset);
             Selection.activeObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.TargetVersionAsset);
-
-            MeticaIntegrationLog.Record("Metica SDK", $"Created {MeticaPaths.TargetVersionAsset}");
         }
 
         // ── Install / remove ───────────────────────────────────────────────────
@@ -182,7 +147,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var target = TargetVersion();
             if (target == null)
             {
-                MeticaIntegrationLog.Record(Title, "MeticaTargetVersion.asset has no version set.");
+                MeticaIntegrationLog.Record(Title, "No target version set.");
                 return;
             }
 
@@ -197,9 +162,8 @@ namespace GameDistrict.MeticaIntegrationTools
             if (chosen == null)
             {
                 MeticaIntegrationLog.Record(Title,
-                    $"Target version {target} is not among the ten most recent releases. Pin a newer " +
-                    "target version (button above), or install it by hand from " +
-                    $"{MeticaReleases.ReleasesPage}.");
+                    $"Metica {target} is not among the ten most recent releases — change the target " +
+                    $"version, or install it by hand from {MeticaReleases.ReleasesPage}.");
                 return;
             }
 
@@ -218,9 +182,7 @@ namespace GameDistrict.MeticaIntegrationTools
         private void RemoveInstalledSdk(string installed)
         {
             if (!EditorUtility.DisplayDialog("Remove the Metica SDK",
-                $"Delete {MeticaPaths.MeticaSdkRoot}?\n\nMetica {installed} does not match the target " +
-                "version. Importing a different package over it would leave the old files in place.",
-                "Delete", "Cancel"))
+                $"Delete {MeticaPaths.MeticaSdkRoot} (Metica {installed})?", "Delete", "Cancel"))
                 return;
 
             AssetDatabase.DeleteAsset(MeticaPaths.MeticaSdkRoot);
@@ -273,34 +235,20 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private static void ReportSdkVersion(VerifyResult result)
         {
-            if (!MeticaPaths.FileExists(MeticaPaths.InitializeOnLoad))
-            {
-                result.Note($"GD Monetization SDK at {MeticaPaths.GDRoot} (version not readable)");
-                return;
-            }
+            if (!MeticaPaths.FileExists(MeticaPaths.InitializeOnLoad)) return;
 
             var source = SourcePatcher.ReadAll(MeticaPaths.InitializeOnLoad);
             var match = Regex.Match(source, "string\\s+Version\\s*=\\s*\"([0-9]+(?:\\.[0-9]+)*)\"");
-
-            if (!match.Success)
-            {
-                result.Note($"GD Monetization SDK at {MeticaPaths.GDRoot} (version not readable)");
-                return;
-            }
+            if (!match.Success) return;
 
             var version = match.Groups[1].Value;
-            result.Note($"GD Monetization SDK {version} at {MeticaPaths.GDRoot}");
-
-            if (int.TryParse(version.Split('.')[0], out var major) && major >= 6)
-                result.Note("This workflow is built for the v5 line. On 6.x the Metica ads wrapper already " +
-                            "ships with the SDK, so check what is actually missing before letting the tool " +
-                            "write anything.");
+            result.Note($"GD SDK {version}");
         }
 
-        private static void Require(VerifyResult result, string path, string what)
+        private static void Require(VerifyResult result, string path)
         {
             if (!MeticaPaths.FileExists(path))
-                result.Problem($"Missing {path} — {what} did not import.");
+                result.Problem($"{Path.GetFileName(path)} missing — re-import the SDK.");
         }
     }
 }

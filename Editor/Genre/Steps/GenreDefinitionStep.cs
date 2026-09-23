@@ -1,6 +1,5 @@
 using System.IO;
 using System.Linq;
-using UnityEditor;
 
 namespace GameDistrict.MeticaIntegrationTools
 {
@@ -18,9 +17,11 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override bool Optional => true;
 
-        public override string Summary =>
-            "Opens the Genre Creator, where genre analytics files are actually authored — manually or " +
-            "imported from an Excel schema. Come back here any time you add a new genre.";
+        public override string Summary => "Author genres in the Genre Creator.";
+
+        public override string Why =>
+            "Genre analytics files are written in the Genre Creator window — by hand or imported from an " +
+            "Excel schema. It's content, not setup, so come back here whenever you add a genre.";
 
         public override string ActionLabel => "Open Genre Creator";
 
@@ -30,23 +31,16 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var genres = CountGenres();
             result.Note(genres == 0
-                ? "No genres created yet."
-                : $"{genres} genre{(genres == 1 ? "" : "s")} created so far.");
+                ? "No genres yet"
+                : $"{genres} genre{(genres == 1 ? "" : "s")}");
 
             return result.Seal();
         }
 
         public override void Apply() => GenreCreatorWindow.ShowWindow();
 
-        public override void DrawBody(VerifyResult result)
-        {
-            EditorGUILayout.HelpBox(
-                "This is where genre files actually get authored. The button opens the Genre Creator " +
-                "window — the same tool, any number of times, for as many genres as the game needs.",
-                MessageType.Info);
-        }
-
-        private static int CountGenres()
+        /// <summary>Generated genres: every folder under GenresRoot except its shared Resources.</summary>
+        internal static int CountGenres()
         {
             var folder = MeticaPaths.ToAbsolute(MeticaPaths.GenresRoot);
             if (!Directory.Exists(folder)) return 0;

@@ -19,17 +19,19 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Metica settings asset";
 
-        public override string Summary =>
-            "Creates MeticaSettings.asset. Filling in the API Key and App ID is yours to do — they are " +
-            "per-game values from the Metica dashboard, and not the same as your MAX keys.";
+        public override string Summary => "Create MeticaSettings.asset — you fill in its keys.";
+
+        public override string Why =>
+            "The API Key and App ID come from the Metica dashboard, per game and per platform — they are " +
+            "not your MAX keys. The asset is created empty on purpose: a prefilled one is how a game ends " +
+            "up reporting into somebody else's Metica app. A platform left blank starts Metica with an " +
+            "empty key.";
 
         public override string ActionLabel => "Create MeticaSettings.asset";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.MeticaSettingsAsset };
 
-        public override string ReviewHint =>
-            "One new asset, created empty. Enter your Metica API Key and App ID before shipping — the " +
-            "tool deliberately does not.";
+        public override string ReviewHint => "One new, empty asset. Fill in the API Key and App ID before shipping.";
 
         public override VerifyResult Verify()
         {
@@ -37,35 +39,30 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (MeticaPaths.MeticaSettingsAsset == null)
             {
-                result.Problem("GD Monetization SDK root not resolved — go back to the Metica SDK step.");
+                result.Problem("GD SDK not found.");
                 return result.Seal();
             }
 
             if (!TemplateWriter.TypeIsLoaded(TypeName))
             {
-                result.Problem("MeticaConfiguration has not compiled yet. Finish the wrapper files and " +
-                               "patch steps and let Unity recompile, then Re-check.");
+                result.Problem("MeticaConfiguration hasn't compiled yet — finish the earlier steps.");
                 return result.Seal();
             }
 
             if (!MeticaPaths.FileExists(MeticaPaths.MeticaSettingsAsset))
             {
-                result.Problem($"Missing {MeticaPaths.MeticaSettingsAsset}");
+                result.Problem("MeticaSettings.asset missing.");
                 return result.Seal();
             }
 
             var asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.MeticaSettingsAsset);
             if (asset == null)
             {
-                result.Problem($"{MeticaPaths.MeticaSettingsAsset} exists but did not load as a " +
-                               "MeticaConfiguration. Delete it and press the button again.");
+                result.Problem("MeticaSettings.asset didn't load — delete it and try again.");
                 return result.Seal();
             }
 
-            result.Note($"{MeticaPaths.MeticaSettingsAsset} exists");
-            result.Note("Fill in the API Key and App ID for every platform you ship, from the Metica " +
-                        "dashboard. MeticaConfiguration returns string.Empty for a platform whose pair is " +
-                        "blank, so Metica would initialize there with an empty key.");
+            result.Note("Created — fill in the API Key and App ID");
 
             return result.Seal();
         }
@@ -97,14 +94,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "The tool only creates the asset. Open it and enter the API Key and App ID Metica issued " +
-                "for this game — per platform.",
-                MessageType.Info);
-
             if (!MeticaPaths.FileExists(MeticaPaths.MeticaSettingsAsset)) return;
 
-            if (GUILayout.Button("Open MeticaSettings in the Inspector"))
+            if (GUILayout.Button("Open MeticaSettings"))
                 Selection.activeObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.MeticaSettingsAsset);
         }
     }

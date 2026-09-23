@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using O = GameDistrict.MeticaIntegrationTools.SourcePatcher.Outcome;
 
@@ -20,12 +21,15 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public override string Title => "Patch the existing SDK files";
 
-        public override string Summary =>
-            "Ads-layer edits: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
+        public override string Summary => "Patch the GD SDK's existing files for Metica.";
+
+        public override string Why =>
+            "Additions only: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
             "AdRevenueInfo payload, the AdUnits Metica section, the UseMetica preference and remote flag, " +
-            "and the AdsManager network switch. Plus one analytics-layer edit: dispatches " +
-            "OnAdRevenuePaidEvent onto the main thread. AdNetworkController, AdNetworkAdmob and " +
-            "AdNetworkAppLovin are not touched.";
+            "the AdsManager network switch, and OnAdRevenuePaidEvent dispatched onto the main thread. " +
+            "AdNetworkController, AdNetworkAdmob and AdNetworkAppLovin are not touched. Originals are " +
+            "backed up to <project>/MeticaIntegrationBackups/ first; an edit whose anchor isn't found is " +
+            "logged with what to add by hand rather than guessed.";
 
         public override string ActionLabel => "Apply patches";
 
@@ -59,9 +63,7 @@ namespace GameDistrict.MeticaIntegrationTools
         };
 
         public override string ReviewHint =>
-            "This is the step worth reading line by line. Ten files, all additive. Ads/Core/ must show " +
-            "NO diff at all — if AdNetworkController.cs or IAdNetworkService.cs changed, something is " +
-            "wrong.";
+            "Read this one line by line. AdNetworkController.cs and IAdNetworkService.cs must not change.";
 
         public override VerifyResult Verify()
         {
@@ -69,27 +71,42 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (MeticaPaths.RuntimeScripts == null)
             {
-                result.Problem("GD Monetization SDK root not resolved — go back to the Metica SDK step.");
+                result.Problem("GD SDK not found.");
                 return result.Seal();
             }
 
-            Check(result, MeticaPaths.AdPlatforms, MarkerPlatform, "AdPlatforms.METICA");
-            CheckEnum(result, MeticaPaths.LoggerTag, "Metica", "Tag.Metica");
-            Check(result, MeticaPaths.ConfigurationsPath, MarkerPath, "MonetizationConfigurationsPath.Metica");
-            Check(result, MeticaPaths.AdRevenueInfo, MarkerRevenueField, "AdRevenueInfo.RevenuePayload field");
-            Check(result, MeticaPaths.AdRevenueInfo, MarkerRevenueParam, "AdRevenueInfo constructor payload parameter");
-            Check(result, MeticaPaths.AdRevenueInfo, MarkerRevenueAssign, "AdRevenueInfo payload assignment");
-            Check(result, MeticaPaths.AdUnitsConfiguration, MarkerAdUnits, "AdUnitsConfiguration.Metica");
-            Check(result, MeticaPaths.Preferences, MarkerPreference, "MonetizationPreferences.UseMetica");
-            Check(result, MeticaPaths.RemoteConfiguration, MarkerRemoteFlag, "RemoteConfiguration.UseMetica");
-            Check(result, MeticaPaths.RemoteConfigManager, MarkerPersistHook, "the PersistRemoteToggles subscription");
-            Check(result, MeticaPaths.RemoteConfigManager, MarkerPersistMethod, "the PersistRemoteToggles method");
-            Check(result, MeticaPaths.AdsManager, MarkerAdsManager, "the AdsManager Metica network");
-            Check(result, MeticaPaths.AnalyticsManager, MarkerRevenueDispatch,
-                "the OnAdRevenuePaidEvent thread dispatch");
+            var checks = new (string path, string marker, string what)[]
+            {
+                (MeticaPaths.AdPlatforms, MarkerPlatform, "AdPlatforms.METICA"),
+                (MeticaPaths.LoggerTag, "Metica", "Tag.Metica"),
+                (MeticaPaths.ConfigurationsPath, MarkerPath, "MonetizationConfigurationsPath.Metica"),
+                (MeticaPaths.AdRevenueInfo, MarkerRevenueField, "AdRevenueInfo.RevenuePayload"),
+                (MeticaPaths.AdRevenueInfo, MarkerRevenueParam, "AdRevenueInfo constructor parameter"),
+                (MeticaPaths.AdRevenueInfo, MarkerRevenueAssign, "AdRevenueInfo payload assignment"),
+                (MeticaPaths.AdUnitsConfiguration, MarkerAdUnits, "AdUnitsConfiguration.Metica"),
+                (MeticaPaths.Preferences, MarkerPreference, "MonetizationPreferences.UseMetica"),
+                (MeticaPaths.RemoteConfiguration, MarkerRemoteFlag, "RemoteConfiguration.UseMetica"),
+                (MeticaPaths.RemoteConfigManager, MarkerPersistHook, "PersistRemoteToggles subscription"),
+                (MeticaPaths.RemoteConfigManager, MarkerPersistMethod, "PersistRemoteToggles method"),
+                (MeticaPaths.AdsManager, MarkerAdsManager, "AdsManager Metica network"),
+                (MeticaPaths.AnalyticsManager, MarkerRevenueDispatch, "OnAdRevenuePaidEvent main-thread dispatch")
+            };
 
-            if (result.Problems.Count == 0)
-                result.Note("All ads-layer edits in place");
+            var missing = checks
+                .Where(c => !MeticaPaths.FileExists(c.path) || !SourcePatcher.Contains(c.path, c.marker))
+                .Select(c => c.what)
+                .ToList();
+
+            if (missing.Count == 0)
+            {
+                result.Note("All patches in place");
+                return result.Seal();
+            }
+
+            // One count up front; the list itself goes under "Why?" as the extra problems.
+            result.Problem($"{missing.Count} of {checks.Length} patches missing.");
+            foreach (var what in missing)
+                result.Problem($"Missing: {what}");
 
             return result.Seal();
         }
@@ -124,15 +141,6 @@ namespace GameDistrict.MeticaIntegrationTools
 
             MeticaIntegrationLog.Record(Title, log);
             AssetDatabase.Refresh();
-        }
-
-        public override void DrawBody(VerifyResult result)
-        {
-            EditorGUILayout.HelpBox(
-                "Originals are copied to <project>/MeticaIntegrationBackups/ before the first change.\n\n" +
-                "Any edit whose anchor is missing is reported rather than guessed — the message tells you " +
-                "what to add by hand.",
-                MessageType.Info);
         }
 
         // ── Individual patches ─────────────────────────────────────────────────
@@ -261,22 +269,6 @@ namespace GameDistrict.MeticaIntegrationTools
             log.Add(outcome == O.AnchorNotFound
                 ? $"{what}: anchor not found in {path}. Apply by hand — {manualHint}."
                 : SourcePatcher.Describe(outcome, path, manualHint));
-        }
-
-        private static void Check(VerifyResult result, string path, string marker, string what)
-        {
-            if (!MeticaPaths.FileExists(path))
-                result.Problem($"Not found: {path}");
-            else if (!SourcePatcher.Contains(path, marker))
-                result.Problem($"{what} is missing from {path}");
-        }
-
-        private static void CheckEnum(VerifyResult result, string path, string member, string what)
-        {
-            if (!MeticaPaths.FileExists(path))
-                result.Problem($"Not found: {path}");
-            else if (!SourcePatcher.Contains(path, member))
-                result.Problem($"{what} is missing from {path}");
         }
     }
 }

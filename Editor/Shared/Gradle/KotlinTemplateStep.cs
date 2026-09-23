@@ -27,19 +27,22 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override bool Optional => true;
 
-        public override string Summary =>
-            "Metica's Android SDK is Kotlin, so the Kotlin Gradle plugin has to be on the buildscript " +
-            "classpath. Enables Custom Base Gradle Template if it is off, then writes the buildscript " +
-            "block — above plugins, with its AGP version matching your com.android.application.";
+        public override string Summary => "Add Kotlin and a matching AGP to baseProjectTemplate.gradle.";
 
-        public override string ActionLabel => "Enable the template and write the buildscript";
+        public override string Why =>
+            "Metica's Android SDK is Kotlin, so its Gradle plugin (1.9.22, per Metica's docs) has to be " +
+            "on the buildscript classpath, next to an AGP classpath matching com.android.application. " +
+            "Turns on Custom Base Gradle Template first if needed. At Target API " +
+            $"{GradleTemplateEditor.MinimumApiForAgp8}+ it also raises AGP to " +
+            $"{GradleTemplateEditor.RecommendedAgpVersion} — Android requires AGP 8 there. The original " +
+            "file is backed up first. Skip this if your Android build already works.";
+
+        public override string ActionLabel => "Fix the base Gradle template";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.BaseProjectTemplateGradle };
 
         public override string ReviewHint =>
-            "Check baseProjectTemplate.gradle has a buildscript block above plugins, holding a " +
-            "kotlin-gradle-plugin classpath and an AGP classpath equal to the com.android.application " +
-            "version below it. The original is in the backup folder.";
+            "buildscript above plugins, holding Kotlin and an AGP classpath equal to com.android.application.";
 
         public override VerifyResult Verify()
         {
@@ -48,45 +51,39 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (report.FileMissing)
             {
-                result.Problem("baseProjectTemplate.gradle does not exist, so Custom Base Gradle Template " +
-                               "is off and there is nowhere to put the Kotlin classpath.");
+                result.Problem("Custom Base Gradle Template is off.");
                 return result.Seal();
             }
 
             if (report.PluginVersion == null)
             {
-                result.Problem("No com.android.application plugin id in baseProjectTemplate.gradle, so " +
-                               "there is no AGP version to match the buildscript against.");
+                result.Problem("No com.android.application version in baseProjectTemplate.gradle.");
                 return result.Seal();
             }
 
             if (!report.HasBuildscript)
-                result.Problem($"No buildscript block. It is what holds the Kotlin and AGP " +
-                               $"({report.PluginVersion}) classpaths.");
+                result.Problem("No buildscript block.");
             else if (!report.BuildscriptAbovePlugins)
-                result.Problem("The buildscript block sits below plugins. Gradle requires buildscript first.");
+                result.Problem("buildscript has to come before plugins.");
 
             if (report.HasBuildscript && report.ClasspathVersion == null)
-                result.Problem("The buildscript block has no com.android.tools.build:gradle classpath.");
+                result.Problem("No AGP classpath in buildscript.");
             else if (report.ClasspathVersion != null && report.ClasspathVersion != report.PluginVersion)
-                result.Problem($"AGP mismatch: the buildscript classpath says {report.ClasspathVersion} " +
-                               $"but com.android.application says {report.PluginVersion}. They have to " +
-                               "agree, and the plugins section wins.");
+                result.Problem($"AGP classpath {report.ClasspathVersion} ≠ com.android.application " +
+                               $"{report.PluginVersion}.");
 
             foreach (var mismatch in report.MismatchedPluginIds)
-                result.Problem($"{mismatch} does not match com.android.application {report.PluginVersion}.");
+                result.Problem($"{mismatch} ≠ com.android.application {report.PluginVersion}.");
 
             if (report.AgpTooOldForTarget)
-                result.Problem($"Target API {GradleTemplateEditor.MinimumApiForAgp8}+ needs AGP 8 or later, " +
-                               $"but com.android.application is {report.PluginVersion}. The button raises " +
-                               $"it to {GradleTemplateEditor.RecommendedAgpVersion}, Metica's recommended " +
-                               "version.");
+                result.Problem($"AGP {report.PluginVersion} is too old for Target API " +
+                               $"{GradleTemplateEditor.MinimumApiForAgp8}+.");
 
             if (!report.HasKotlinClasspath)
-                result.Problem("No kotlin-gradle-plugin on the buildscript classpath.");
+                result.Problem("No Kotlin plugin in buildscript.");
 
             if (!report.NeedsWork)
-                result.Note($"baseProjectTemplate.gradle is set up for Metica (AGP {report.PluginVersion})");
+                result.Note($"Ready (AGP {report.PluginVersion})");
 
             return result.Seal();
         }
@@ -97,20 +94,6 @@ namespace GameDistrict.MeticaIntegrationTools
                 MeticaIntegrationLog.Record(Title, EnableCustomBaseTemplate());
 
             MeticaIntegrationLog.Record(Title, GradleTemplateEditor.Fix());
-        }
-
-        public override void DrawBody(VerifyResult result)
-        {
-            EditorGUILayout.HelpBox(
-                $"The AGP version is normally read from the com.android.application plugin id already in " +
-                "your file and copied onto the buildscript classpath, so the buildscript agrees with the " +
-                $"version you build with. The one exception is Target API {GradleTemplateEditor.MinimumApiForAgp8}" +
-                $"+: Android requires AGP 8 there, so if yours is older the button raises " +
-                $"com.android.application and com.android.library to {GradleTemplateEditor.RecommendedAgpVersion} " +
-                "first. The Kotlin plugin is pinned to 1.9.22, the version Metica documents. The original " +
-                "file is backed up first.\n\n" +
-                "Skip this step if your Android build already works.",
-                MessageType.Info);
         }
 
         /// <summary>

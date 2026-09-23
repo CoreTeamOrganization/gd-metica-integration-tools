@@ -4,7 +4,7 @@ Editor wizard that adds **Metica for ads** (Smart Floors through MAX mediation) 
 running GD Monetization SDK **v5.x or older**. Every patch anchor was verified across
 `v5.3.4`–`v5.5.0`.
 
-Open it from **GameDistrict → Monetization → Metica Integration Tool**.
+Open it from **GameDistrict → Metica → Ads Integration…**.
 
 The wrapper sources are taken from GDSDK `v6.2.4`.
 
@@ -28,6 +28,9 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
   add by hand instead of editing blind.
 - **Originals are backed up** to `<project>/MeticaIntegrationBackups/` before the first
   change — outside `Assets`, so Unity never imports them.
+- **One problem at a time.** A step shows a one-line summary, its first problem and short
+  status notes. Any further problems and the longer explanation sit under a **Why?**
+  foldout that starts closed.
 
 ## Two runs
 
@@ -84,24 +87,25 @@ The value applies to the **next** session — Metica initializes long before a r
 returns, so the flag is persisted and read at boot, the same trade the GD SDK makes with
 `MonetizationPreferences.UseMetica`.
 
-**If the tool will not do it**, `Documentation/Metica-Standalone/` has the same thirteen
-files as ordinary `.cs` (outside `Assets/`, so Unity ignores them until you copy them in)
-next to a runbook for doing the whole standalone integration by hand.
+**If the tool will not do it**, `Documentation/Metica-Standalone/` in the
+`Monetization-SDK-Unity` repo has the same files as ordinary `.cs` (outside `Assets/`, so
+Unity ignores them until you copy them in) next to a runbook for doing the whole standalone
+integration by hand.
 
 ## The steps
 
 | # | Step | What it does |
 |---|---|---|
-| 1 | Metica SDK | Lists the **ten most recent** releases from `meticalabs/metica-unity-package`, downloads and imports the chosen one. A project already on one of those ten is left alone; anything older is **removed first**, since importing over it leaves the old files behind. Also drops `Metica.SDK.asmdef`'s reference to the analytics abstractions assembly that an ads-only install does not have |
-| 2 | Resolve libraries | Runs the Android resolver so `com.metica:metica-sdk` reaches Gradle, and enables the xcframework for iOS |
+| 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind |
+| 2 | Resolve libraries | Runs the Android resolver (Force Resolve) so `com.metica:metica-sdk` reaches Gradle. With **Enable iOS** ticked, also enables the xcframework for iOS |
 | 3 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
 | 4 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` preference and remote flag, the `AdsManager` network switch. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
 | 5 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.UseMetica` instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
 | 6 | Metica settings asset | Creates `MeticaSettings.asset`, empty. The API Key / App ID are per-game — the developer fills them |
 | 7 | Metica ad units | Copies the Applovin App Key and ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values |
 | 8 | Remove the unused async init path | Only bites on a project that already had the async Metica integration: strips `IAsyncAdNetworkService` and the `AdNetworkController` overload built for it. Leaves them if `AdNetworkAdmob` / `AdNetworkAppLovin` still implement the interface |
-| 9 | Finish up | Teaches the Remove SDK menu about Metica, sets the local `UseMetica` default, lists what is left |
-| 10 | Dependencies and Moloco version | Checks the floors Metica publishes: AppLovin MAX Unity plugin **8.2.0+**, Moloco SDK and adapters **4.3.0+** |
+| 9 | Finish up | Teaches the Remove SDK menu about Metica. The Metica on/off switch stays on remote config — there is no local override |
+| 10 | Dependencies and Moloco version | Checks the floors Metica publishes: AppLovin MAX Unity plugin **8.1.0+**, Moloco SDK and adapters **4.3.1+**. Per-platform **Fix Moloco** buttons rewrite the declared version in `Dependencies.xml`; MAX is upgraded in AppLovin's Integration Manager |
 | 11 | Gradle 8.6 or later *(optional)* | Metica needs Gradle 8.6+; Unity 2022.3 bundles 7.5.1. Reads the editor's Android Gradle preference, works out the version in use, and can point it at a folder you choose. An editor preference, not a project setting — per machine, never committed |
 | 12 | Kotlin in the base Gradle template *(optional)* | Enables Custom Base Gradle Template if it is off (by copying Unity's own default, which carries the right AGP version), then writes the `buildscript` block above `plugins` with the Kotlin plugin classpath and an AGP classpath matching `com.android.application` |
 
@@ -117,18 +121,20 @@ where it stands now and run its action again.
 
 ## Getting the Metica SDK
 
-Step 1 reads `https://api.github.com/repos/meticalabs/metica-unity-package/releases?per_page=10`
-and offers those ten. Asset names are not assumed — whatever a release attaches, the first
-file ending in `.unitypackage` is taken, and a release with no such asset is still listed so
-its page can be opened and the download done by hand.
+Step 1 installs exactly one version: the one pinned in `MeticaTargetVersion.asset`. The
+package ships a default. **Change target version…** copies it to
+`Assets/MeticaIntegrationToolsSettings/` as a per-project override, since a git package
+install is read-only.
 
-The installed version comes from `Assets/MeticaSdk/package.json`. If it is not one of the
-ten, step 1 refuses to import over it and offers to delete `Assets/MeticaSdk` first: Unity
-merges a package import rather than replacing, so files dropped between versions would
-survive and still compile.
+The target has to be among the ten most recent releases at
+`https://api.github.com/repos/meticalabs/metica-unity-package/releases?per_page=10`. Asset
+names are not assumed — the first file ending in `.unitypackage` is downloaded and imported
+interactively, so its contents are visible before anything is written.
 
-If the release list cannot be fetched, the installed version is treated as fine. A network
-hiccup should not turn into a demand to delete the SDK.
+The installed version comes from `Assets/MeticaSdk/package.json`. If it is not the target —
+older or newer — step 1 refuses to import over it and offers to delete `Assets/MeticaSdk`
+first: Unity merges a package import rather than replacing, so files dropped between
+versions would survive and still compile.
 
 ## The tool never writes async
 
@@ -160,11 +166,11 @@ Nothing this tool writes or edits is an analytics file. No abstractions assembly
 analytics network, no genre code, and the `METICA_ANALYTICS` define is never added — for
 an ads-only integration it has to stay off.
 
-That has one consequence worth knowing: `Metica.SDK.asmdef` references the
-`MeticaAnalyticsAbstractions` assembly, and Unity fails the whole assembly when a
-referenced assembly is missing. Step 1 detects that case and rewrites the asmdef without
-the reference (original backed up first). If your Metica package ships its own abstractions
-assembly, the reference resolves and step 1 leaves it alone.
+That matters because the Metica SDK's own analytics code is gated on `METICA_ANALYTICS` and
+needs the `MeticaAnalyticsAbstractions` assembly, which an ads-only install does not have.
+Turning the define on there stops the Metica SDK compiling. Genre Creator's
+`MeticaSymbolInstaller` (same package) therefore only adds it when **both** `Metica.SDK` and
+`MeticaAnalyticsAbstractions` are present.
 
 **Metica analytics** needs the `AnalyticsNetworkSO`, Genre and Bootstrap architectures
 introduced in `v6.1`/`v6.2`, which a v5 project does not have — a full upgrade, not a port.
@@ -172,26 +178,25 @@ Afterwards, `Assets/GDMonetization/METICA_INTEGRATION.md` in `v6.2.x` is the gui
 
 ## Where it lives
 
-`Assets/MeticaIntegrationTool/` — deliberately outside `Assets/GDMonetization/`, so it
-exports and imports as a standalone package without dragging the SDK along, and so removing
-the SDK does not remove the tool.
+In the `com.gamedistrict.metica-integration-tools` package, under `Editor/Ads/`, compiled
+into the package's **Editor-only** assembly (`GameDistrict.MeticaIntegrationTools.Editor`,
+`autoReferenced` off), so it never reaches a build.
 
-It carries its own assembly definition, `GDMonetization.MeticaIntegration.Editor.asmdef`,
-marked **Editor-only** with **no references**. Two things follow from that:
+The Ads flow has no compile-time dependency on the GD SDK or the Metica SDK. Everything it
+knows about GDMonetization it reads from disk or through `SerializedObject`, which is why
+the package can be added long before the SDK is in the state it expects. It finds the SDK
+by locating `Runtime/Scripts/Ads/Core/AdsManager.cs`, and finds its own `Templates/` through
+`PackageInfo.FindForAssembly`, so neither folder is hardcoded.
 
-- **It compiles wherever you put it.** Without an asmdef, editor code has to sit under a
-  folder literally named `Editor`, or `UnityEditor` will not resolve — `Assembly-CSharp`
-  does not reference it. The asmdef removes that constraint. If you ever delete the asmdef,
-  move the folder under an `Editor/` one.
-- **It never reaches a build.** Editor-only, and `autoReferenced` is off, so no game
-  assembly can accidentally take a dependency on it.
+## Removing the tool
 
-The tool has no compile-time dependency on the SDK at all — only `System.*`, `UnityEditor`
-and `UnityEngine`. Everything it knows about GDMonetization it reads from disk or through
-`SerializedObject`, which is why it can be imported into a project long before the SDK is
-in the state it expects. It finds the SDK by locating
-`Runtime/Scripts/Ads/Core/AdsManager.cs`, and finds its own `Templates/` by locating
-`MeticaIntegrationWindow.cs`, so neither folder is hardcoded.
+**GameDistrict → Metica → Remove Integration Tools…**, or the same item in either wizard
+window's ⋮ tab menu. It removes the package through Package Manager and deletes
+`Assets/MeticaIntegrationToolsSettings/`. Everything the Ads flow wrote stays in the
+project and needs nothing from the package at runtime.
+
+It refuses while `Assets/MeticaGenres/` has genres: generated genre code inherits from the
+package's `Runtime/` classes, so removing the package would break it.
 
 ## Layout
 

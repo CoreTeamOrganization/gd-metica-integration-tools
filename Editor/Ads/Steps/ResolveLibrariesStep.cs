@@ -39,9 +39,14 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Resolve libraries";
 
-        public override string Summary =>
-            "Runs the Android dependency resolver so the Metica Maven artifact reaches Gradle. Tick " +
-            "Enable iOS to also enable the Metica xcframework for iOS.";
+        public override string Summary => "Pull Metica's Android library into Gradle.";
+
+        public override string Why =>
+            "Runs External Dependency Manager's Force Resolve (same as Assets → External Dependency " +
+            "Manager → Android Resolver → Force Resolve) so com.metica:metica-sdk lands in " +
+            "mainTemplate.gradle. It only runs with Android as the active build target, needs network, " +
+            "and can take a moment — Re-check after. Enable iOS also ticks iOS on " +
+            "MeticaSDKFramework.xcframework, which Metica's iOS build step needs.";
 
         public override string ActionLabel => EnableIos ? "Resolve Android, enable iOS" : "Resolve Android";
 
@@ -52,9 +57,7 @@ namespace GameDistrict.MeticaIntegrationTools
             "ProjectSettings/AndroidResolverDependencies.xml"
         };
 
-        public override string ReviewHint =>
-            "Check mainTemplate.gradle gained com.metica:metica-sdk. If Enable iOS was ticked, also check " +
-            "the xcframework meta now has iOS enabled.";
+        public override string ReviewHint => "mainTemplate.gradle gains com.metica:metica-sdk.";
 
         public override VerifyResult Verify()
         {
@@ -63,55 +66,39 @@ namespace GameDistrict.MeticaIntegrationTools
             // ── Android ────────────────────────────────────────────────────────
             if (!MeticaPaths.FileExists(MeticaPaths.MainTemplateGradle))
             {
-                result.Problem($"{MeticaPaths.MainTemplateGradle} not found. Enable Player Settings → " +
-                               "Publishing Settings → Custom Main Gradle Template, then resolve again.");
+                result.Problem("Custom Main Gradle Template is off.");
             }
             else if (!SourcePatcher.Contains(MeticaPaths.MainTemplateGradle, AndroidArtifact))
             {
-                result.Problem($"{AndroidArtifact} is not in mainTemplate.gradle yet. Run the resolver below.");
+                result.Problem(EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android
+                    ? "Switch the build target to Android, then resolve."
+                    : "Not resolved yet.");
             }
             else
             {
                 var declared = ReadDeclaredAndroidSpec();
-                result.Note(declared == null
-                    ? "Metica Android artifact is in mainTemplate.gradle"
-                    : $"Resolved {declared} into mainTemplate.gradle");
+                result.Note(declared == null ? "Resolved" : $"Resolved {declared}");
             }
 
             if (MeticaPaths.FileExists(MeticaPaths.GradleProperties))
             {
                 var properties = SourcePatcher.ReadAll(MeticaPaths.GradleProperties);
                 if (!properties.Contains("android.useAndroidX=true"))
-                    result.Problem("gradleTemplate.properties is missing android.useAndroidX=true.");
+                    result.Problem("gradleTemplate.properties needs android.useAndroidX=true.");
                 if (!properties.Contains("android.enableJetifier=true"))
-                    result.Problem("gradleTemplate.properties is missing android.enableJetifier=true.");
-                if (properties.Contains("org.gradle.java.home"))
-                    result.Note("gradleTemplate.properties pins org.gradle.java.home — that is a local " +
-                                "machine path, do not commit it.");
+                    result.Problem("gradleTemplate.properties needs android.enableJetifier=true.");
             }
 
             // ── iOS ────────────────────────────────────────────────────────────
-            if (!EnableIos)
-            {
-                result.Note("Enable iOS is unticked — this step is not checking the iOS xcframework.");
-            }
-            else
+            if (EnableIos)
             {
                 var importer = LoadXcFrameworkImporter();
                 if (importer == null)
-                {
-                    result.Note("Could not inspect the Metica xcframework importer. If you ship on iOS, " +
-                                "check that iOS is ticked for MeticaSDKFramework.xcframework in the Inspector.");
-                }
+                    result.Note("Couldn't check the iOS framework.");
                 else if (!importer.GetCompatibleWithPlatform(BuildTarget.iOS))
-                {
-                    result.Problem("MeticaSDKFramework.xcframework is not enabled for iOS. Metica's build " +
-                                   "post-processor cannot embed it until it is.");
-                }
+                    result.Problem("iOS framework isn't enabled for iOS.");
                 else
-                {
-                    result.Note("Metica xcframework enabled for iOS");
-                }
+                    result.Note("iOS enabled");
             }
 
             return result.Seal();
@@ -126,21 +113,6 @@ namespace GameDistrict.MeticaIntegrationTools
         public override void DrawBody(VerifyResult result)
         {
             EnableIos = EditorGUILayout.ToggleLeft("Enable iOS", EnableIos);
-
-            EditorGUILayout.HelpBox(
-                (EnableIos
-                    ? "The button does two things: enables the iOS xcframework, and runs the same Force " +
-                      "Resolve that Assets → External Dependency Manager → Android Resolver → Force " +
-                      "Resolve does."
-                    : "The button runs the same Force Resolve that Assets → External Dependency Manager → " +
-                      "Android Resolver → Force Resolve does. Tick Enable iOS above to also enable the " +
-                      "Metica xcframework for iOS.") +
-                " That resolver only runs while Android is the active build target (File → Build " +
-                "Settings), and the button checks for that itself and logs a clear message if it is not.\n\n" +
-                "The resolver needs network access and can take a while — give it a moment, then Re-check. " +
-                "If the button logs that it could not find the resolver, run Force Resolve from that menu " +
-                "by hand instead.",
-                MessageType.Info);
         }
 
         // ── Actions ────────────────────────────────────────────────────────────

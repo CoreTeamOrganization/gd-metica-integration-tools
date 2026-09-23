@@ -34,8 +34,7 @@ namespace GameDistrict.MeticaIntegrationTools
             new FinishUpStep(),
             new DependenciesStep(),
             new GradleVersionStep(),
-            new KotlinTemplateStep(),
-            new RemoveToolStep()
+            new KotlinTemplateStep()
         };
 
         /// <summary>
@@ -50,8 +49,7 @@ namespace GameDistrict.MeticaIntegrationTools
             new StandaloneConfigStep(),
             new DependenciesStep(),
             new GradleVersionStep(),
-            new KotlinTemplateStep(),
-            new RemoveToolStep()
+            new KotlinTemplateStep()
         };
 
         /// <summary>
@@ -85,17 +83,9 @@ namespace GameDistrict.MeticaIntegrationTools
             var standalone = !ReferenceEquals(_steps, GDSdkSteps);
 
             EditorGUILayout.LabelField(
-                standalone ? "Metica ads — standalone install" : "Metica integration for GDSDK v5",
+                standalone ? "Metica ads — standalone" : "Metica ads — GD Monetization SDK",
                 EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(
-                (standalone
-                    ? "No GD Monetization SDK here, so Metica is installed on its own: a self-contained " +
-                      "ads runtime your game drives through MeticaAdsManager.\n"
-                    : "Adds Metica for ads (Smart Floors through MAX). Ads only — nothing here touches " +
-                      "analytics.\n") +
-                "Each step stops once it verifies and waits for you to sign it off, so you can read the " +
-                "diff before the next one runs. A step you have finished or skipped stays open — expand " +
-                "it any time to see where it stands now and run it again.",
+            EditorGUILayout.LabelField("Run each step, check its diff, sign it off.",
                 EditorStyles.wordWrappedMiniLabel);
 
             DrawProgressAndControls(current, GDSdkSteps.Concat(StandaloneSteps).Select(step => step.Id));
@@ -116,16 +106,7 @@ namespace GameDistrict.MeticaIntegrationTools
             EditorGUILayout.Space(4);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            EditorGUILayout.LabelField("This project already initializes Metica through Tasks",
-                EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(
-                "IAsyncAdNetworkService only existed because Metica shipped InitializeAsync alone at " +
-                "first. Its callback API removed that need, so converting is the better end state — but " +
-                "it touches Ads/Core, so it is your call. Everything else the tool does is the same " +
-                "either way.",
-                EditorStyles.wordWrappedMiniLabel);
-
-            var mode = (InitMode)EditorGUILayout.EnumPopup("Existing async", MeticaIntegrationMode.Current);
+            var mode = (InitMode)EditorGUILayout.EnumPopup("Existing async init", MeticaIntegrationMode.Current);
             if (mode != MeticaIntegrationMode.Current)
             {
                 MeticaIntegrationMode.Current = mode;
@@ -139,9 +120,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
             EditorGUILayout.LabelField(
                 MeticaIntegrationMode.IsCallback
-                    ? "Callback — the async cleanup step removes IAsyncAdNetworkService and the AdNetworkController "
-                      + "overload built for it."
-                    : "Async — the async cleanup step leaves the async plumbing alone.",
+                    ? "Callback: the async cleanup step removes it."
+                    : "Async: the async cleanup step leaves it alone.",
                 EditorStyles.wordWrappedMiniLabel);
 
             EditorGUILayout.EndVertical();

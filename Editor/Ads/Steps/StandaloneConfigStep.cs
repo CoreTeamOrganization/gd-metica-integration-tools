@@ -20,17 +20,19 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Metica ads config";
 
-        public override string Summary =>
-            "Creates MeticaAdsConfig.asset in Resources: the Metica API Key and App ID, your MAX SDK " +
-            "key, and the ad unit ids per platform. Filling them in is yours to do at your own pace.";
+        public override string Summary => "Create MeticaAdsConfig.asset — you fill in its keys.";
+
+        public override string Why =>
+            "One asset holds every id Metica ads need. API Key and App ID come from the Metica dashboard. " +
+            "The MAX SDK key is the one your game already uses — Metica serves through MAX. Ad unit ids " +
+            "are your MAX ad unit ids and differ per platform; leave one blank to turn that format off. " +
+            "The asset is created empty on purpose, and blank keys never block this step.";
 
         public override string ActionLabel => "Create MeticaAdsConfig.asset";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.StandaloneConfigAsset };
 
-        public override string ReviewHint =>
-            "One new asset. Check the API Key and App ID are this game's Metica values, and that the " +
-            "ad unit ids are on the right platform — an id in the wrong column silently serves nothing.";
+        public override string ReviewHint => "One new asset. Check each ad unit id is under the right platform.";
 
         public override VerifyResult Verify()
         {
@@ -38,22 +40,20 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!TemplateWriter.TypeIsLoaded(TypeName))
             {
-                result.Problem("MeticaAdsConfig has not compiled yet. Finish the runtime step and let " +
-                               "Unity recompile, then Re-check.");
+                result.Problem("MeticaAdsConfig hasn't compiled yet — finish the runtime step.");
                 return result.Seal();
             }
 
             if (!MeticaPaths.FileExists(MeticaPaths.StandaloneConfigAsset))
             {
-                result.Problem($"Missing {MeticaPaths.StandaloneConfigAsset}");
+                result.Problem("MeticaAdsConfig.asset missing.");
                 return result.Seal();
             }
 
             var asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.StandaloneConfigAsset);
             if (asset == null)
             {
-                result.Problem($"{MeticaPaths.StandaloneConfigAsset} exists but did not load as a " +
-                               "MeticaAdsConfig. Delete it and press the button again.");
+                result.Problem("MeticaAdsConfig.asset didn't load — delete it and try again.");
                 return result.Seal();
             }
 
@@ -79,8 +79,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 var property = serialized.FindProperty(field);
                 if (property == null)
                 {
-                    result.Problem($"MeticaAdsConfig has no {field} field — the asset may be from an " +
-                                   "older version of this tool.");
+                    result.Problem($"No {field} field — the asset is from an older tool version.");
                     continue;
                 }
 
@@ -88,8 +87,7 @@ namespace GameDistrict.MeticaIntegrationTools
             }
 
             if (blank.Count > 0)
-                result.Note($"{string.Join(", ", blank)} still blank — Metica cannot initialize without " +
-                            "them, but that is yours to fill in from the dashboards, not this step's to block on.");
+                result.Note($"Still blank: {string.Join(", ", blank)}");
 
             var units = new[]
             {
@@ -104,9 +102,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 if (property != null && !string.IsNullOrEmpty(property.stringValue)) filled++;
             }
 
-            result.Note(filled == 0
-                ? "No ad unit ids yet — with none, Metica initializes but no ad ever serves."
-                : $"{filled} of {units.Length} ad unit ids filled in (an empty format is simply off)");
+            result.Note($"{filled} of {units.Length} ad unit ids set");
         }
 
         public override void Apply()
@@ -139,17 +135,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "The tool creates the asset; the values are yours to enter.\n\n" +
-                "API Key and App ID come from the Metica dashboard. The MAX SDK key is the one your " +
-                "game already uses — Metica serves through MAX, so it is the same key. Ad unit ids are " +
-                "your MAX ad unit ids, and they differ between Android and iOS.\n\n" +
-                "Leave a format's id blank to turn that format off.",
-                MessageType.Info);
-
             if (!MeticaPaths.FileExists(MeticaPaths.StandaloneConfigAsset)) return;
 
-            if (GUILayout.Button("Open MeticaAdsConfig in the Inspector"))
+            if (GUILayout.Button("Open MeticaAdsConfig"))
                 Selection.activeObject =
                     AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.StandaloneConfigAsset);
         }

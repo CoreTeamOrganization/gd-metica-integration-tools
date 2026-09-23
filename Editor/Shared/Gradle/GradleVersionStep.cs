@@ -36,14 +36,15 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override bool Optional => true;
 
-        public override string Summary =>
-            "Metica's Android SDK needs Gradle 8.6+. Unity 2022.3 bundles 7.5.1, which is too old, so " +
-            "the editor has to be pointed at an external install. This is an editor preference, not a " +
-            "project setting — it is per machine and is not committed.";
+        public override string Summary => "Point Unity at Gradle 8.6+.";
 
-        public override string ReviewHint =>
-            "Nothing in the project changed. Confirm Edit → Preferences → External Tools now shows " +
-            "Gradle Installed with Unity unticked, with the path below it pointing at your 8.6+ install.";
+        public override string Why =>
+            "Metica's Android SDK needs Gradle 8.6+; Unity 2022.3 bundles 7.5.1. Download Gradle from " +
+            "gradle.org, unzip it somewhere permanent, and pick the folder that holds bin/ and lib/. " +
+            "It's an editor preference, per machine — nothing is committed. Skip this if your Android " +
+            "build already works.";
+
+        public override string ReviewHint => "Nothing in the project changes — it's an editor preference.";
 
         public override VerifyResult Verify()
         {
@@ -52,8 +53,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var custom = ReadGradlePath(out var readable);
             if (!readable)
             {
-                result.Note("Could not read the Android Gradle preference on this Unity version. Check " +
-                            "Edit → Preferences → External Tools by hand.");
+                result.Note("Couldn't read the Gradle setting — check Preferences → External Tools.");
                 return result.Seal();
             }
 
@@ -61,44 +61,34 @@ namespace GameDistrict.MeticaIntegrationTools
             {
                 var bundled = BundledVersion();
                 result.Problem(bundled == null
-                    ? "Unity is using the Gradle bundled with the editor. Metica needs 8.6 or later; " +
-                      "untick Gradle Installed with Unity and point it at an external install."
-                    : $"Unity is using the bundled Gradle {bundled}, below the {Required} Metica needs. " +
-                      "Untick Gradle Installed with Unity and point it at an external install.");
+                    ? $"Using Unity's bundled Gradle — needs {Required}+."
+                    : $"Using Unity's bundled Gradle {bundled} — needs {Required}+.");
                 return result.Seal();
             }
 
             if (!Directory.Exists(custom))
             {
-                result.Problem($"The Gradle path points at {custom}, which does not exist on this machine.");
+                result.Problem($"Gradle folder not found: {custom}");
                 return result.Seal();
             }
 
             var found = VersionAt(custom);
             if (found == null)
             {
-                result.Note($"Using Gradle at {custom}, but its version could not be read. Make sure it " +
-                            $"is {Required} or later.");
+                result.Note($"Gradle at {custom} (version unknown)");
                 return result.Seal();
             }
 
             if (found < Required)
-                result.Problem($"Gradle {found} at {custom} is below the {Required} Metica needs.");
+                result.Problem($"Gradle {found} is below {Required}.");
             else
-                result.Note($"Gradle {found} at {custom}");
+                result.Note($"Gradle {found}");
 
             return result.Seal();
         }
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "Download Gradle 8.6+ from gradle.org and unzip it somewhere permanent, then point the " +
-                "editor at the folder that contains bin/ and lib/.\n\n" +
-                "Skip this step if your build already works — it matters for the Kotlin native SDK, and " +
-                "not every game hits it.",
-                MessageType.Info);
-
             EditorGUILayout.BeginHorizontal();
 
             if (GUILayout.Button("Choose a Gradle folder…", GUILayout.Height(24)))

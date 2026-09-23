@@ -30,17 +30,19 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Metica ad units";
 
-        public override string Summary =>
-            "Copies the Applovin App Key and ad unit IDs into the Metica section of AdUnitsSettings. " +
-            "Metica runs through MAX, so those are exactly the values it needs.";
+        public override string Summary => "Copy the Applovin App Key and ad units into Metica's section.";
+
+        public override string Why =>
+            "Metica mediates through MAX, so its App Key is the AppLovin MAX SDK key and its ad unit IDs " +
+            "are the MAX ad unit IDs — copying the Applovin section is exactly right. Metica has no " +
+            "App-Open unit, so App-Open ads keep coming from Admob. The per-game Metica API Key and App ID " +
+            "are different values and live in MeticaSettings.";
 
         public override string ActionLabel => "Copy the Applovin section into Metica";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.AdUnitsSettingsAsset };
 
-        public override string ReviewHint =>
-            "The Metica block should now hold the same App Key and the same four ad unit IDs as the " +
-            "Applovin block above it. Nothing else in the asset should have moved.";
+        public override string ReviewHint => "The Metica block should match the Applovin block. Nothing else moves.";
 
         public override VerifyResult Verify()
         {
@@ -49,7 +51,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var asset = LoadAsset();
             if (asset == null)
             {
-                result.Problem($"Could not load {MeticaPaths.AdUnitsSettingsAsset}");
+                result.Problem("AdUnitsSettings.asset not found.");
                 return result.Seal();
             }
 
@@ -57,14 +59,9 @@ namespace GameDistrict.MeticaIntegrationTools
             var metica = serialized.FindProperty("Metica");
             if (metica == null)
             {
-                result.Problem("AdUnitsSettings has no Metica section. Run the patch step and let Unity recompile — " +
-                               "the field is added to AdUnitsConfiguration there.");
+                result.Problem("No Metica section yet — run the patch step first.");
                 return result.Seal();
             }
-
-            foreach (var (label, value) in ReadAppKeys(metica))
-                if (string.IsNullOrWhiteSpace(value))
-                    result.Problem($"Metica {label} is empty.");
 
             var units = metica.FindPropertyRelative("AdUnitsInfo");
             if (units == null)
@@ -73,24 +70,36 @@ namespace GameDistrict.MeticaIntegrationTools
                 return result.Seal();
             }
 
+            var empty = new List<string>();
+
+            foreach (var (label, value) in ReadAppKeys(metica))
+                if (string.IsNullOrWhiteSpace(value))
+                    empty.Add(label);
+
             foreach (var (formatValue, formatName) in RequiredFormats)
             {
                 var entry = FindEntry(units, formatValue);
                 if (entry == null)
                 {
-                    result.Problem($"No Metica ad unit configured for {formatName}.");
+                    empty.Add($"{formatName} unit");
                     continue;
                 }
 
                 foreach (var (label, id) in ReadAdUnitIds(entry))
                     if (string.IsNullOrWhiteSpace(id))
-                        result.Problem($"Metica {formatName} {label} is empty.");
+                        empty.Add($"{formatName} {label}");
             }
 
-            if (result.Problems.Count == 0)
-                result.Note("App Key and all four ad units set");
+            if (empty.Count == 0)
+            {
+                result.Note("App Key and 4 ad units set");
+                return result.Seal();
+            }
 
-            result.Note("Metica has no App-Open unit — App-Open ads keep coming from Admob.");
+            result.Problem($"{empty.Count} Metica fields empty.");
+            foreach (var label in empty)
+                result.Problem($"Empty: {label}");
+
             return result.Seal();
         }
 
@@ -133,16 +142,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "Metica's App Key is the AppLovin MAX SDK key and its ad unit IDs are the MAX ad unit IDs, " +
-                "so copying the Applovin section is exactly right rather than an approximation. Review the " +
-                "values afterwards.\n\n" +
-                "The per-game Metica API Key and App ID are a different thing and belong in MeticaSettings " +
-                "(the Metica settings asset step) — the tool does not touch those.",
-                MessageType.Info);
-
             if (MeticaPaths.FileExists(MeticaPaths.AdUnitsSettingsAsset)
-                && GUILayout.Button("Select AdUnitsSettings in the Project window"))
+                && GUILayout.Button("Open AdUnitsSettings"))
             {
                 Selection.activeObject = LoadAsset();
             }

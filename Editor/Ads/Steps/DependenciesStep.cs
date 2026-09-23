@@ -61,18 +61,23 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Dependencies and Moloco version";
 
-        public override string Summary =>
-            "Checks the mediation versions Metica requires: AppLovin MAX Unity plugin 8.1.0+, Moloco " +
-            "4.3.1+ on both platforms. Only the active build target's Moloco floor blocks moving on. " +
-            "The MAX floor moves with the Metica SDK, so a lower MAX can be accepted.";
+        public override string Summary => MinMolocoAndroid == MinMolocoIos
+            ? $"Check AppLovin MAX {MinMaxPlugin}+ and Moloco {MinMolocoAndroid}+."
+            : $"Check AppLovin MAX {MinMaxPlugin}+ and Moloco {MinMolocoAndroid}+ / iOS {MinMolocoIos}+.";
+
+        public override string Why =>
+            "These are the floors on Metica's requirements page. Older Moloco builds break dependency " +
+            "resolution next to Metica; only the active build target's Moloco blocks. The MAX floor moves " +
+            "with the Metica SDK, so tick the box if your Metica version supports an older MAX. MAX is " +
+            "upgraded in AppLovin's Integration Manager. The Fix Moloco buttons only rewrite the version in " +
+            "Dependencies.xml (floor + .0) — re-run Resolve libraries after to fetch it.";
 
         public override string ActionLabel => "Open AppLovin Integration Manager";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.MolocoDependencies };
 
         public override string ReviewHint =>
-            "MAX is read-only here. If you used a Fix Moloco button, check Dependencies.xml gained the " +
-            "new version, then re-run Resolve libraries so the artifact itself is fetched.";
+            "Only Moloco's version in Dependencies.xml may change. Re-run Resolve libraries after.";
 
         public override VerifyResult Verify()
         {
@@ -81,7 +86,6 @@ namespace GameDistrict.MeticaIntegrationTools
             CheckMaxPlugin(result);
             CheckMoloco(result);
 
-            result.Note($"Source for these floors: {DocsUrl}");
             return result.Seal();
         }
 
@@ -109,22 +113,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void DrawBody(VerifyResult result)
         {
-            EditorGUILayout.HelpBox(
-                "AppLovin MAX is upgraded through the Integration Manager, not by editing Dependencies.xml " +
-                "— the manager downloads binaries that match the versions it declares.\n\n" +
-                "Moloco can be fixed directly: the buttons below only rewrite the declared version in " +
-                "Dependencies.xml as the floor version with a .0 adapter revision — confirm that build " +
-                "actually exists once you resolve. After either, re-run Resolve libraries so the new " +
-                "artifact is actually fetched.",
-                MessageType.Info);
-
-            if (GUILayout.Button("Open Metica's requirements page"))
-                Application.OpenURL(DocsUrl);
-
             DrawMaxFloorOverride();
-
-            EditorGUILayout.Space(6);
-            EditorGUILayout.LabelField("Moloco", EditorStyles.boldLabel);
 
             EditorGUILayout.BeginHorizontal();
 
@@ -146,8 +135,15 @@ namespace GameDistrict.MeticaIntegrationTools
 
             EditorGUILayout.EndHorizontal();
 
+            EditorGUILayout.BeginHorizontal();
+
             if (GUILayout.Button("Select Dependencies.xml"))
                 PingMolocoDependencies();
+
+            if (GUILayout.Button("Metica requirements page"))
+                Application.OpenURL(DocsUrl);
+
+            EditorGUILayout.EndHorizontal();
         }
 
         /// <summary>
@@ -162,18 +158,6 @@ namespace GameDistrict.MeticaIntegrationTools
             var key = AcceptedKey(InstalledMax);
             var accepted = EditorPrefs.GetBool(key, false);
 
-            EditorGUILayout.Space(4);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-            EditorGUILayout.LabelField($"MAX {InstalledMax} is below the documented {MinMaxPlugin}",
-                EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(
-                "That floor is what Metica's page lists for the current SDK, and it moves between Metica " +
-                "releases — an older Metica version can support an older MAX than this one lists. Check " +
-                "your Metica version's own requirements; if this MAX is supported there, tick this and " +
-                "the step passes.",
-                EditorStyles.wordWrappedMiniLabel);
-
             var now = EditorGUILayout.ToggleLeft(
                 $"My Metica version supports MAX {InstalledMax}", accepted);
 
@@ -185,8 +169,6 @@ namespace GameDistrict.MeticaIntegrationTools
                         ? $"Accepted AppLovin MAX {InstalledMax}, below the documented {MinMaxPlugin}"
                         : $"Withdrew acceptance of AppLovin MAX {InstalledMax}");
             }
-
-            EditorGUILayout.EndVertical();
         }
 
         // ── AppLovin MAX Unity plugin ──────────────────────────────────────────
@@ -195,8 +177,7 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             if (!MeticaPaths.FileExists(MeticaPaths.MaxSdkVersionFile))
             {
-                result.Problem($"Could not read {MeticaPaths.MaxSdkVersionFile} to determine the " +
-                               "AppLovin MAX plugin version.");
+                result.Problem("AppLovin MAX plugin not found.");
                 return;
             }
 
@@ -205,8 +186,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!match.Success || !TryParse(match.Groups[1].Value, out var version))
             {
-                result.Problem("Could not parse the AppLovin MAX plugin version from MaxSdk.cs. " +
-                               $"Confirm it is {MinMaxPlugin} or newer yourself.");
+                result.Problem($"Couldn't read the MAX version — make sure it's {MinMaxPlugin}+.");
                 return;
             }
 
@@ -214,20 +194,17 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (version >= MinMaxPlugin)
             {
-                result.Note($"AppLovin MAX Unity plugin {version} (minimum {MinMaxPlugin})");
+                result.Note($"MAX {version}");
                 return;
             }
 
             if (EditorPrefs.GetBool(AcceptedKey(version), false))
             {
-                result.Note($"AppLovin MAX Unity plugin {version} — below the {MinMaxPlugin} the docs " +
-                            "list, accepted as supported by your Metica version.");
+                result.Note($"MAX {version} (accepted)");
                 return;
             }
 
-            result.Problem($"AppLovin MAX Unity plugin is {version}, below the {MinMaxPlugin} Metica's " +
-                           "docs list. Upgrade it in the Integration Manager — or, if your Metica " +
-                           "version supports this one, tick the box below.");
+            result.Problem($"MAX {version} is below {MinMaxPlugin} — upgrade it, or tick the box.");
         }
 
         // ── Moloco SDK and adapters ────────────────────────────────────────────
@@ -238,8 +215,7 @@ namespace GameDistrict.MeticaIntegrationTools
             {
                 AndroidMolocoBelowFloor = false;
                 IosMolocoBelowFloor = false;
-                result.Note("Moloco adapter is not installed — nothing to check. If you add it later it " +
-                            $"must be {MinMolocoAndroid} or newer on Android, {MinMolocoIos} or newer on iOS.");
+                result.Note("Moloco not installed");
                 return;
             }
 
@@ -261,8 +237,7 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             if (!match.Success || !TryParse(match.Groups[1].Value, out var version))
             {
-                result.Problem($"Could not read the {platform} Moloco adapter version from " +
-                               $"{MeticaPaths.MolocoDependencies}. Confirm it is {minimum} or newer yourself.");
+                result.Problem($"Couldn't read the {platform} Moloco version — make sure it's {minimum}+.");
                 return false;
             }
 
@@ -272,18 +247,14 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (sdkVersion >= minimum)
             {
-                result.Note($"{platform} Moloco adapter {version} (minimum SDK {minimum})");
+                result.Note($"{platform} Moloco {version}");
                 return false;
             }
 
-            var message = $"{platform} Moloco adapter is {version}, i.e. Moloco SDK {sdkVersion}. Metica " +
-                          $"requires {minimum} or newer on {platform} — older Moloco builds cause " +
-                          "dependency-resolution failures alongside Metica.";
-
             if (blocking)
-                result.Problem(message + " Fix it with the Moloco button below, then re-run Resolve libraries.");
+                result.Problem($"{platform} Moloco {version} is below {minimum} — press Fix {platform} Moloco.");
             else
-                result.Note(message + $" Not blocking here — the active build target is not {platform}.");
+                result.Note($"{platform} Moloco {version} is below {minimum} (not blocking)");
 
             return true;
         }

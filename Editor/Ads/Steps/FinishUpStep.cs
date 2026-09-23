@@ -15,7 +15,14 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Finish up";
 
-        public override string Summary => "Adds the Metica folders to the Remove SDK menu.";
+        public override string Summary => "Add the Metica folders to the Remove SDK menu.";
+
+        public override string Why =>
+            "So the GD SDK's own Remove SDK menu also deletes Metica. After this, set UseMetica in the " +
+            "Monetization Firebase Remote Config payload — ads start about 2s after launch, before the " +
+            "fetch lands, so a flipped value applies on the next launch (same as v6.2.4). Then build to a " +
+            "device and look for the Metica tag: SDK version, \"Metica initialization completed\" and the " +
+            "TRIAL / HOLDOUT user group.";
 
         public override string ActionLabel => "Update the Remove SDK menu";
 
@@ -29,17 +36,11 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var remover = MeticaPaths.MonetizationRemover;
             if (!MeticaPaths.FileExists(remover))
-                result.Note("MonetizationRemover.cs not found — skipping the Remove SDK menu update.");
+                result.Note("No Remove SDK menu — skipped");
             else if (!SourcePatcher.Contains(remover, RemoverMarker))
-                result.Problem("The Remove SDK menu does not know about the Metica folders yet.");
+                result.Problem("Remove SDK menu doesn't list the Metica folders yet.");
             else
-                result.Note("Remove SDK menu covers the Metica folders");
-
-            result.Note("Remaining, and yours to decide: set UseMetica in the Monetization Firebase Remote " +
-                        "Config payload. Ads initialise about 2s after launch, before the fetch lands, so a " +
-                        "flipped remote value takes effect on the NEXT launch. That is how v6.2.4 behaves too.");
-            result.Note("Build to a device and check the log for the Metica tag: SDK version, " +
-                        "\"Metica initialization completed\" and the TRIAL / HOLDOUT user group.");
+                result.Note("Remove SDK menu updated");
 
             return result.Seal();
         }

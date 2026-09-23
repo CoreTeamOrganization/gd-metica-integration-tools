@@ -24,11 +24,15 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Title => "Remote Metica switch";
 
-        public override string Summary =>
-            "Points AdsManager at the remote UseMetica preference instead of the build-time flag on " +
-            "SDKConfiguration. Only v6.0.0–v6.2.0 need this.";
+        public override string Summary => "Read the Metica on/off switch from remote config.";
 
-        public override string ActionLabel => "Switch AdsManager to the remote flag";
+        public override string Why =>
+            "v6.0.0–v6.2.0 read the flag off SDKConfiguration, so turning Metica off meant shipping a " +
+            "build. This points AdsManager at MonetizationPreferences.UseMetica (filled from remote config " +
+            "by the patch step) and removes the dead SDKConfiguration field. The flag applies on the next " +
+            "launch — ads start about 2s in, before the fetch lands. Nothing to do on v5 or v6.2.1+.";
+
+        public override string ActionLabel => "Switch to the remote flag";
 
         public override IEnumerable<string> TouchedPaths => new[]
         {
@@ -37,8 +41,7 @@ namespace GameDistrict.MeticaIntegrationTools
         };
 
         public override string ReviewHint =>
-            "AdsManager should read MonetizationPreferences.UseMetica.Get(), and the dead flag should be " +
-            "gone from SDKConfiguration. On v5 and v6.2.1+ this step changes nothing.";
+            "AdsManager reads MonetizationPreferences.UseMetica.Get(); the SDKConfiguration field is gone.";
 
         public override VerifyResult Verify()
         {
@@ -46,13 +49,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (MeticaPaths.AdsManager == null || !MeticaPaths.FileExists(MeticaPaths.AdsManager))
             {
-                result.Problem("AdsManager.cs not found — go back to the Metica SDK step.");
+                result.Problem("AdsManager.cs not found.");
                 return result.Seal();
             }
 
             if (SourcePatcher.Contains(MeticaPaths.AdsManager, RemoteRead))
             {
-                result.Note("AdsManager already reads the remote UseMetica preference.");
+                result.Note("Already remote");
                 return result.Seal();
             }
 
@@ -60,12 +63,11 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (legacy == null)
             {
-                result.Note("No build-time Metica flag in AdsManager — nothing to move.");
+                result.Note("Nothing to switch");
                 return result.Seal();
             }
 
-            result.Problem($"AdsManager still reads {legacy}, so Metica can only be turned off by shipping " +
-                           "a build. Move it to the remote preference.");
+            result.Problem($"AdsManager still reads {legacy}.");
 
             return result.Seal();
         }
@@ -105,17 +107,6 @@ namespace GameDistrict.MeticaIntegrationTools
 
             MeticaIntegrationLog.Record(Title, log);
             AssetDatabase.Refresh();
-        }
-
-        public override void DrawBody(VerifyResult result)
-        {
-            EditorGUILayout.HelpBox(
-                "v6.0.0–v6.2.0 read the Metica flag off SDKConfiguration, so it could only change with a " +
-                "build. This points AdsManager at the preference that the patch step's PersistRemoteToggles fills " +
-                "from remote config — the same thing v6.2.1 did.\n\n" +
-                "Remember the flag then applies on the NEXT launch: ads initialise about 2s in, before the " +
-                "remote fetch lands.",
-                MessageType.Info);
         }
     }
 }
