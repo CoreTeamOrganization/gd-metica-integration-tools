@@ -1,0 +1,12 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    public interface IAdNetworkService
+    {
+        void Initialize(string appID, Action onInitialized);
+    }
+}

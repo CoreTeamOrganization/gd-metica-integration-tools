@@ -1,0 +1,103 @@
+using UnityEditor;
+using UnityEngine;
+using System.IO;
+using System.Collections.Generic;
+
+namespace GDMonetization.Editor.MenuItems
+{
+    static class MonetizationRemover
+    {
+        // Define the paths to be deleted (relative to Assets folder)
+        private static readonly string[] PathsToDelete = new string[]
+        {
+            "Assets/Adjust",
+            "Assets/AppMetrica",
+            "Assets/Editor Default Resources",
+            "Assets/ExternalDependencyManager",
+            "Assets/Firebase",
+            "Assets/GDMonetization/Plugins",
+            "Assets/GDMonetization/Runtime/Prefabs",
+            "Assets/GDMonetization/Runtime/Resources/Prefabs",
+            "Assets/GDMonetization/Runtime/Scriptables",
+            "Assets/GDMonetization/Runtime/Scripts",
+            "Assets/GDMonetization/Runtime/Sprites",
+            "Assets/GDMonetization/Samples",
+            "Assets/GeneratedLocalRepo",
+            "Assets/GoogleMobileAds",
+            "Assets/MaxSdk",
+            "Assets/Plugins/Android/AndroidManifest.xml",
+            "Assets/Plugins/Android/FirebaseApp.androidlib",
+            "Assets/Plugins/Android/GoogleMobileAdsPlugin.androidlib",
+            "Assets/Plugins/Android/googlemobileads-unity.aar",
+            "Assets/Plugins/iOS/Firebase",
+            "Assets/Plugins/iOS/NativeTemplates",
+            "Assets/Plugins/iOS/GADUAdNetworkExtras.h",
+            "Assets/Plugins/iOS/ToastPlugin.mm",
+            "Assets/Plugins/iOS/UIView+Toast.h",
+            "Assets/Plugins/iOS/UIView+Toast.m",
+            "Assets/Plugins/iOS/unity-plugin-library.a",
+            "Assets/Plugins/tvOS/Firebase",
+        };
+
+        [MenuItem("GameDistrict/Monetization/Remove SDK", false, 20)]
+        public static void RemoveSDK()
+        {
+            // Build the confirmation message
+            string message = "Are you sure you want to delete the SDK?\n" +
+                             "The following folders and files will be deleted:\n\n";
+
+            foreach (string path in PathsToDelete)
+            {
+                message += $"{path}\n";
+            }
+
+            message += "\nPlease backup important files if required.";
+
+            // Show confirmation dialog
+            bool confirmed = EditorUtility.DisplayDialog(
+                "Remove GDMonetization SDK",
+                message,
+                "Delete",
+                "Cancel"
+            );
+
+            if (confirmed)
+            {
+                try
+                {
+                    // Delete each path
+                    foreach (string path in PathsToDelete)
+                    {
+                        if (Directory.Exists(path))
+                        {
+                            Directory.Delete(path, true);
+                            File.Delete($"{path}.meta"); // Delete associated meta file
+                        }
+                        else if (File.Exists(path))
+                        {
+                            File.Delete(path);
+                            File.Delete($"{path}.meta");
+                        }
+                    }
+
+                    // Refresh the Asset Database to reflect changes
+                    AssetDatabase.Refresh();
+
+                    EditorUtility.DisplayDialog(
+                        "Success",
+                        "GDMonetization SDK has been successfully removed.",
+                        "OK"
+                    );
+                }
+                catch (System.Exception e)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Error",
+                        $"Failed to remove GDMonetization SDK: {e.Message}",
+                        "OK"
+                    );
+                }
+            }
+        }
+    }
+}

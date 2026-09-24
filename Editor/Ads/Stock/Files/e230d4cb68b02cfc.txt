@@ -1,0 +1,19 @@
+namespace Monetization.Runtime.Logger
+{
+    public enum Tag
+    {
+        SDK,
+        Admob,
+        Applovin,
+        Consent,
+        Firebase,
+        Adjust,
+        Appmetrica,
+        GameAnalytics,
+        CustomEvent,
+        InAppPurchasing,
+        InAppReview,
+        Dispatcher,
+        AppCycle
+    }
+}

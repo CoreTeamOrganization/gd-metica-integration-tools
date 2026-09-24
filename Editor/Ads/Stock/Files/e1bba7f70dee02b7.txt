@@ -1,0 +1,38 @@
+using JetBrains.Annotations;
+
+namespace Monetization.Runtime.Ads
+{
+    public readonly struct AdRevenueInfo
+    {
+        public readonly AdFormat AdFormat;
+        public readonly string Platform; // Just Applovin or Admob
+        public readonly string AdSource; // Adnetwork (aka adapters)
+        public readonly string AdUnitName;
+        public readonly double Revenue;
+        public readonly string Currency;
+        public readonly string AdPlacement;
+
+        public AdRevenueInfo(AdFormat adFormat, string platform, string adSource, string adUnitName, string currency,
+            double revenue, string adPlacement)
+        {
+            AdFormat = adFormat;
+            Platform = platform;
+            AdSource = adSource;
+            AdUnitName = adUnitName;
+            Currency = currency;
+            Revenue = revenue;
+            AdPlacement = adPlacement;
+        }
+
+        public override string ToString()
+        {
+            return $"{nameof(AdFormat)} : {AdFormat} " +
+                   $"{nameof(Platform)} : {Platform} " +
+                   $"{nameof(AdSource)} : {AdSource} " +
+                   $"{nameof(AdUnitName)} : {AdUnitName} " +
+                   $"{nameof(Currency)} : {Currency} " +
+                   $"{nameof(Revenue)} : {Revenue} " +
+                   $"{nameof(AdPlacement)} : {AdPlacement}";
+        }
+    }
+}

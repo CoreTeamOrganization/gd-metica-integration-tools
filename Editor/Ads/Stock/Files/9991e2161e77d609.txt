@@ -1,0 +1,14 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Serialization;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "SDKConfig", menuName = "GDMonetization/SDKConfig")]
+    [System.Serializable]
+    public sealed class SDKConfiguration : ScriptableObject
+    {
+        public bool AutoInitialize = true;
+    }
+}

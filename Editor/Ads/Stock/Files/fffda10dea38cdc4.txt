@@ -1,0 +1,123 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Internet;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Sdk
+{
+    public static class MonetizationInitializeOnLoad
+    {
+        public const string Version = "5.0.0-beta5";
+        public const string Release_Date = "July 31, 2025";
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void Activate()
+        {
+            MonetizationPreferences.SessionCount.Set(MonetizationPreferences.SessionCount.Get() + 1);
+            Message.Log(Tag.SDK, "Session Count : " + MonetizationPreferences.SessionCount.Get().ToString());
+            AppMetricaAnalyticsNetwork.Activate();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        internal static void OnGameInitialized()
+        {
+            var config = Resources.Load<SDKConfiguration>(MonetizationConfigurationsPath.SDK);
+            if (config.AutoInitialize)
+                Initialize();
+        }
+
+        public static async Task Initialize()
+        {
+            Message.Log(Tag.SDK, $"Initializing GDMonetization v{Version}");
+            new GameObject("MonetizationObject").AddComponent<MonetizationMonoBehaviour>();
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
+            SetDefaultRemoteValues();
+            LoadPrivacyPolicyPanel();
+        }
+
+        static void LoadPrivacyPolicyPanel()
+        {
+            if (!MonetizationPreferences.HasUserConsent.Get())
+            {
+                MonetizationPreferences.PersonalizedAds.Set(true);
+            }
+
+
+            if (!MonetizationPreferences.PrivacyPolicy.Get())
+            {
+                var privacyConfiguration = Resources.Load<PrivacyConfiguration>(MonetizationConfigurationsPath.Privacy);
+                UnityEngine.Object.Instantiate(Resources.Load<PrivacyPolicyPanel>(privacyConfiguration.PanelPath));
+                PrivacyPolicyPanel.OnPolicyAcceptedEvent += OnAccepted;
+            }
+            else
+            {
+                OnAccepted();
+            }
+        }
+
+        private static async void OnAccepted()
+        {
+            while (!InternetPanelManager.InternetAvailable)
+            {
+                await Task.Delay(1000);
+            }
+
+            AnalyticsManager.Initialize();
+            DelayedActionManager.Add(InitAds, 1f, true);
+            DelayedActionManager.Add(GatherConsent, 2f, true);
+        }
+
+        static void InitAds()
+        {
+            var adUnitsInfo = Resources.Load<AdUnitsConfiguration>(MonetizationConfigurationsPath.AdUnits);
+            AdsManager.Initialize(adUnitsInfo);
+        }
+
+        static void GatherConsent()
+        {
+            Message.Log(Tag.Consent, "GatherConsent");
+            var consentSettings = Resources.Load<ConsentConfiguration>(MonetizationConfigurationsPath.Consent);
+            ConsentManager.UMP.Initialize(consentSettings, message =>
+            {
+                Message.Log(Tag.Consent, $"Response : {message}");
+                ConsentManager.UpdateConsentOnMainThread();
+            });
+        }
+
+        static void SetDefaultRemoteValues()
+        {
+            var defaultRemote = Resources.Load<RemoteConfiguration>(MonetizationConfigurationsPath.Remote);
+            RemoteConfigManager.AddOrUpdateValue(RemoteConfigManager.REMOTE_KEY, JsonUtility.ToJson(defaultRemote));
+            RemoteConfigManager.AddOrUpdateValue("Taichi_Enabled", false);
+            RemoteConfigManager.AddOrUpdateValue("Taichi_MaxValue", 0.15f);
+
+            RemoteConfigManager.OnFetchComplete += delegate
+            {
+                string json = RemoteConfigManager.GetRemoteValue<string>(RemoteConfigManager.REMOTE_KEY).Value;
+                if (!string.IsNullOrEmpty(json))
+                {
+                    AnalyticsManager.SendAppMetricaEvent("Monetization", $"{{\"RemoteSettings\":{json}}}");
+                }
+            };
+        }
+
+
+        public static void VisitPrivacyPolicy()
+        {
+            AdsManager.ExtendAppOpenTime();
+            var privacyConfiguration = Resources.Load<PrivacyConfiguration>(MonetizationConfigurationsPath.Privacy);
+            Application.OpenURL(privacyConfiguration.PrivacyPolicyLink);
+        }
+    }
+}

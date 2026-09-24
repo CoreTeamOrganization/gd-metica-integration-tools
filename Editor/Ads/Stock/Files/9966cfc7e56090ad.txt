@@ -1,0 +1,71 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using UnityEngine;
+using UnityEngine.Serialization;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "AdUnitsConfig", menuName = "GDMonetization/AdUnitsConfig")]
+    public sealed class AdUnitsConfiguration : ScriptableObject
+    {
+        public bool ShowAppopenOnLoad = true;
+        public bool TestAds;
+        public BannerInfo BannerSettings;
+        public AdNetworkInfo Applovin;
+        public AdNetworkInfo Admob;
+
+        [System.Serializable]
+        public struct AdNetworkInfo
+        {
+            public string AppKey;
+            [SerializeField] AdUnitIdInfo[] AdUnitsInfo;
+
+            public AdNetworkInfo(string appKey, AdUnitIdInfo[] adUnitsInfo)
+            {
+                AppKey = appKey;
+                AdUnitsInfo = adUnitsInfo;
+            }
+
+            public bool TryGetAdUnitInfo(AdFormat type, out AdUnitIdInfo adUnitId)
+            {
+                if (AdUnitsInfo != null)
+                {
+                    for (int i = 0; i < AdUnitsInfo.Length; i++)
+                    {
+                        if (AdUnitsInfo[i].AdType == type)
+                        {
+                            adUnitId = AdUnitsInfo[i];
+                            return true;
+                        }
+                    }
+                }
+
+                adUnitId = new AdUnitIdInfo();
+                return false;
+            }
+        }
+
+        [System.Serializable]
+        public struct AdUnitIdInfo
+        {
+            public AdFormat AdType;
+            public string AdUnitId;
+
+            public AdUnitIdInfo(AdFormat adType, string adUnit)
+            {
+                AdType = adType;
+                AdUnitId = adUnit;
+            }
+        }
+
+        [System.Serializable]
+        public struct BannerInfo
+        {
+            public BannerSize bannerSize;
+            public BannerPosition BannerPosition;
+            public BannerPosition MrecPosition;
+        }
+    }
+}

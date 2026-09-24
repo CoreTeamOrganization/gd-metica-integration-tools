@@ -1,0 +1,182 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    public static class AnalyticsManager
+    {
+        public static event Action<AdRevenueInfo> OnAdRevenuePaidEvent;
+        public static event Action<InAppRevenueInfo> OnPurchaseSuccessEvent;
+        private static List<IAnalyticsInitialization> InitializableNetworks = new(4);
+        private static List<IAnalyticsEventsService> EventsNetworks = new(4);
+        private static List<IAnalyticsAdRevenueService> RevenueNetworks = new(4);
+        private static List<IMarketingServices> MarketingNetworks = new(4);
+
+        public static void Create()
+        {
+#if UNITY_EDITOR
+            return;
+#endif
+
+            AdjustAnalyticsNetwork adjust = new AdjustAnalyticsNetwork();
+            FirebaseAnalyticsNetwork firebase = new FirebaseAnalyticsNetwork();
+            AppMetricaAnalyticsNetwork appmetrica = new AppMetricaAnalyticsNetwork();
+            FirebaseTaichiCampaign taichiCampaign = new FirebaseTaichiCampaign();
+
+            InitializableNetworks.Add(firebase);
+            InitializableNetworks.Add(adjust);
+
+            EventsNetworks.Add(appmetrica);
+            EventsNetworks.Add(firebase);
+
+            RevenueNetworks.Add(firebase);
+            RevenueNetworks.Add(taichiCampaign);
+            RevenueNetworks.Add(adjust);
+            RevenueNetworks.Add(appmetrica);
+
+            MarketingNetworks.Add(firebase);
+            MarketingNetworks.Add(appmetrica);
+        }
+
+        public static void Initialize()
+        {
+            Message.Log(Tag.SDK, "Initializing Analytics Manager...");
+            for (int i = 0; i < InitializableNetworks.Count; i++)
+            {
+                InitializableNetworks[i].Initialize();
+            }
+        }
+
+        /// <summary>
+        /// Send event to firebase and appmetrica
+        /// </summary>
+        /// <param name="eventName">Must consist of letters, digits or _ (underscores)</param>
+        public static void SendEvent(string eventName)
+        {
+            for (int index = 0; index < EventsNetworks.Count; index++)
+            {
+                IAnalyticsEventsService analyticNetwork = EventsNetworks[index];
+                analyticNetwork.SendEvent(eventName);
+            }
+        }
+
+        /// <summary>
+        /// Send event to firebase and appmetrica
+        /// </summary>
+        /// <param name="eventName">Must consist of letters, digits or _ (underscores)</param>
+        /// <param name="parameters">Dictionary keys must consist of letters, digits or _ (underscores)</param>
+        public static void SendEvent(string eventName, Dictionary<string, object> parameters)
+        {
+            for (int index = 0; index < EventsNetworks.Count; index++)
+            {
+                IAnalyticsEventsService analyticNetwork = EventsNetworks[index];
+                if (parameters == null)
+                {
+                    analyticNetwork.SendEvent(eventName);
+                }
+                else
+                {
+                    analyticNetwork.SendEvent(eventName, parameters);
+                }
+            }
+        }
+
+        [Obsolete("Use SendEvent instead", true)]
+        public static void SendAppMetricaEvent(string eventName, params string[] parameters)
+        {
+            for (int index = 0; index < EventsNetworks.Count; index++)
+            {
+                IAnalyticsEventsService analyticNetwork = EventsNetworks[index];
+                if (analyticNetwork is AppMetricaAnalyticsNetwork appMetricaAnalyticNetwork)
+                {
+                    appMetricaAnalyticNetwork.SendEvent(eventName, parameters);
+                    break;
+                }
+            }
+        }
+
+        [Obsolete("Use SendEvent instead", true)]
+        public static void SendAppMetricaEvent(string eventName, string json)
+        {
+            for (int index = 0; index < EventsNetworks.Count; index++)
+            {
+                IAnalyticsEventsService analyticNetwork = EventsNetworks[index];
+                if (analyticNetwork is AppMetricaAnalyticsNetwork appMetricaAnalyticNetwork)
+                {
+                    appMetricaAnalyticNetwork.SendEvent(eventName, json);
+                    break;
+                }
+            }
+        }
+
+        public static void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            for (int index = 0; index < RevenueNetworks.Count; index++)
+            {
+                IAnalyticsAdRevenueService revenueNetwork = RevenueNetworks[index];
+                revenueNetwork.ReportAdRevenue(adRevenueInfo);
+            }
+
+            OnAdRevenuePaidEvent?.Invoke(adRevenueInfo);
+        }
+
+        public static void ReportInAppRevenue(InAppRevenueInfo inAppRevenueInfo)
+        {
+#if UNITY_EDITOR
+            return;
+#endif
+            for (int index = 0; index < MarketingNetworks.Count; index++)
+            {
+                IMarketingServices revenueNetwork = MarketingNetworks[index];
+                revenueNetwork.SendInAppPurchaseEvent(inAppRevenueInfo);
+            }
+
+            OnPurchaseSuccessEvent?.Invoke(inAppRevenueInfo);
+        }
+
+        public static bool IsNetworkInitialized<T>() where T : IAnalyticsInitialization
+        {
+            for (int index = 0; index < InitializableNetworks.Count; index++)
+            {
+                var analyticNetwork = InitializableNetworks[index];
+                if (analyticNetwork is T output)
+                {
+                    return output.IsInitialized;
+                }
+            }
+
+            return false;
+        }
+
+        public static bool GetAnalyticsService<T>(out T result) where T : IAnalyticsEventsService
+        {
+            for (int index = 0; index < InitializableNetworks.Count; index++)
+            {
+                var analyticNetwork = InitializableNetworks[index];
+                if (analyticNetwork is T network)
+                {
+                    result = network;
+                    return true;
+                }
+            }
+
+            result = default(T);
+            return false;
+        }
+
+        public static void Dispose()
+        {
+            InitializableNetworks.Clear();
+            EventsNetworks.Clear();
+            RevenueNetworks.Clear();
+            MarketingNetworks.Clear();
+        }
+    }
+}

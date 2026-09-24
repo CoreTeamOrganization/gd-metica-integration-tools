@@ -1,0 +1,609 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Internet;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+using Monetization.Runtime.Logger;
+
+namespace Monetization.Runtime.Ads
+{
+    public static class AdsManager
+    {
+        public static bool IsInitialized { get; private set; }
+        public static bool TestAds;
+        public static bool BannerStatus;
+        public static bool MRecStatus;
+        private static bool BannerWasActive;
+        private static bool MRecWasActive;
+
+        private static AdNetworkController[] adNetworks = new AdNetworkController[] { };
+
+        #region Initialization
+
+        public static void Initialize()
+        {
+            if (IsInitialized)
+            {
+                Message.LogWarning(Tag.SDK, $"Ads already initialized.");
+                return;
+            }
+
+            IsInitialized = true;
+            var adUnitsInfo = Resources.Load<AdUnitsConfiguration>(MonetizationConfigurationsPath.AdUnits);
+            DelayedActionManager.Add(() => { AdsManager.Initialize(adUnitsInfo); }, 2f, "Initializing Ads");
+        }
+
+        private static void Initialize(AdUnitsConfiguration adUnits)
+        {
+            flag = false;
+            TestAds = adUnits.TestAds;
+
+            var applovin = new AdNetworkController(new AdUnit[]
+            {
+                new ApplovinInterstitial(),
+                new ApplovinRewarded(),
+                new ApplovinAppopen(),
+                new ApplovinBanner(),
+                new ApplovinMRec()
+            }, new AdNetworkAppLovin(), adUnits.Applovin);
+
+            var admob = new AdNetworkController(new AdUnit[]
+            {
+                new AdmobInterstitial(),
+                new AdmobRewarded(),
+                new AdmobAppOpen(),
+                new AdmobBanner(),
+                new AdmobMRec()
+            }, new AdNetworkAdmob(), adUnits.TestAds ? MonetizationConstants.GetAdmobTestAds() : adUnits.Admob);
+
+            adNetworks = new AdNetworkController[] { applovin, admob };
+
+            SetBannersPosition(adUnits.BannerSettings);
+            ShowAppOpenOnLoad(adUnits.ShowAppopenOnLoad);
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                adNetworks[i].Initialize();
+            }
+
+            ExtendInterstitialTime();
+        }
+
+        #endregion
+
+        #region Banner
+
+        // public static void ShowBanner()
+        // {
+        //     BannerStatus = true;
+        //     Message.Log(Tag.SDK, $"ShowBanner, Status = true");
+        //
+        //     if (true) // Removed Ads Check
+        //     {
+        //         for (int i = 0; i < adNetworks.Length; i++)
+        //         {
+        //             if (adNetworks[i].IsInitialized)
+        //             {
+        //                 BannerAdUnit bannerAd = adNetworks[i].GetAdType<BannerAdUnit>();
+        //                 if (bannerAd != null)
+        //                 {
+        //                     if (bannerAd.HasBanner())
+        //                     {
+        //                         bannerAd.ShowBanner();
+        //                         //break;
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+
+        // private static void TryLoadBanner()
+        // {
+        //     if (true) // RemoveAdsCheck
+        //     {
+        //         for (int i = 0; i < adNetworks.Length; i++)
+        //         {
+        //             if (adNetworks[i].IsInitialized)
+        //             {
+        //                 if (adNetworks[i].TryGetAdType(out BannerAdUnit bannerAd))
+        //                 {
+        //                     if (!bannerAd.HasBanner())
+        //                     {
+        //                         bannerAd.LoadBanner();
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+
+        public static void ShowBanner()
+        {
+            if (MonetizationPreferences.AdsRemoved.Get())
+            {
+                Message.LogWarning(Tag.SDK, "Cannot show banner ad because ads are removed!");
+                return;
+            }
+
+            BannerStatus = true;
+            Message.Log(Tag.SDK, $"BannerStatus = {BannerStatus}");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    if (adNetworks[i].TryGetAdType(out BannerAdUnit bannerAd))
+                    {
+                        if (bannerAd.HasBanner())
+                        {
+                            foreach (var network in adNetworks) // Hide Other Banners
+                            {
+                                if (network.TryGetAdType(out BannerAdUnit otherBanner))
+                                {
+                                    if (!ReferenceEquals(bannerAd, otherBanner)) // && otherBanner.IsBannerActive())
+                                    {
+                                        otherBanner.HideBanner();
+                                    }
+                                }
+                            }
+
+                            bannerAd.ShowBanner();
+                            return;
+                        }
+                    }
+                }
+            }
+
+            //TryLoadBanner();
+        }
+
+        public static void HideBanner()
+        {
+            BannerStatus = false;
+            Message.LogWarning(Tag.SDK, $"HideBanner, Status = false");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    BannerAdUnit bannerAd = adNetworks[i].GetAdType<BannerAdUnit>();
+                    if (bannerAd != null) // && bannerAd.IsBannerActive())
+                    {
+                        bannerAd.HideBanner();
+                    }
+                }
+            }
+        }
+
+        public static void DestroyBanner()
+        {
+            BannerStatus = false;
+            Message.LogWarning(Tag.SDK, $"DestroyBanner, Status = false");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    BannerAdUnit bannerAd = adNetworks[i].GetAdType<BannerAdUnit>();
+                    if (bannerAd != null) // && bannerAd.IsBannerActive())
+                    {
+                        bannerAd.DestroyBanner();
+                    }
+                }
+            }
+        }
+
+        public static void RepositionBanner(BannerPosition newPosition)
+        {
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].TryGetAdType(out BannerAdUnit bannerAd))
+                {
+                    bannerAd.RepositionBanner(newPosition);
+                }
+            }
+        }
+
+        // internal static void HideAllBannersExcept(BannerAdUnit ignoreBanner)
+        // {
+        //     var availableBanners = new List<BannerAdUnit>();
+        //
+        //     if (true) // Removed Ads Check
+        //     {
+        //         for (int i = 0; i < adNetworks.Length; i++)
+        //         {
+        //             if (adNetworks[i].IsInitialized)
+        //             {
+        //                 adNetworks[i].TryGetAdTypes(ref availableBanners);
+        //             }
+        //         }
+        //     }
+        //
+        //     for (int i = 0; i < availableBanners.Count; i++)
+        //     {
+        //         BannerAdUnit bannerAd = availableBanners[i];
+        //         if (bannerAd != null)
+        //         {
+        //             if (ReferenceEquals(bannerAd, ignoreBanner))
+        //             {
+        //                 continue;
+        //             }
+        //
+        //             Message.Log(Tag.SDK, $"Hiding {bannerAd.GetType().Name}, Except : {ignoreBanner.GetType().Name}");
+        //             bannerAd.HideBanner();
+        //         }
+        //     }
+        // }
+
+        #endregion
+
+        #region MREC
+
+        public static void ShowMRec()
+        {
+            if (MonetizationPreferences.AdsRemoved.Get())
+            {
+                Message.LogWarning(Tag.SDK, "Cannot show mrec ad because ads are removed!");
+                return;
+            }
+
+            MRecStatus = true;
+            Message.Log(Tag.SDK, $"MRecStatus = {MRecStatus}");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    if (adNetworks[i].TryGetAdType(out MRecAdUnit mrecAd))
+                    {
+                        if (mrecAd.HasMRec())
+                        {
+                            foreach (var network in adNetworks) // Hide Other Banners
+                            {
+                                if (network.TryGetAdType(out MRecAdUnit otherMrec))
+                                {
+                                    if (!ReferenceEquals(mrecAd, otherMrec))
+                                    {
+                                        otherMrec.HideMRec();
+                                    }
+                                }
+                            }
+
+                            mrecAd.ShowMRec();
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        public static void HideMRec()
+        {
+            MRecStatus = false;
+            Message.LogWarning(Tag.SDK, $"MRecStatus, Status = false");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    MRecAdUnit mrecAd = adNetworks[i].GetAdType<MRecAdUnit>();
+                    if (mrecAd != null)
+                    {
+                        mrecAd.HideMRec();
+                    }
+                }
+            }
+        }
+
+        public static void DestroyMRec()
+        {
+            MRecStatus = false;
+            Message.LogWarning(Tag.SDK, $"DestroyMRec, Status = false");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    MRecAdUnit mrecAd = adNetworks[i].GetAdType<MRecAdUnit>();
+                    if (mrecAd != null)
+                    {
+                        mrecAd.DestroyMRec();
+                    }
+                }
+            }
+        }
+
+        public static void RepositionMRec(MRecPosition newPosition)
+        {
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].TryGetAdType(out MRecAdUnit mrecAd))
+                {
+                    mrecAd.RepositionMRec(newPosition);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Banners Status
+
+        static void SetBannersPosition(AdUnitsConfiguration.BannerInfo bannerInfo)
+        {
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                //if (adNetworks[i].IsInitialized)
+                {
+                    BannerAdUnit bannerAd = adNetworks[i].GetAdType2<BannerAdUnit>();
+                    if (bannerAd != null)
+                        bannerAd.SetBannerPosition(bannerInfo);
+
+                    MRecAdUnit mrecAd = adNetworks[i].GetAdType2<MRecAdUnit>();
+                    if (mrecAd != null)
+                        mrecAd.SetMRecPosition(bannerInfo);
+                }
+            }
+        }
+
+        public static void HideAllBanners()
+        {
+            BannerWasActive = BannerStatus;
+            MRecWasActive = MRecStatus;
+
+            if (BannerWasActive)
+            {
+                HideBanner();
+            }
+
+            if (MRecWasActive)
+            {
+                HideMRec();
+            }
+        }
+
+        public static void ResumeAllBanners()
+        {
+            if (BannerWasActive)
+                ShowBanner();
+
+            if (MRecWasActive)
+                ShowMRec();
+        }
+
+        #endregion
+
+        #region Interstital
+
+        public static bool HasInterstitial()
+        {
+            if (ReadyForNextInterstitial)
+            {
+                for (int i = 0; i < adNetworks.Length; i++)
+                {
+                    if (adNetworks[i].IsInitialized)
+                    {
+                        IntersitialAdUnit interstitialAd = adNetworks[i].GetAdType<IntersitialAdUnit>();
+                        if (interstitialAd != null && interstitialAd.HasInterstitial(false))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        static bool flag = false;
+
+        public static void ShowInterstitial(string placementName, Action onAdClosed = null)
+        {
+            if (MonetizationPreferences.AdsRemoved.Get())
+            {
+                Message.LogWarning(Tag.SDK, "Cannot show interstitial ad because ads are removed!");
+                return;
+            }
+
+            onAdClosed += ExtendInterstitialTime;
+
+            if (ReadyForNextInterstitial)
+            {
+                for (int i = 0; i < adNetworks.Length; i++)
+                {
+                    if (adNetworks[i].IsInitialized)
+                    {
+                        IntersitialAdUnit interstitialAd = adNetworks[i].GetAdType<IntersitialAdUnit>();
+                        if (interstitialAd != null && interstitialAd.HasInterstitial(true))
+                        {
+                            if (!flag)
+                            {
+                                flag = true;
+                                string n = i.ToString();
+                                AnalyticsManager.SendEvent("Extras", new()
+                                {
+                                    { "FirstInterstitialNetworkIndex", n }
+                                });
+                            }
+
+                            ExtendAppOpenTime();
+                            interstitialAd.ShowInterstitial(placementName, onAdClosed);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        static float InterstitialTimer = 0;
+
+        public static bool ReadyForNextInterstitial
+        {
+            get
+            {
+                float timeLeft = (InterstitialTimer - Time.unscaledTime);
+                bool canShow = Time.unscaledTime > InterstitialTimer;
+                Message.Log(Tag.SDK,
+                    $"ReadyForNextInterstitial : {canShow}, TimeLeft : {Math.Clamp(timeLeft, 0, 1000).ToString("F")}");
+                return Time.unscaledTime > InterstitialTimer;
+            }
+        }
+
+        public static void ExtendInterstitialTime()
+        {
+            InterstitialTimer = Time.unscaledTime + RemoteConfigManager.Configuration.NextInterstitialDelay;
+        }
+
+        public static void ResetInterstitialTime()
+        {
+            InterstitialTimer = 0;
+        }
+
+        #endregion
+
+        #region Rewarded
+
+        public static bool HasRewardedAd()
+        {
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    RewardedAdUnit rewardedAd = adNetworks[i].GetAdType<RewardedAdUnit>();
+                    if (rewardedAd != null && rewardedAd.HasRewarded(false))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public static void ShowRewarded(string placementName, Action UserReward)
+        {
+            if (!InternetPanelManager.InternetAvailable)
+            {
+                MobileToast.Show("Sorry, No Internet Connection!", true);
+                return;
+            }
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                if (adNetworks[i].IsInitialized)
+                {
+                    RewardedAdUnit rewardedAd = adNetworks[i].GetAdType<RewardedAdUnit>();
+                    if (rewardedAd != null && rewardedAd.HasRewarded(true))
+                    {
+                        if (RemoteConfigManager.Configuration.DelayInterstitialOnRewardedAd)
+                        {
+                            UserReward += ExtendInterstitialTime;
+                        }
+
+                        ExtendAppOpenTime();
+                        rewardedAd.ShowRewarded(placementName, UserReward);
+                        return;
+                    }
+                }
+            }
+
+            MobileToast.Show("Video Ad not Available!", false);
+
+            return;
+        }
+
+        #endregion
+
+        #region AppOpen
+
+        static float AppOpenTimer = 10;
+        static int NextAppOpenDelay = 10;
+
+        public static void ShowAppOpenOnLoad(bool value)
+        {
+            if (Application.isEditor) return;
+
+            if (value)
+            {
+                if (!MonetizationPreferences.HasUserConsent_UMP.Get()) return;
+                if (MonetizationPreferences.SessionCount.Get().Equals(1)) return;
+
+                if (MonetizationPreferences.AdsRemoved.Get())
+                {
+                    Message.LogWarning(Tag.SDK, "Cannot show appopen ad because ads are removed!");
+                    return;
+                }
+            }
+
+            Message.Log(Tag.SDK, $"ShowAppOpenOnLoad : {value}");
+
+            for (int i = 0; i < adNetworks.Length; i++)
+            {
+                //if (adNetworks[i].IsInitialized)
+                {
+                    AppOpenAdUnit appOpenAd = adNetworks[i].GetAdType2<AppOpenAdUnit>();
+                    if (appOpenAd != null)
+                    {
+                        appOpenAd.ShowAppopenOnLoad(value);
+                    }
+                }
+            }
+        }
+
+        public static void ExtendAppOpenTime()
+        {
+            AppOpenTimer = Time.time + NextAppOpenDelay;
+        }
+
+        public static void ShowAppOpen()
+        {
+            if (MonetizationPreferences.AdsRemoved.Get())
+            {
+                Message.LogWarning(Tag.SDK, "Cannot show appopen ad because ads are removed!");
+                return;
+            }
+
+            if (!MonetizationPreferences.HasUserConsent_UMP.Get())
+            {
+                Message.LogWarning(Tag.SDK, "Cannot show appopen ad because user consent is not received!");
+                return;
+            }
+
+            float timeLeft = Mathf.Clamp(AppOpenTimer - Time.time, 0, NextAppOpenDelay);
+            bool isReady = Time.time > AppOpenTimer;
+            Message.Log(Tag.SDK, $"AppOpen Left: {timeLeft.ToString("F2")}s, isReady: {isReady}");
+
+            if (isReady)
+            {
+                for (int i = 0; i < adNetworks.Length; i++)
+                {
+                    if (adNetworks[i].IsInitialized)
+                    {
+                        AppOpenAdUnit appOpenAd = adNetworks[i].GetAdType<AppOpenAdUnit>();
+                        if (appOpenAd != null && appOpenAd.HasAppOpen(true))
+                        {
+                            appOpenAd.ShowAppOpen("on_app_pause");
+                            ExtendAppOpenTime();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+        #region Misc
+
+        public static void Dispose()
+        {
+            IsInitialized = false;
+        }
+
+        #endregion
+    }
+}

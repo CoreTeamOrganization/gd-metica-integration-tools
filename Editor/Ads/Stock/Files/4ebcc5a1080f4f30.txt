@@ -1,0 +1,73 @@
+using System;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.RemoteConfig
+{
+    public static class RemoteConfigManager
+    {
+        public const string REMOTE_KEY = "AdsSettings";
+
+        private static BaseRemoteConfigService remoteConfig = new FirebaseRemoteConfigService();
+
+        private static RemoteConfiguration m_Configuration;
+
+        public static RemoteConfiguration Configuration
+        {
+            get
+            {
+                if (m_Configuration == null)
+                {
+                    CreateAndUpdateConfig();
+                }
+
+                return m_Configuration;
+            }
+        }
+
+        public static event Action OnFetchComplete
+        {
+            add { remoteConfig.OnFetchComplete += value; }
+            remove { remoteConfig.OnFetchComplete -= value; }
+        }
+
+        internal static void Initialize()
+        {
+            OnFetchComplete += CreateAndUpdateConfig;
+            remoteConfig.Initialize();
+        }
+
+        static void CreateAndUpdateConfig()
+        {
+            if (m_Configuration == null)
+            {
+                m_Configuration = ScriptableObject.CreateInstance<RemoteConfiguration>();
+            }
+
+            string json = remoteConfig.GetRemoteValue<string>(REMOTE_KEY).Value;
+            JsonUtility.FromJsonOverwrite(json, m_Configuration);
+        }
+
+        public static void AddOrUpdateValue(string key, object value)
+        {
+            remoteConfig.AddOrUpdateValue(key, value);
+        }
+
+        public static RemoteValue<T> GetRemoteValue<T>(string key)
+        {
+            return remoteConfig.GetRemoteValue<T>(key);
+        }
+
+        internal static void Dispose()
+        {
+            if (m_Configuration != null)
+            {
+                UnityEngine.Object.DestroyImmediate(m_Configuration);
+            }
+
+            m_Configuration = null;
+            remoteConfig = new FirebaseRemoteConfigService();
+        }
+    }
+}

@@ -1,0 +1,118 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public static class MonetizationPreferences
+{
+    public static readonly Preferences<bool> PrivacyPolicy = new Preferences<bool>("GDPrefs_PrivacyPolicy");
+    public static readonly Preferences<bool> HasUserConsent = new Preferences<bool>("GDPrefs_HasUserConsent");
+    public static readonly Preferences<bool> PersonalizedAds = new Preferences<bool>("GDPrefs_PersonalizedAds");
+    public static readonly Preferences<bool> ConsentEuropeanArea = new Preferences<bool>("GDPrefs_ConsentEuropeanArea");
+    public static readonly Preferences<int> SessionCount = new Preferences<int>("GDPrefs_SessionCount");
+    public static readonly Preferences<bool> AdsRemoved = new Preferences<bool>("AdsRemoved");
+
+    // public static readonly Preferences<int> UserLevel = new Preferences<int>("GDPrefs_AUserLevel");
+    // public static readonly Preferences<int> WatchedRewardedCount = new Preferences<int>("GDPrefs_WatchedRewardedCount");
+    // public static readonly Preferences<int> WatchedInterstitialCount = new Preferences<int>("GDPrefs_WatchedInterstitialCount");
+    // public static readonly Preferences<long> SpentTimeInFirstDay = new Preferences<long>("GDPrefs_SpentTimeInFirstDay");
+
+    public readonly struct Preferences<T>
+    {
+        public readonly string Key;
+
+        public Preferences(string key)
+        {
+            Key = key;
+        }
+
+        public void Set(T value)
+        {
+            if (typeof(T) == typeof(bool))
+            {
+                if (value is bool boolValue)
+                {
+                    PlayerPrefs.SetInt(Key, boolValue ? 1 : 0);
+                }
+            }
+
+            if (typeof(T) == typeof(int))
+            {
+                if (value is int intValue)
+                {
+                    PlayerPrefs.SetInt(Key, intValue);
+                }
+            }
+
+            if (typeof(T) == typeof(float))
+            {
+                if (value is float floatValue)
+                {
+                    PlayerPrefs.SetFloat(Key, floatValue);
+                }
+            }
+
+            if (typeof(T) == typeof(string))
+            {
+                if (value is string stringValue)
+                {
+                    PlayerPrefs.SetString(Key, stringValue);
+                }
+            }
+
+            if (typeof(T) == typeof(long))
+            {
+                if (value is long longValue)
+                {
+                    PlayerPrefs.SetString(Key, longValue.ToString());
+                }
+            }
+        }
+
+        public T Get()
+        {
+            if (typeof(T) == typeof(bool))
+            {
+                if (PlayerPrefs.GetInt(Key, 0) > 0 is T value)
+                {
+                    return value;
+                }
+            }
+
+            if (typeof(T) == typeof(int))
+            {
+                if (PlayerPrefs.GetInt(Key, 0) is T value)
+                {
+                    return value;
+                }
+            }
+
+            if (typeof(T) == typeof(float))
+            {
+                if (PlayerPrefs.GetFloat(Key, 0) is T value)
+                {
+                    return value;
+                }
+            }
+
+            if (typeof(T) == typeof(string))
+            {
+                if (PlayerPrefs.GetString(Key, null) is T value)
+                {
+                    return value;
+                }
+            }
+
+            if (typeof(T) == typeof(long))
+            {
+                string valueAsString = PlayerPrefs.GetString(Key, null);
+                long.TryParse(valueAsString, out long value);
+                if (value is T castedValue)
+                {
+                    return castedValue;
+                }
+            }
+
+            return default;
+        }
+    }
+}

@@ -1,0 +1,15 @@
+namespace Monetization.Runtime.Sdk
+{
+    public static class MonetizationConfigurationsPath
+    {
+        public static readonly string SDK = "Configurations/SDKConfiguration";
+        public static readonly string Adjust = "Configurations/AdjustToken";
+        public static readonly string AdUnits = "Configurations/AdUnitsSettings";
+        public static readonly string Consent = "Configurations/ConsentDebugging";
+        public static readonly string Internet = "Configurations/InternetPopupSettings";
+        public static readonly string Privacy = "Configurations/PrivacyPolicyPanel";
+        public static readonly string Remote = "Configurations/DefaultRemoteSettings";
+        public static readonly string AppMetrica = "Configurations/AppMetricaSettings";
+        public static readonly string InApps = "Configurations/InAppPurchasing";
+    }
+}

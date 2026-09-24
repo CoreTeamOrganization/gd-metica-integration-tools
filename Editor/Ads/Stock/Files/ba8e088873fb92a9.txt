@@ -1,0 +1,79 @@
+using UnityEngine;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AdjustSdk;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdNetworkController
+    {
+        public bool IsInitialized { get; private set; }
+        private AdUnit[] adUnits;
+        private AdUnitsConfiguration.AdNetworkInfo adUnitInfo;
+        private IAdNetworkService adNetwork;
+
+        public AdNetworkController(AdUnit[] adUnits, IAdNetworkService network, AdUnitsConfiguration.AdNetworkInfo info)
+        {
+            this.adUnits = adUnits;
+            this.adNetwork = network;
+            this.adUnitInfo = info;
+        }
+
+        public void Initialize()
+        {
+            adNetwork.Initialize(adUnitInfo.AppKey, InvokeCompletionOnMainThread);
+        }
+
+        void InvokeCompletionOnMainThread()
+        {
+            ThreadDispatcher.Enqueue(OnCompelete);
+        }
+
+        public void OnCompelete()
+        {
+            foreach (var adUnit in adUnits)
+            {
+                if (adUnitInfo.TryGetAdUnitInfo(adUnit.AdType, out AdUnitsConfiguration.AdUnitIdInfo info))
+                {
+                    if (!string.IsNullOrEmpty(info.AdUnitId))
+                    {
+                        adUnit.Initialize(info.AdUnitId);
+                    }
+                }
+            }
+
+            IsInitialized = true;
+        }
+
+        public T GetAdType<T>() where T : AdUnit
+        {
+            for (int i = 0; i < adUnits.Length; i++)
+            {
+                var adUnit = adUnits[i];
+                if (adUnit is T)
+                    return (T)adUnit;
+            }
+
+            Debug.LogWarning("No ad found for type : " + typeof(T));
+
+            return null;
+        }
+
+        public void TryGetAdTypes<T>(ref List<T> result) where T : AdUnit
+        {
+            for (int i = 0; i < adUnits.Length; i++)
+            {
+                var adUnit = adUnits[i];
+                if (adUnit is T && !adUnit.IsAdUnitEmpty)
+                {
+                    result.Add((T)adUnit);
+                }
+            }
+        }
+    }
+}

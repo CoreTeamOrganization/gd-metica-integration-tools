@@ -1,0 +1,17 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "RemoteConfig", menuName = "GDMonetization/RemoteConfig")]
+
+    [System.Serializable]
+    public sealed class RemoteConfiguration : ScriptableObject
+    {
+        public bool ShowInternetPopup = true;
+        public bool UseAdmobCollapsible = true;
+        public bool DisableMaxOn2GBDevices = true;
+        public int NextInterstitialDelay = 10;
+    }
+}
