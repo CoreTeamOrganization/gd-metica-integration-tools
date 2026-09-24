@@ -20,7 +20,8 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public override string Title => "Metica SDK";
 
-        public override string Summary => "Install the Metica SDK version this tool targets.";
+        public override string Summary =>
+            TargetVersion() is string target ? $"Install the Metica SDK v{target}." : "Install the Metica SDK.";
 
         public override string Why =>
             "Downloads the pinned Metica SDK release from GitHub and imports it. Any other installed " +
