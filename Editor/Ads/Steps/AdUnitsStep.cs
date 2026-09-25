@@ -140,13 +140,11 @@ namespace GameDistrict.MeticaIntegrationTools
                 "App-Open, so that entry — if there was one — is simply ignored.");
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (MeticaPaths.FileExists(MeticaPaths.AdUnitsSettingsAsset)
-                && GUILayout.Button("Open AdUnitsSettings"))
-            {
-                Selection.activeObject = LoadAsset();
-            }
+            if (MeticaPaths.FileExists(MeticaPaths.AdUnitsSettingsAsset))
+                yield return new StepButton("Open AdUnitsSettings", () => Selection.activeObject = LoadAsset(),
+                    icon: StepIcon.File);
         }
 
         // ── Reading ────────────────────────────────────────────────────────────

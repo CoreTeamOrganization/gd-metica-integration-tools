@@ -77,7 +77,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>
         /// Label for the action button. Null means the step has no action of its own —
         /// it is a check the project must satisfy (or a manual step driven by
-        /// <see cref="DrawBody"/>).
+        /// <see cref="Controls"/>).
         /// </summary>
         public virtual string ActionLabel => null;
 
@@ -87,8 +87,11 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Performs the step. Must be safe to run twice.</summary>
         public virtual void Apply() { }
 
-        /// <summary>Extra controls drawn inside the step, above the action button.</summary>
-        public virtual void DrawBody(VerifyResult result) { }
+        /// <summary>
+        /// Extra controls shown inside the step, above the action row. Described, not drawn:
+        /// the window renders them in the tool's theme.
+        /// </summary>
+        internal virtual IEnumerable<StepControl> Controls(VerifyResult result) => Array.Empty<StepControl>();
 
         /// <summary>
         /// The longer explanation — why the step exists, what it touches, when to skip it.

@@ -111,64 +111,31 @@ namespace GameDistrict.MeticaIntegrationTools
                 "menu to upgrade MAX, then re-run Resolve libraries.");
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            DrawMaxFloorOverride();
-
-            EditorGUILayout.BeginHorizontal();
-
-            using (new EditorGUI.DisabledScope(!AndroidMolocoBelowFloor))
+            // Offered only when MAX is below the published floor. The floor comes from one page
+            // that describes one Metica version; an older Metica pairs with an older MAX, and
+            // the developer is the one who can check that pairing.
+            if (InstalledMax != null && InstalledMax < MinMaxPlugin)
             {
-                // Writes a file and triggers a reimport, so it runs on the next editor tick
-                // rather than inside OnGUI — same reasoning as the window's own QueueApply.
-                if (GUILayout.Button($"Fix Android Moloco → {MinMolocoAndroid}.0"))
-                    EditorApplication.delayCall += () =>
-                        FixMolocoVersion("Android", AndroidMolocoVersion, MinMolocoAndroid);
+                var max = InstalledMax;
+                var key = AcceptedKey(max);
+                yield return new StepToggle($"My Metica version supports MAX {max}", EditorPrefs.GetBool(key, false),
+                    accepted =>
+                    {
+                        EditorPrefs.SetBool(key, accepted);
+                        MeticaIntegrationLog.Record(Title, accepted
+                            ? $"Accepted AppLovin MAX {max}, below the documented {MinMaxPlugin}"
+                            : $"Withdrew acceptance of AppLovin MAX {max}");
+                    });
             }
 
-            using (new EditorGUI.DisabledScope(!IosMolocoBelowFloor))
-            {
-                if (GUILayout.Button($"Fix iOS Moloco → {MinMolocoIos}.0"))
-                    EditorApplication.delayCall += () =>
-                        FixMolocoVersion("iOS", IosMolocoVersion, MinMolocoIos);
-            }
-
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Select Dependencies.xml"))
-                PingMolocoDependencies();
-
-            if (GUILayout.Button("Metica requirements page"))
-                Application.OpenURL(DocsUrl);
-
-            EditorGUILayout.EndHorizontal();
-        }
-
-        /// <summary>
-        /// Offered only when MAX is below the published floor. The floor comes from one page
-        /// that describes one Metica version; an older Metica pairs with an older MAX, and the
-        /// developer is the one who can check that pairing.
-        /// </summary>
-        private static void DrawMaxFloorOverride()
-        {
-            if (InstalledMax == null || InstalledMax >= MinMaxPlugin) return;
-
-            var key = AcceptedKey(InstalledMax);
-            var accepted = EditorPrefs.GetBool(key, false);
-
-            var now = EditorGUILayout.ToggleLeft(
-                $"My Metica version supports MAX {InstalledMax}", accepted);
-
-            if (now != accepted)
-            {
-                EditorPrefs.SetBool(key, now);
-                MeticaIntegrationLog.Record("Dependencies and Moloco version",
-                    now
-                        ? $"Accepted AppLovin MAX {InstalledMax}, below the documented {MinMaxPlugin}"
-                        : $"Withdrew acceptance of AppLovin MAX {InstalledMax}");
-            }
+            yield return new StepButton($"Fix Android Moloco → {MinMolocoAndroid}.0",
+                () => FixMolocoVersion("Android", AndroidMolocoVersion, MinMolocoAndroid), AndroidMolocoBelowFloor);
+            yield return new StepButton($"Fix iOS Moloco → {MinMolocoIos}.0",
+                () => FixMolocoVersion("iOS", IosMolocoVersion, MinMolocoIos), IosMolocoBelowFloor);
+            yield return new StepButton("Select Dependencies.xml", PingMolocoDependencies, icon: StepIcon.File);
+            yield return new StepButton("Metica requirements page", () => Application.OpenURL(DocsUrl));
         }
 
         // ── AppLovin MAX Unity plugin ──────────────────────────────────────────

@@ -1,0 +1,209 @@
+/* Metica Integration — UI Toolkit theme. Tokens match the design's DESIGN_SPEC.md. */
+:root, .mi-root {
+    --bg: #121212;
+    --strip: #0A0A0A;
+    --surface: #1C1C1C;
+    --surface-2: #262626;
+    --border: #333333;
+    --border-strong: #4D4D4D;
+    --text: #F2F2F2;
+    --text-2: #B3B3B3;
+    --text-3: #949494;
+    --disabled: #6B6B6B;
+    --yellow: #FFD60A;
+    --yellow-hover: #FFE14D;
+    --ink: #111111;
+    --error: #FF8080;
+    --error-bg: #2A1414;
+    --error-border: #6E2B2B;
+    --ok: #5CD68C;
+    --ok-bg: #13261A;
+    --ok-border: #2B5A3B;
+    --warn: #FFA64D;
+    --warn-bg: #2E1E0D;
+    --warn-border: #7A4A17;
+}
+
+/* Unity's own unity-button / unity-label classes are removed in code (With()), so every
+   Button and Label here is styled by this sheet alone — no resets fighting the spacing. */
+.mi-root Label { white-space: normal; }
+
+/* ---------- Window ---------- */
+.mi-root { flex-grow: 1; background-color: var(--bg); color: var(--text); font-size: 13px; }
+.mi-scroll { flex-grow: 1; }
+.mi-content { padding: 20px 16px; }
+.mi-root .mi-content > * { margin-bottom: 16px; flex-shrink: 0; }
+
+/* ---------- Header ---------- */
+.mi-header { height: 56px; flex-shrink: 0; flex-direction: row; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom-width: 1px; border-color: var(--border); }
+.mi-header__left, .mi-header__right { flex-direction: row; align-items: center; }
+.mi-root .mi-header__right > * { margin-left: 8px; }
+.mi-divider-v { width: 1px; height: 24px; background-color: var(--border-strong); margin: 0 14px; }
+.mi-crumb { flex-direction: row; align-items: center; font-size: 13px; }
+.mi-crumb__link { color: var(--text-2); cursor: link; }
+.mi-crumb__link:hover { color: var(--text); }
+.mi-crumb__sep { color: var(--text-3); margin: 0 6px; }
+.mi-crumb__current { color: var(--text); -unity-font-style: bold; }
+.mi-chip { height: 24px; padding: 0 9px; border-radius: 12px; border-width: 1px; border-color: var(--border-strong); color: var(--text-2); font-size: 11px; flex-direction: row; align-items: center; }
+.mi-chip > .mi-icon { margin-right: 6px; }
+
+/* ---------- Icons ---------- */
+.mi-icon { width: 14px; height: 14px; flex-shrink: 0; }
+.mi-icon--12 { width: 12px; height: 12px; }
+.mi-icon--16 { width: 16px; height: 16px; }
+.mi-icon--24 { width: 24px; height: 24px; }
+
+/* ---------- Buttons ---------- */
+.mi-root .mi-btn { height: 32px; padding: 0 14px; border-radius: 6px; border-width: 1px; font-size: 13px; flex-direction: row; align-items: center; justify-content: center; -unity-text-align: middle-center; cursor: link; flex-shrink: 0; }
+.mi-btn > .mi-icon { margin-right: 7px; }
+.mi-root .mi-btn Label { white-space: nowrap; }
+.mi-btn--primary { background-color: var(--yellow); border-color: var(--yellow); color: var(--ink); -unity-font-style: bold; }
+.mi-btn--primary:hover { background-color: var(--yellow-hover); border-color: var(--yellow-hover); }
+.mi-btn--primary:active { background-color: var(--yellow); }
+.mi-btn--secondary { background-color: var(--surface-2); border-color: var(--border-strong); color: var(--text); }
+.mi-btn--secondary:hover { background-color: var(--surface-2); border-color: var(--text-3); }
+.mi-btn--secondary:active { background-color: var(--surface); }
+.mi-btn--ghost { background-color: rgba(0, 0, 0, 0); border-color: rgba(0, 0, 0, 0); color: var(--text-2); }
+.mi-root .mi-btn--ghost { padding: 0 8px; }
+.mi-btn--ghost:hover { background-color: rgba(0, 0, 0, 0); border-color: rgba(0, 0, 0, 0); color: var(--text); }
+.mi-root .mi-btn--small { height: 28px; padding: 0 10px; font-size: 12px; }
+.mi-btn:disabled { background-color: rgba(0, 0, 0, 0); border-color: var(--border); color: var(--disabled); }
+.mi-btn--ghost:disabled { border-color: rgba(0, 0, 0, 0); }
+.mi-root .mi-icon-btn { width: 32px; height: 32px; padding: 0; border-radius: 6px; border-width: 1px; border-color: var(--border); background-color: var(--surface); color: var(--text); align-items: center; justify-content: center; cursor: link; }
+.mi-icon-btn:hover { background-color: var(--surface-2); border-color: var(--border-strong); }
+.mi-icon-btn--active { border-color: var(--yellow); background-color: var(--surface-2); }
+.mi-icon-btn:disabled { background-color: var(--surface); border-color: var(--border); color: var(--yellow); }
+.mi-btn:focus, .mi-icon-btn:focus { border-color: var(--yellow); }
+.mi-link { background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--text-2); cursor: link; }
+.mi-link:hover { background-color: rgba(0, 0, 0, 0); color: var(--text); }
+
+/* ---------- Menu (the ⋮ dropdown) ---------- */
+.mi-root .mi-menu__item { padding: 0 10px; }
+.mi-menu { position: absolute; top: 52px; right: 16px; width: 256px; padding: 4px; background-color: var(--surface); border-width: 1px; border-color: var(--border-strong); border-radius: 8px; }
+.mi-menu__item { height: 36px; padding: 0 10px; flex-direction: row; align-items: center; justify-content: flex-start; background-color: rgba(0, 0, 0, 0); border-width: 0; border-radius: 6px; color: var(--text); font-size: 13px; cursor: link; }
+.mi-menu__item:hover { background-color: var(--surface-2); }
+.mi-menu__item > .mi-icon { margin-right: 10px; color: var(--text-2); }
+.mi-menu__divider { height: 1px; margin: 4px 6px; background-color: var(--border); }
+
+/* ---------- Stepper ---------- */
+.mi-stepper { flex-shrink: 0; padding: 12px 16px; border-bottom-width: 1px; border-color: var(--border); }
+.mi-stepper__label { font-size: 12px; color: var(--text-2); }
+.mi-stepper__row { flex-direction: row; align-items: center; margin-top: 10px; }
+.mi-step { width: 22px; height: 22px; border-radius: 11px; border-width: 1px; flex-shrink: 0; align-items: center; justify-content: center; -unity-text-align: middle-center; font-size: 11px; -unity-font-style: bold; padding: 0; margin: 0; }
+.mi-step--done { background-color: var(--surface); border-width: 1.5px; border-color: var(--ok); color: var(--ok); cursor: link; }
+.mi-step--current { width: 26px; height: 26px; border-radius: 13px; border-width: 1.5px; background-color: var(--yellow); border-color: var(--yellow); color: var(--ink); }
+.mi-step--review { width: 26px; height: 26px; border-radius: 13px; background-color: var(--bg); border-width: 2px; border-color: var(--yellow); color: var(--yellow); }
+.mi-step--skipped { background-color: var(--bg); border-color: var(--text-3); color: var(--text-3); cursor: link; }
+.mi-step--locked { background-color: var(--surface); border-color: var(--border); color: var(--disabled); }
+.mi-step--viewing { border-width: 2px; border-color: var(--yellow); }
+.mi-step:hover { background-color: var(--surface-2); }
+.mi-step--current:hover { background-color: var(--yellow); }
+.mi-step--review:hover, .mi-step--locked:hover { background-color: var(--bg); }
+.mi-step--locked:hover { background-color: var(--surface); }
+.mi-step-line { flex-grow: 1; height: 1.5px; min-width: 6px; background-color: var(--border); }
+.mi-step-line--done { background-color: var(--ok); }
+
+/* ---------- Step content ---------- */
+.mi-title-row { flex-direction: row; align-items: center; }
+.mi-title { font-size: 20px; -unity-font-style: bold; color: var(--text); }
+.mi-summary { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+.mi-pill { height: 20px; padding: 0 8px; margin-left: 10px; border-radius: 10px; border-width: 1px; border-color: var(--border-strong); color: var(--text-2); font-size: 11px; -unity-text-align: middle-center; }
+.mi-problem { flex-direction: row; align-items: center; padding: 8px 10px; border-radius: 6px; border-width: 1px; background-color: var(--error-bg); border-color: var(--error-border); color: var(--error); }
+.mi-problem > .mi-icon, .mi-success > .mi-icon, .mi-kept-note > .mi-icon { margin-right: 8px; }
+.mi-problem__text { flex-grow: 1; flex-shrink: 1; -unity-font-style: bold; color: var(--error); }
+.mi-problem__more { margin-left: 12px; color: var(--error); font-size: 12px; -unity-font-style: bold; }
+.mi-problem__more:hover { color: var(--error); }
+.mi-success { flex-direction: row; align-items: center; padding: 8px 10px; border-radius: 6px; border-width: 1px; background-color: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+.mi-success > Label { -unity-font-style: bold; color: var(--ok); flex-shrink: 1; }
+.mi-kept-note { flex-direction: row; align-items: center; padding: 8px 10px; border-radius: 6px; border-width: 1px; background-color: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.mi-root .mi-notes > * { margin-bottom: 2px; }
+.mi-root .mi-notes > .mi-problem, .mi-root .mi-notes > .mi-success { margin-bottom: 8px; }
+.mi-note { font-size: 12px; color: var(--text-3); padding-left: 2px; }
+.mi-row { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.mi-root .mi-row > * { margin-right: 8px; margin-bottom: 4px; }
+.mi-root .mi-row > .mi-row__spacer { flex-grow: 1; margin: 0; }
+
+/* ---------- Step controls (switch, dropdown) ---------- */
+.mi-root .mi-controls > * { margin-bottom: 8px; }
+.mi-switch { flex-direction: row; align-items: center; align-self: flex-start; background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--text); cursor: link; }
+.mi-switch:hover { background-color: rgba(0, 0, 0, 0); }
+.mi-switch__track { width: 36px; height: 20px; flex-direction: row; align-items: center; justify-content: flex-start; padding: 0 2px; margin-right: 10px; border-radius: 10px; border-width: 1px; border-color: var(--border-strong); background-color: var(--surface-2); }
+.mi-switch__knob { width: 14px; height: 14px; border-radius: 7px; background-color: var(--text-3); }
+.mi-switch--on .mi-switch__track { justify-content: flex-end; background-color: var(--yellow); border-color: var(--yellow); }
+.mi-switch--on .mi-switch__knob { background-color: var(--ink); }
+.mi-switch__label { font-size: 13px; color: var(--text); }
+.mi-choice { flex-direction: row; align-items: center; }
+.mi-choice__label { font-size: 13px; color: var(--text-2); margin-right: 10px; }
+.mi-root .mi-select { height: 32px; padding: 0 10px; flex-direction: row; align-items: center; background-color: var(--surface-2); border-width: 1px; border-color: var(--border-strong); border-radius: 6px; color: var(--text); cursor: link; }
+.mi-select:hover { background-color: var(--surface-2); border-color: var(--text-3); }
+.mi-select > Label { margin-right: 18px; white-space: nowrap; }
+.mi-select > .mi-icon { color: var(--text-2); }
+
+/* ---------- Why? ---------- */
+.mi-why { border-top-width: 1px; border-color: var(--border); padding-top: 6px; }
+.mi-why__toggle { height: 28px; flex-direction: row; align-items: center; justify-content: flex-start; align-self: flex-start; background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--text); cursor: link; }
+.mi-why__toggle:hover { background-color: rgba(0, 0, 0, 0); }
+.mi-why__toggle > .mi-icon { margin-right: 6px; }
+.mi-why__body { padding: 12px; background-color: var(--surface); border-width: 1px; border-color: var(--border); border-radius: 6px; margin-top: 8px; }
+.mi-why__text { font-size: 13px; color: var(--text-2); }
+.mi-why__problem { flex-direction: row; align-items: center; margin-top: 8px; color: var(--error); }
+.mi-why__problem > .mi-icon { margin-right: 8px; }
+.mi-why__problem > Label { font-size: 12px; color: var(--error); flex-shrink: 1; }
+
+/* ---------- Review panel ---------- */
+.mi-review { padding: 14px; background-color: var(--surface); border-width: 1px; border-color: var(--yellow); border-radius: 8px; }
+.mi-review__head { flex-direction: row; align-items: center; color: var(--ok); }
+.mi-review__head > .mi-icon { margin-right: 10px; }
+.mi-review__title { font-size: 14px; -unity-font-style: bold; color: var(--text); }
+.mi-review__hint { font-size: 12px; color: var(--text-2); margin: 10px 0; }
+.mi-review__label { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
+.mi-code-box { padding: 8px 10px; background-color: var(--bg); border-width: 1px; border-color: var(--border-strong); border-radius: 6px; font-size: 12px; color: var(--text); margin-bottom: 12px; }
+.mi-review__buttons { flex-direction: row; justify-content: space-between; flex-wrap: wrap; }
+
+/* ---------- Home ---------- */
+.mi-home-title { font-size: 22px; -unity-font-style: bold; color: var(--text); }
+.mi-home-sub { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+.mi-root .mi-card { padding: 18px; }
+.mi-card { flex-direction: row; align-items: flex-start; -unity-text-align: upper-left; background-color: var(--surface); border-width: 1px; border-color: var(--border-strong); border-radius: 10px; cursor: link; }
+.mi-card:hover { background-color: var(--surface); border-color: var(--text-3); }
+.mi-card:disabled { border-color: var(--border); }
+.mi-card__tile { width: 44px; height: 44px; border-radius: 8px; background-color: var(--yellow); color: var(--ink); align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0; }
+.mi-card__body { flex-grow: 1; flex-shrink: 1; }
+.mi-card__head { flex-direction: row; align-items: center; }
+.mi-card__title { font-size: 17px; -unity-font-style: bold; color: var(--text); flex-grow: 1; }
+.mi-card__cta { flex-direction: row; align-items: center; color: var(--yellow); }
+.mi-card__cta > Label { color: var(--yellow); -unity-font-style: bold; margin-right: 4px; }
+.mi-card__desc { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+.mi-card__check { flex-direction: row; align-items: center; margin-top: 10px; color: var(--ok); }
+.mi-card__check > .mi-icon { margin-right: 8px; }
+.mi-card__check > Label { font-size: 12px; color: var(--text-2); flex-shrink: 1; }
+.mi-card__check--missing { color: var(--error); }
+.mi-card__progress { flex-direction: row; margin-top: 12px; }
+.mi-card__segment { flex-grow: 1; height: 4px; border-radius: 2px; margin-right: 4px; background-color: var(--border); }
+.mi-card__segment--done { background-color: var(--ok); }
+.mi-card__segment--skipped { background-color: var(--text-3); }
+.mi-card__status { font-size: 12px; -unity-font-style: bold; color: var(--text-2); margin-top: 10px; }
+
+/* ---------- Finished ---------- */
+.mi-done-card { padding: 20px; background-color: var(--surface); border-width: 1px; border-color: var(--border-strong); border-radius: 10px; }
+.mi-done-badge { width: 40px; height: 40px; border-radius: 20px; border-width: 1.5px; border-color: var(--ok); color: var(--ok); align-items: center; justify-content: center; margin-bottom: 14px; }
+.mi-panel { background-color: var(--surface); border-width: 1px; border-color: var(--border); border-radius: 8px; }
+.mi-panel__head { flex-direction: row; align-items: center; justify-content: space-between; padding: 10px 14px; }
+.mi-panel__row { flex-direction: row; align-items: center; padding: 8px 14px; border-top-width: 1px; border-color: var(--border); color: var(--text-3); }
+.mi-panel__row > .mi-icon { margin-right: 10px; }
+.mi-panel__num { width: 26px; color: var(--text-3); }
+.mi-panel__name { flex-grow: 1; flex-shrink: 1; color: var(--text); }
+.mi-section-label { font-size: 11px; -unity-font-style: bold; color: var(--text-3); letter-spacing: 1px; }
+.mi-caption { font-size: 12px; color: var(--text-3); }
+
+/* ---------- Footer ---------- */
+.mi-footer { flex-shrink: 0; border-top-width: 1px; border-color: var(--border); padding: 6px 12px 8px; }
+.mi-footer__row { flex-direction: row; align-items: center; }
+.mi-footer__sep { width: 1px; height: 12px; background-color: var(--border); margin: 0 4px; }
+.mi-footer .mi-btn--ghost { height: 26px; font-size: 12px; }
+.mi-root .mi-log-toggle { padding: 0 8px; }
+.mi-log-toggle { height: 26px; align-self: flex-start; flex-direction: row; align-items: center; justify-content: flex-start; background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--text-2); font-size: 12px; cursor: link; }
+.mi-log-toggle:hover { background-color: rgba(0, 0, 0, 0); color: var(--text); }
+.mi-log-toggle > .mi-icon { margin-right: 6px; }
+.mi-log { max-height: 140px; margin: 2px 8px 0; padding: 8px 10px; background-color: var(--surface); border-width: 1px; border-color: var(--border); border-radius: 6px; }
+.mi-log__entry { font-size: 11px; color: var(--text-3); margin-bottom: 2px; }

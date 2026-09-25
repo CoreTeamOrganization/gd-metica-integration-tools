@@ -91,10 +91,9 @@ namespace GameDistrict.MeticaIntegrationTools
             return result.Seal();
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (GUILayout.Button("Choose a JDK folder…", GUILayout.Height(24)))
-                ChooseJdkFolder();
+            yield return new StepButton("Choose a JDK folder…", ChooseJdkFolder, icon: StepIcon.Folder);
         }
 
         // ── Actions ────────────────────────────────────────────────────────────

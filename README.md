@@ -1,20 +1,23 @@
 # GameDistrict Metica Integration Tools
 
-Editor tooling for Metica, as a Unity package. Two independent wizards, picked one at a
-time from **GameDistrict → Metica**:
+Editor tooling for Metica, as a Unity package. One window, **GameDistrict → Metica →
+Metica Integration…**, whose Home screen picks one of two independent flows:
 
-- **Ads Integration…** — gets Metica ads into a project, standalone or wired into the GD
+- **Ads Integration** — gets Metica ads into a project, standalone or wired into the GD
   Monetization SDK. See [Editor/Ads/README.md](Editor/Ads/README.md).
-- **Genre Creator…** — a setup wizard (Android toolchain, scripting define, optional
-  Performance Tracker package), whose last step opens the actual genre-authoring window —
-  moved in from `gd-analytics-genre-creator`, unchanged. See
-  [Editor/Genre/README.md](Editor/Genre/README.md).
+- **Genre Creator** — a setup flow (Android toolchain, optional Performance Tracker
+  package), whose last step opens the actual genre-authoring window — moved in from
+  `gd-analytics-genre-creator`, unchanged. See [Editor/Genre/README.md](Editor/Genre/README.md).
+
+A flow runs one step per screen: a stepper shows every step's state, a step unlocks once the
+one before it verifies and is signed off, and done or skipped steps can be revisited. The
+window is built with UI Toolkit to the design in `Editor/UI/` (theme: `MeticaTheme.uss`).
 
 Both flows share one Gradle/Kotlin/AGP layer (`Editor/Shared/Gradle/`), so there is a
 single place that owns `baseProjectTemplate.gradle`, not two.
 
-**Remove Integration Tools…** (same menu, and each window's ⋮ tab menu) removes the package.
-It refuses while the project has generated genres, since those inherit from `Runtime/`.
+**Remove Integration Tools…** (same menu, the window's ⋮ menu, and its tab menu) removes the
+package. It refuses while the project has generated genres, since those inherit from `Runtime/`.
 
 ## Installing
 
@@ -42,19 +45,22 @@ change. One versioned package fixes that: every project points at the same sourc
 ```
 Editor/
   GameDistrict.MeticaIntegrationTools.Editor.asmdef   references GameDistrict.MeticaAnalytics.Runtime
+  UI/
+    MeticaIntegrationWindow  the one window: Home, stepper, one step per screen, review panel,
+                             Why?, finished screen, footer, ⋮ menu (UI Toolkit)
+    MeticaTheme.uss          the design's tokens and component classes
+    MiIcon                   the design's line icons, drawn from their SVG path data
   Shared/
-    MeticaStepWizardWindow   the generic wizard shell (verify, sign off, review gate, Why?
-                             foldout, log, ⋮ menu) — both windows below are this plus their
-                             own step list and header
+    MeticaFlow               one run's engine, no UI: verify, sign off, skip, current step
     MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress stores
     ToolRemover              removes the package (menu item + ⋮ menu)
     PackageRequests          waits on Package Manager requests without blocking the editor
     Gradle/                GradleVersionStep, KotlinTemplateStep, GradleTemplateEditor,
                             GradleJdkStep — used by both flows, so one place owns
                             baseProjectTemplate.gradle and gradleTemplate.properties, not two
-  Ads/                     MeticaIntegrationWindow + its steps/templates
+  Ads/                     AdsFlow (its two step lists) + steps, templates, stock GD SDK copies
   Genre/
-    GenreWizardWindow      the setup wizard: shared Gradle steps, PerformanceTrackerStep,
+    GenreFlow              the setup flow: shared Gradle steps, PerformanceTrackerStep,
                            GenreDefinitionStep
     MeticaSymbolInstaller  [InitializeOnLoad] define installer, not a step — see below
     GenreCreator/          the actual genre-authoring window and codegen engine, unchanged —

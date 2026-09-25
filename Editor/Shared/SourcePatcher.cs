@@ -31,9 +31,39 @@ namespace GameDistrict.MeticaIntegrationTools
         public static bool IsSatisfied(Outcome outcome) =>
             outcome == Outcome.Applied || outcome == Outcome.AlreadyApplied;
 
+        // ── In-memory mode ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Project-relative path → contents while an <see cref="InMemory"/> scope is open;
+        /// null otherwise. Lets the modified-file check run the real patch code against
+        /// stock copies to learn what "patched" looks like, without touching the disk.
+        /// </summary>
+        private static Dictionary<string, string> _memory;
+
+        /// <summary>
+        /// Until disposed, every read, write and existence check here goes to
+        /// <paramref name="files"/> instead of the disk, and nothing is backed up. A path
+        /// that is not a key counts as missing.
+        /// </summary>
+        public static IDisposable InMemory(Dictionary<string, string> files)
+        {
+            _memory = files ?? throw new ArgumentNullException(nameof(files));
+            return new MemoryScope();
+        }
+
+        private sealed class MemoryScope : IDisposable
+        {
+            public void Dispose() => _memory = null;
+        }
+
+        public static bool Exists(string projectRelativePath) =>
+            _memory != null
+                ? projectRelativePath != null && _memory.ContainsKey(projectRelativePath)
+                : MeticaPaths.FileExists(projectRelativePath);
+
         public static bool Contains(string projectRelativePath, string needle)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return false;
+            if (!Exists(projectRelativePath)) return false;
             return ReadAll(projectRelativePath).Contains(needle);
         }
 
@@ -45,7 +75,7 @@ namespace GameDistrict.MeticaIntegrationTools
         public static Outcome InsertAfterLine(string projectRelativePath, string marker,
             string anchorContains, string insertion)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return Outcome.FileMissing;
+            if (!Exists(projectRelativePath)) return Outcome.FileMissing;
 
             var text = ReadAll(projectRelativePath);
             if (text.Contains(marker)) return Outcome.AlreadyApplied;
@@ -68,7 +98,7 @@ namespace GameDistrict.MeticaIntegrationTools
         public static Outcome InsertBeforeLine(string projectRelativePath, string marker,
             string anchorContains, string insertion)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return Outcome.FileMissing;
+            if (!Exists(projectRelativePath)) return Outcome.FileMissing;
 
             var text = ReadAll(projectRelativePath);
             if (text.Contains(marker)) return Outcome.AlreadyApplied;
@@ -88,7 +118,7 @@ namespace GameDistrict.MeticaIntegrationTools
         public static Outcome ReplaceFirst(string projectRelativePath, string marker,
             string find, string replacement)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return Outcome.FileMissing;
+            if (!Exists(projectRelativePath)) return Outcome.FileMissing;
 
             var text = ReadAll(projectRelativePath);
             if (text.Contains(marker)) return Outcome.AlreadyApplied;
@@ -107,7 +137,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static Outcome AppendToLastType(string projectRelativePath, string marker, string insertion)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return Outcome.FileMissing;
+            if (!Exists(projectRelativePath)) return Outcome.FileMissing;
 
             var text = ReadAll(projectRelativePath);
             if (text.Contains(marker)) return Outcome.AlreadyApplied;
@@ -133,7 +163,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static Outcome AppendEnumMember(string projectRelativePath, string enumName, string member)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return Outcome.FileMissing;
+            if (!Exists(projectRelativePath)) return Outcome.FileMissing;
 
             var text = ReadAll(projectRelativePath);
             var newline = DetectNewline(text);
@@ -177,7 +207,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static Outcome AppendTypeToNamespace(string projectRelativePath, string marker, string insertion)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return Outcome.FileMissing;
+            if (!Exists(projectRelativePath)) return Outcome.FileMissing;
 
             var text = ReadAll(projectRelativePath);
             if (text.Contains(marker)) return Outcome.AlreadyApplied;
@@ -200,7 +230,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static int RemoveLinesContaining(string projectRelativePath, string needle)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return 0;
+            if (!Exists(projectRelativePath)) return 0;
 
             var text = ReadAll(projectRelativePath);
             var newline = DetectNewline(text);
@@ -219,7 +249,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static bool RemoveBlockContaining(string projectRelativePath, string declarationContains)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return false;
+            if (!Exists(projectRelativePath)) return false;
 
             var text = ReadAll(projectRelativePath);
             var newline = DetectNewline(text);
@@ -253,7 +283,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static bool ReplaceBlockBody(string projectRelativePath, string declarationContains, string body)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return false;
+            if (!Exists(projectRelativePath)) return false;
 
             var text = ReadAll(projectRelativePath);
             var newline = DetectNewline(text);
@@ -322,7 +352,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static int ReplaceEvery(string projectRelativePath, string find, string replacement)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return 0;
+            if (!Exists(projectRelativePath)) return 0;
 
             var text = ReadAll(projectRelativePath);
             var count = 0;
@@ -343,7 +373,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Makes sure a <c>using</c> directive is present at the top of the file.</summary>
         public static void EnsureUsing(string projectRelativePath, string usingLine)
         {
-            if (!MeticaPaths.FileExists(projectRelativePath)) return;
+            if (!Exists(projectRelativePath)) return;
 
             var text = ReadAll(projectRelativePath);
             if (text.Contains(usingLine)) return;
@@ -371,7 +401,9 @@ namespace GameDistrict.MeticaIntegrationTools
         // ── File IO ────────────────────────────────────────────────────────────
 
         public static string ReadAll(string projectRelativePath) =>
-            File.ReadAllText(MeticaPaths.ToAbsolute(projectRelativePath));
+            _memory != null
+                ? _memory[projectRelativePath]
+                : File.ReadAllText(MeticaPaths.ToAbsolute(projectRelativePath));
 
         /// <summary>
         /// Overwrites a file, keeping a copy of the pre-tool original in the backup folder.
@@ -382,6 +414,12 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private static void WriteAll(string projectRelativePath, string contents)
         {
+            if (_memory != null)
+            {
+                _memory[projectRelativePath] = contents;
+                return;
+            }
+
             Backup(projectRelativePath);
             File.WriteAllText(MeticaPaths.ToAbsolute(projectRelativePath), contents);
         }

@@ -85,22 +85,30 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
+            MeticaIntegrationLog.Record(Title, ApplyPatches());
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// The callback-mode edits, through <see cref="SourcePatcher"/> only. The mode check
+        /// stays in <see cref="Apply"/>, since it reads an editor preference.
+        /// </summary>
+        internal static List<string> ApplyPatches()
+        {
             var log = new List<string>();
 
             var stillImplementing = StillImplementing().ToList();
             if (stillImplementing.Count > 0)
             {
-                MeticaIntegrationLog.Record(Title,
-                    $"Left the async path in place — {string.Join(" and ", stillImplementing)} still " +
-                    "implement it. Removing it would break the build.");
-                return;
+                log.Add($"Left the async path in place — {string.Join(" and ", stillImplementing)} still " +
+                        "implement it. Removing it would break the build.");
+                return log;
             }
 
             RemoveControllerAsyncPath(log);
             RemoveAsyncInterface(log);
 
-            MeticaIntegrationLog.Record(Title, log);
-            AssetDatabase.Refresh();
+            return log;
         }
 
         // ── Detection ──────────────────────────────────────────────────────────

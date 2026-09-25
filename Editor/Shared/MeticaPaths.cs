@@ -19,6 +19,13 @@ namespace GameDistrict.MeticaIntegrationTools
         private static bool _gdRootScanned;
 
         /// <summary>
+        /// When set, <see cref="GDRoot"/> returns this without looking at the project. Only
+        /// for running the patch code on stock copies outside a real project (checking which
+        /// GD SDK releases patch cleanly); never set in normal use.
+        /// </summary>
+        internal static string GDRootOverride { get; set; }
+
+        /// <summary>
         /// Project-relative root of the GD Monetization SDK (e.g. "Assets/GDMonetization"),
         /// or null when the SDK is not in this project.
         ///
@@ -30,6 +37,8 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             get
             {
+                if (GDRootOverride != null) return GDRootOverride;
+
                 if (_gdRootScanned && (_gdRoot == null || Directory.Exists(ToAbsolute(_gdRoot))))
                     return _gdRoot;
 

@@ -92,12 +92,13 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaIntegrationLog.Record(Title, $"Created {MeticaPaths.MeticaSettingsAsset}");
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (!MeticaPaths.FileExists(MeticaPaths.MeticaSettingsAsset)) return;
+            if (!MeticaPaths.FileExists(MeticaPaths.MeticaSettingsAsset)) yield break;
 
-            if (GUILayout.Button("Open MeticaSettings"))
-                Selection.activeObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.MeticaSettingsAsset);
+            yield return new StepButton("Open MeticaSettings", () =>
+                    Selection.activeObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.MeticaSettingsAsset),
+                icon: StepIcon.File);
         }
     }
 }

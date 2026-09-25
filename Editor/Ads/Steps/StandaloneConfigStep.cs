@@ -133,13 +133,13 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaIntegrationLog.Record(Title, $"Created {MeticaPaths.StandaloneConfigAsset}");
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (!MeticaPaths.FileExists(MeticaPaths.StandaloneConfigAsset)) return;
+            if (!MeticaPaths.FileExists(MeticaPaths.StandaloneConfigAsset)) yield break;
 
-            if (GUILayout.Button("Open MeticaAdsConfig"))
-                Selection.activeObject =
-                    AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.StandaloneConfigAsset);
+            yield return new StepButton("Open MeticaAdsConfig", () =>
+                    Selection.activeObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.StandaloneConfigAsset),
+                icon: StepIcon.File);
         }
     }
 }

@@ -44,7 +44,17 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var result = new VerifyResult();
 
-            if (MeticaPaths.HasGDSdk) ReportSdkVersion(result);
+            if (MeticaPaths.HasGDSdk)
+            {
+                var gdSdk = GdSdkVersion.Reported();
+                if (gdSdk != null) result.Note($"GD SDK {gdSdk}");
+
+                if (!GdSdkVersion.IsSupported(gdSdk))
+                {
+                    result.Problem($"GD SDK {gdSdk} isn't supported — needs {GdSdkVersion.Minimum}+.");
+                    return result.Seal();
+                }
+            }
 
             if (!MeticaPaths.DirectoryExists("Assets/MaxSdk/Scripts"))
                 result.Problem("Install the AppLovin MAX plugin first.");
@@ -85,6 +95,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void Apply()
         {
+            if (!Supported)
+            {
+                MeticaIntegrationLog.Record(Title,
+                    $"GD SDK {GdSdkVersion.Reported()} isn't supported — needs {GdSdkVersion.Minimum}+. Nothing changed.");
+                return;
+            }
+
             var installed = InstalledVersion();
 
             if (installed != null && IsStale(installed, out _))
@@ -96,8 +113,13 @@ namespace GameDistrict.MeticaIntegrationTools
             InstallSelectedRelease();
         }
 
+        /// <summary>Standalone projects, and GD SDK 5.3.0 or newer (or unreadable).</summary>
+        private static bool Supported => !MeticaPaths.HasGDSdk || GdSdkVersion.IsSupported(GdSdkVersion.Reported());
+
         private string ActionForState()
         {
+            if (!Supported) return null;
+
             var installed = InstalledVersion();
             if (installed != null && IsStale(installed, out _)) return $"Remove Metica {installed}";
             if (installed != null) return "Re-import";
@@ -108,9 +130,11 @@ namespace GameDistrict.MeticaIntegrationTools
 
         // ── UI ─────────────────────────────────────────────────────────────────
 
-        public override void DrawBody(VerifyResult result)
+        /// <summary>Only before the SDK is imported: after that the version is settled.</summary>
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (GUILayout.Button("Change target version…")) OpenTargetVersionOverride();
+            if (!Supported || InstalledVersion() != null) yield break;
+            yield return new StepButton("Change target version…", OpenTargetVersionOverride);
         }
 
         /// <summary>
@@ -232,18 +256,6 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var asset = AssetDatabase.LoadAssetAtPath<MeticaTargetVersion>(path);
             return string.IsNullOrEmpty(asset?.Version) ? null : asset.Version;
-        }
-
-        private static void ReportSdkVersion(VerifyResult result)
-        {
-            if (!MeticaPaths.FileExists(MeticaPaths.InitializeOnLoad)) return;
-
-            var source = SourcePatcher.ReadAll(MeticaPaths.InitializeOnLoad);
-            var match = Regex.Match(source, "string\\s+Version\\s*=\\s*\"([0-9]+(?:\\.[0-9]+)*)\"");
-            if (!match.Success) return;
-
-            var version = match.Groups[1].Value;
-            result.Note($"GD SDK {version}");
         }
 
         private static void Require(VerifyResult result, string path)

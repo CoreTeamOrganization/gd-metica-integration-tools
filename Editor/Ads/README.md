@@ -1,10 +1,11 @@
 # Metica Integration Tool
 
 Editor wizard that adds **Metica for ads** (Smart Floors through MAX mediation) to a game
-running GD Monetization SDK **v5.x or older**. Every patch anchor was verified across
-`v5.3.4`–`v5.5.0`.
+running GD Monetization SDK **v5.3.0 or newer**, or to a game with no GD SDK at all
+(standalone). See [Supported GD SDK versions](#supported-gd-sdk-versions).
 
-Open it from **GameDistrict → Metica → Ads Integration…**.
+Open it from **GameDistrict → Metica → Metica Integration…**, then **Ads Integration** on
+the Home screen.
 
 The wrapper sources are taken from GDSDK `v6.2.4`.
 
@@ -119,6 +120,38 @@ verifying. The skip is remembered, reversible from the same button, and cleared 
 sign-offs**. A step you have finished or skipped stays open: expand it any time to see
 where it stands now and run its action again.
 
+## Supported GD SDK versions
+
+**5.3.0 and newer.** On an older version the Metica SDK step stops with "GD SDK 5.2.0 isn't
+supported — needs 5.3.0+." and the Home card says the same; nothing is changed.
+
+How that was checked, on every non-beta v5 release (stock copies in `Stock/`):
+
+| GD SDK | Patches apply (in memory) | Compiles in Unity with the patches + wrapper files |
+|---|---|---|
+| 5.3.0 – 5.5.0 | ✅ all | ✅ 5.3.0, 5.3.1, 5.3.2, 5.3.3, 5.3.4, 5.3.5, 5.3.6, 5.4.0, 5.5.0 |
+| 5.0.0 – 5.2.0 | ✅ all | ❌ the wrapper files — tested on 5.0.0 and 5.2.0 |
+
+- **Patches apply**: every patch finds its anchor, the patch step's own check passes, and a
+  second run changes nothing. Run by the real patch code on the stock copies, in memory.
+- **Compiles**: each release exported from its tag, the patches and the GD wrapper files
+  applied, Metica SDK 2.45.2 added, then compiled in Unity 2022.3.62f2 batchmode.
+- **Why 5.3.0**: before it the GD SDK's ad-unit base classes are different — no
+  interstitial close callback (`ShowInterstitial(string, Action)`), no banner
+  `RepositionBanner` / `IsBannerActive`, no `MRecPosition` — so `MeticaInterstitial`,
+  `MeticaBanner` and `MeticaMRec` do not compile. Supporting them would need a second set
+  of wrapper files; no game has been seen below 5.3.1.
+
+Version differences the patches handle on their own:
+
+| Patch | Before | Instead |
+|---|---|---|
+| `PersistRemoteToggles` subscription | 5.3.6 | `OnFetchComplete` (no arguments) instead of `OnFetchCompleteWithSuccess` |
+| MeticaSettings resource path | 5.1.0 | anchored after `AppMetrica`, since there is no `InApps` |
+| `MonetizationPreferences.UseMetica` | 5.3.0 | anchored after `SessionCount`, one-argument `Preferences` constructor |
+| `OnAdRevenuePaidEvent` main-thread dispatch | 5.3.0 | skipped — the event does not exist |
+| Remove SDK menu (Finish up) | 5.2.0 | skipped — `MonetizationRemover.cs` does not exist |
+
 ## Getting the Metica SDK
 
 Step 1 installs exactly one version: the one pinned in `MeticaTargetVersion.asset`. The
@@ -190,8 +223,8 @@ by locating `Runtime/Scripts/Ads/Core/AdsManager.cs`, and finds its own `Templat
 
 ## Removing the tool
 
-**GameDistrict → Metica → Remove Integration Tools…**, or the same item in either wizard
-window's ⋮ tab menu. It removes the package through Package Manager and deletes
+**GameDistrict → Metica → Remove Integration Tools…**, or the same item in the window's ⋮
+menu. It removes the package through Package Manager and deletes
 `Assets/MeticaIntegrationToolsSettings/`. Everything the Ads flow wrote stays in the
 project and needs nothing from the package at runtime.
 
@@ -201,16 +234,17 @@ package's `Runtime/` classes, so removing the package would break it.
 ## Layout
 
 ```
-GDMonetization.MeticaIntegration.Editor.asmdef   Editor-only, no references
-MeticaIntegrationWindow.cs   the wizard: ordering, gating, drawing
-MeticaStep.cs                step contract + VerifyResult
-MeticaPaths.cs               path discovery (the GD root is found, not hardcoded)
-SourcePatcher.cs             anchored, idempotent, backed-up C# edits
-TemplateWriter.cs            copies Templates/*.cs.txt into place
-MeticaIntegrationLog.cs      running record of what changed
+AdsFlow.cs                   the two step lists (GD SDK / standalone)
+MeticaPatchSet.cs            every GD SDK edit, in step order (runs on disk or in memory)
+ModifiedFileCheck.cs         stock / patched / modified / missing, per file
+StockFiles.cs                reads Stock/ (the untouched GD SDK copies)
+Stock/                       exported by Tools~/ExportStockFiles.ps1, .txt so they never compile
 Steps/                       one file per step
 Templates/                   wrapper sources, .cs.txt so they never compile from here
 ```
+
+The window (`Editor/UI/`), the flow engine, `MeticaStep`, `MeticaPaths`, `SourcePatcher`,
+`TemplateWriter` and the log live in the shared folders, since Genre Creator uses them too.
 
 `Templates/AdNetworkMetica.cs.txt` and `Templates/MeticaInitializer.cs.txt` are the two
 templates that differ from `v6.2.4`. That release predates Metica's callback-based init and

@@ -110,9 +110,9 @@ namespace GameDistrict.MeticaIntegrationTools
             RunAndroidResolver();
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            EnableIos = EditorGUILayout.ToggleLeft("Enable iOS", EnableIos);
+            yield return new StepToggle("Enable iOS", EnableIos, value => EnableIos = value);
         }
 
         // ── Actions ────────────────────────────────────────────────────────────

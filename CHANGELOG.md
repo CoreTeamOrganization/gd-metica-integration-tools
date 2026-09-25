@@ -89,3 +89,50 @@
   folders, `package.json`, the READMEs). A git-installed package is read-only, so Unity
   ignores any asset without a committed `.meta` — the Ads window would not have existed in a
   project that added this package by git URL. Fresh GUIDs; nothing references these by GUID.
+
+- Stock copies of the GD SDK files the tool edits: `Tools~/ExportStockFiles.ps1` exports every
+  non-beta v5.x.y release (15, v5.0.0 to v5.5.0) into `Editor/Ads/Stock/` — 49 unique files
+  plus `manifest.json` (version → the Version string it reports → path → stored file).
+- Modified-file check (`ModifiedFileCheck`, no UI yet): reads the GD SDK version from
+  `MonetizationInitializeOnLoad.cs` (5.0.0 reports `"5.0.0-beta5"`) and classifies each file
+  the tool patches as stock / patched / modified / missing, ignoring line endings and trailing
+  whitespace. "Patched" is worked out by running the real patch code on the stock copy in
+  memory (`SourcePatcher.InMemory`, `MeticaPatchSet`), so hand-written code that merely
+  contains the tool's marker strings shows as modified. Wrapper files are compared with the
+  tool's own templates; `MeticaAdsHooks.cs` is skipped, since it is meant to be edited.
+- Fixed patching on GD SDK 5.0.0–5.2.0. Checked on all 15 releases in memory: every patch now
+  applies, and a second run changes nothing.
+  - `MonetizationConfigurationsPath`: anchors after `AppMetrica` when there is no `InApps`
+    (5.0.x).
+  - `MonetizationPreferences.UseMetica`: anchors after `SessionCount` when there is no
+    `RestorePurchaseOnce`, and uses the one-argument `Preferences` constructor where that is
+    all the SDK has (before 5.3.0; its `Get()` already defaults to false).
+  - The `OnAdRevenuePaidEvent` main-thread dispatch is skipped, and no longer required by the
+    patch step, where the event does not exist (before 5.3.0).
+- Fixed: on GD SDK 5.0.0–5.3.5 the patch step wrote code that did not compile.
+  `PersistRemoteToggles` subscribed to `RemoteConfigManager.OnFetchCompleteWithSuccess`, which
+  only exists from 5.3.6. Before that it now subscribes to `OnFetchComplete` (no arguments)
+  instead — the same event `CreateAndUpdateConfig` uses there. Found by compiling each release
+  with the patches applied in Unity; the text-only anchor checks could not see it.
+- One window instead of two, rebuilt with UI Toolkit to the new design (phase A):
+  **GameDistrict → Metica → Metica Integration…** opens Home, which picks Ads Integration or
+  Genre Creator. The old Ads Integration and Genre Creator menu items and windows are gone.
+  - Header (Home, breadcrumb, GD Monetization SDK chip, ⋮ menu), stepper with done / current /
+    review / skipped / locked dots (done and skipped steps can be revisited), one step per
+    screen (problem line with "+N more", notes, action row with one yellow primary, Skip /
+    Un-skip, Why?, review panel with the diff command), finished screen with skipped steps,
+    footer (Re-check everything, Reveal backups, Reset sign-offs, the change log).
+  - Step engine moved out of the window into `MeticaFlow` (no UI); `AdsFlow` and `GenreFlow`
+    hold the step lists. Sign-offs are unchanged (same keys), so progress carries over.
+  - The "Existing async init" dropdown moved from the window header into the patch step.
+  - Steps' own controls are described, not drawn (`MeticaStep.Controls` → `StepButton`,
+    `StepToggle`, `StepChoice`) and the window renders them in the theme: secondary
+    buttons, a switch, a dropdown. `DrawBody` and IMGUI are gone from the steps.
+  - "Change target version…" shows only until the Metica SDK is imported.
+  - The review panel's diff command and Copy button are hidden for now
+    (`ShowDiffCommand`, kept, not removed).
+  - New tab icon: a black bolt on a yellow tile — the wide logo was unreadable at 16 px.
+- GD SDK 5.3.0 is now the minimum (`GdSdkVersion`). On an older version the Metica SDK step
+  stops with "GD SDK x isn't supported — needs 5.3.0+." and the Home card says so. The
+  wrapper files do not compile against the 5.0–5.2 ad-unit base classes (checked in Unity);
+  5.3.0–5.5.0 all compile with the patches and wrappers. Results in `Editor/Ads/README.md`.

@@ -47,7 +47,7 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var result = new VerifyResult();
 
-            if (MeticaPaths.AdsManager == null || !MeticaPaths.FileExists(MeticaPaths.AdsManager))
+            if (!SourcePatcher.Exists(MeticaPaths.AdsManager))
             {
                 result.Problem("AdsManager.cs not found.");
                 return result.Seal();
@@ -74,14 +74,21 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void Apply()
         {
+            MeticaIntegrationLog.Record(Title, ApplyPatches());
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>The edits themselves, through <see cref="SourcePatcher"/> only.</summary>
+        internal static List<string> ApplyPatches()
+        {
             var log = new List<string>();
             var path = MeticaPaths.AdsManager;
 
             var legacy = LegacyFlags.FirstOrDefault(flag => SourcePatcher.Contains(path, flag));
             if (legacy == null)
             {
-                MeticaIntegrationLog.Record(Title, "No build-time Metica flag in AdsManager — nothing to do.");
-                return;
+                log.Add("No build-time Metica flag in AdsManager — nothing to do.");
+                return log;
             }
 
             // The SDKConfiguration load exists only to read that flag.
@@ -105,8 +112,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var removed = SourcePatcher.RemoveLinesContaining(field, $"public bool {name}");
             if (removed > 0) log.Add($"Removed the dead {name} field from SDKConfiguration");
 
-            MeticaIntegrationLog.Record(Title, log);
-            AssetDatabase.Refresh();
+            return log;
         }
     }
 }

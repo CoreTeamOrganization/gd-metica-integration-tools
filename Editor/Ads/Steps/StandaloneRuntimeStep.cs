@@ -19,7 +19,7 @@ namespace GameDistrict.MeticaIntegrationTools
     public sealed class StandaloneRuntimeStep : MeticaStep
     {
         /// <summary>Written into <see cref="MeticaPaths.StandaloneRoot"/>, in this order.</summary>
-        private static readonly string[] Files =
+        internal static readonly string[] Files =
         {
             // Support: what the GD SDK used to provide.
             "AdTypes",
@@ -117,13 +117,13 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaIntegrationLog.Record(Title, messages);
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (!MeticaPaths.DirectoryExists(MeticaPaths.StandaloneRoot)) return;
+            if (!MeticaPaths.DirectoryExists(MeticaPaths.StandaloneRoot)) yield break;
 
-            if (GUILayout.Button("Select the folder"))
-                Selection.activeObject =
-                    AssetDatabase.LoadAssetAtPath<Object>(MeticaPaths.StandaloneRoot);
+            yield return new StepButton("Select the folder", () =>
+                    Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>(MeticaPaths.StandaloneRoot),
+                icon: StepIcon.Folder);
         }
     }
 }

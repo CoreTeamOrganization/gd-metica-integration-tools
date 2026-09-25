@@ -35,7 +35,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var result = new VerifyResult();
 
             var remover = MeticaPaths.MonetizationRemover;
-            if (!MeticaPaths.FileExists(remover))
+            if (!SourcePatcher.Exists(remover))
                 result.Note("No Remove SDK menu — skipped");
             else if (!SourcePatcher.Contains(remover, RemoverMarker))
                 result.Problem("Remove SDK menu doesn't list the Metica folders yet.");
@@ -47,12 +47,16 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void Apply()
         {
+            MeticaIntegrationLog.Record(Title, ApplyPatches());
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>The edit itself, through <see cref="SourcePatcher"/> only.</summary>
+        internal static List<string> ApplyPatches()
+        {
             var remover = MeticaPaths.MonetizationRemover;
-            if (!MeticaPaths.FileExists(remover))
-            {
-                MeticaIntegrationLog.Record(Title, "MonetizationRemover.cs not found — nothing to update.");
-                return;
-            }
+            if (!SourcePatcher.Exists(remover))
+                return new List<string> { "MonetizationRemover.cs not found — nothing to update." };
 
             var outcome = SourcePatcher.InsertBeforeLine(remover, RemoverMarker,
                 "\"Assets/Plugins/Android/AndroidManifest.xml\"",
@@ -60,12 +64,13 @@ namespace GameDistrict.MeticaIntegrationTools
                 "            \"Assets/MeticaSdk\",\n" +
                 "            \"Assets/MeticaSDK\",");
 
-            MeticaIntegrationLog.Record(Title, SourcePatcher.IsSatisfied(outcome)
-                ? SourcePatcher.Describe(outcome, remover, null)
-                : "Could not find the PathsToDelete anchor. Add \"Assets/Metica\", \"Assets/MeticaSdk\" and " +
-                  "\"Assets/MeticaSDK\" to PathsToDelete in MonetizationRemover.cs by hand.");
-
-            AssetDatabase.Refresh();
+            return new List<string>
+            {
+                SourcePatcher.IsSatisfied(outcome)
+                    ? SourcePatcher.Describe(outcome, remover, null)
+                    : "Could not find the PathsToDelete anchor. Add \"Assets/Metica\", \"Assets/MeticaSdk\" and " +
+                      "\"Assets/MeticaSDK\" to PathsToDelete in MonetizationRemover.cs by hand."
+            };
         }
     }
 }

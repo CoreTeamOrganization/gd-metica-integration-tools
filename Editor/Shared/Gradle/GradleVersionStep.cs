@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -87,23 +88,16 @@ namespace GameDistrict.MeticaIntegrationTools
             return result.Seal();
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            EditorGUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Choose a Gradle folder…", GUILayout.Height(24)))
-                ChooseGradleFolder();
-
-            if (GUILayout.Button("Open External Tools", GUILayout.Height(24)))
-                SettingsService.OpenUserPreferences("Preferences/External Tools");
-
-            if (GUILayout.Button("Use Unity's bundled Gradle", GUILayout.Height(24)))
+            yield return new StepButton("Choose a Gradle folder…", ChooseGradleFolder, icon: StepIcon.Folder);
+            yield return new StepButton("Open External Tools",
+                () => SettingsService.OpenUserPreferences("Preferences/External Tools"));
+            yield return new StepButton("Use Unity's bundled Gradle", () =>
             {
                 if (WriteGradlePath(string.Empty))
                     MeticaIntegrationLog.Record(Title, "Cleared the Gradle path — back to Unity's bundled Gradle");
-            }
-
-            EditorGUILayout.EndHorizontal();
+            });
         }
 
         // ── Actions ────────────────────────────────────────────────────────────

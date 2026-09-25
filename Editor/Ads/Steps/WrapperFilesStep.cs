@@ -25,7 +25,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private bool _overwrite;
 
-        private static IEnumerable<(string template, string target)> Files()
+        internal static IEnumerable<(string template, string target)> Files()
         {
             var ads = MeticaPaths.AdsMeticaFolder;
             var scripts = MeticaPaths.RuntimeScripts;
@@ -82,9 +82,9 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaIntegrationLog.Record(Title, messages);
         }
 
-        public override void DrawBody(VerifyResult result)
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            _overwrite = EditorGUILayout.ToggleLeft("Overwrite existing files", _overwrite);
+            yield return new StepToggle("Overwrite existing files", _overwrite, value => _overwrite = value);
         }
     }
 }

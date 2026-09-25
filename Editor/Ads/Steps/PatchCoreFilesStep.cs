@@ -92,8 +92,11 @@ namespace GameDistrict.MeticaIntegrationTools
                 (MeticaPaths.AnalyticsManager, MarkerRevenueDispatch, "OnAdRevenuePaidEvent main-thread dispatch")
             };
 
+            // A GD SDK version without the event has nothing to dispatch, so nothing to check.
+            if (!HasRevenueEvent) checks = checks.Where(c => c.marker != MarkerRevenueDispatch).ToArray();
+
             var missing = checks
-                .Where(c => !MeticaPaths.FileExists(c.path) || !SourcePatcher.Contains(c.path, c.marker))
+                .Where(c => !SourcePatcher.Contains(c.path, c.marker))
                 .Select(c => c.what)
                 .ToList();
 
@@ -113,6 +116,16 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override void Apply()
         {
+            MeticaIntegrationLog.Record(Title, ApplyPatches());
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// The edits themselves, through <see cref="SourcePatcher"/> only, so they run the same
+        /// on disk or in memory (<see cref="MeticaPatchSet"/>). Returns what happened.
+        /// </summary>
+        internal static List<string> ApplyPatches()
+        {
             var log = new List<string>();
 
             Run(log, "AdPlatforms.METICA",
@@ -125,9 +138,12 @@ namespace GameDistrict.MeticaIntegrationTools
                 SourcePatcher.AppendEnumMember(MeticaPaths.LoggerTag, "Tag", "Metica"),
                 MeticaPaths.LoggerTag, "add Metica to the Tag enum");
 
+            // InApps only exists from v5.1.0; before that AppMetrica is the last path.
             Run(log, "MeticaSettings resource path",
                 SourcePatcher.InsertAfterLine(MeticaPaths.ConfigurationsPath, MarkerPath,
-                    "string InApps",
+                    SourcePatcher.Contains(MeticaPaths.ConfigurationsPath, "string InApps")
+                        ? "string InApps"
+                        : "string AppMetrica",
                     "        public static readonly string Metica = \"Configurations/MeticaSettings\";"),
                 MeticaPaths.ConfigurationsPath,
                 "public static readonly string Metica = \"Configurations/MeticaSettings\";");
@@ -139,8 +155,31 @@ namespace GameDistrict.MeticaIntegrationTools
             PatchAdsManager(log);
             PatchAnalyticsManager(log);
 
-            MeticaIntegrationLog.Record(Title, log);
-            AssetDatabase.Refresh();
+            return log;
+        }
+
+        /// <summary>
+        /// The async-init choice, only for a project that already has the async plumbing —
+        /// anywhere else there is no choice to make. Changing it clears every sign-off, since
+        /// the async cleanup step would then do something different from what was reviewed.
+        /// </summary>
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
+        {
+            if (!MeticaIntegrationMode.ProjectHasAsyncPath) yield break;
+
+            yield return new StepChoice("Existing async init", new[] { "Callback", "Async" },
+                MeticaIntegrationMode.IsCallback ? 0 : 1,
+                selected =>
+                {
+                    var mode = selected == 0 ? InitMode.Callback : InitMode.Async;
+                    if (mode == MeticaIntegrationMode.Current) return;
+
+                    MeticaIntegrationMode.Current = mode;
+                    MeticaIntegrationProgress.ClearAll(AdsFlow.AllStepIds.Distinct().ToArray());
+                },
+                MeticaIntegrationMode.IsCallback
+                    ? "Callback: the async cleanup step removes it."
+                    : "Async: the async cleanup step leaves it alone.");
         }
 
         // ── Individual patches ─────────────────────────────────────────────────
@@ -177,13 +216,24 @@ namespace GameDistrict.MeticaIntegrationTools
                 MeticaPaths.AdUnitsConfiguration, "add: public AdNetworkInfo Metica;");
         }
 
+        /// <summary>
+        /// Before v5.3.0 there is no RestorePurchaseOnce to sit after, and Preferences takes only
+        /// a key — its Get() already defaults a bool to false, so the one-argument form behaves
+        /// the same.
+        /// </summary>
         private static void PatchPreferences(List<string> log)
         {
+            var path = MeticaPaths.Preferences;
+            var modern = SourcePatcher.Contains(path, "RestorePurchaseOnce");
+            var takesDefault = SourcePatcher.Contains(path, "public Preferences(string key, T defaultValue)");
+
             Run(log, "MonetizationPreferences.UseMetica",
-                SourcePatcher.InsertAfterLine(MeticaPaths.Preferences, MarkerPreference,
-                    "RestorePurchaseOnce",
-                    "    public static readonly Preferences<bool> UseMetica = new Preferences<bool>(\"GDPrefs_UseMetica\", false);"),
-                MeticaPaths.Preferences,
+                SourcePatcher.InsertAfterLine(path, MarkerPreference,
+                    modern ? "RestorePurchaseOnce" : "Preferences<int> SessionCount",
+                    takesDefault
+                        ? "    public static readonly Preferences<bool> UseMetica = new Preferences<bool>(\"GDPrefs_UseMetica\", false);"
+                        : "    public static readonly Preferences<bool> UseMetica = new Preferences<bool>(\"GDPrefs_UseMetica\");"),
+                path,
                 "add a UseMetica preference keyed \"GDPrefs_UseMetica\"");
         }
 
@@ -194,21 +244,34 @@ namespace GameDistrict.MeticaIntegrationTools
                     "NextInterstitialDelay", "        public bool UseMetica;"),
                 MeticaPaths.RemoteConfiguration, "add: public bool UseMetica;");
 
+            // OnFetchCompleteWithSuccess (bool, string) arrived in v5.3.6. Before that the only
+            // event is OnFetchComplete, with no arguments — the same one CreateAndUpdateConfig
+            // uses there, which does not know about success either.
+            var withSuccess = SourcePatcher.Contains(MeticaPaths.RemoteConfigManager, "OnFetchCompleteWithSuccess");
+
             Run(log, "PersistRemoteToggles subscription",
                 SourcePatcher.InsertAfterLine(MeticaPaths.RemoteConfigManager, MarkerPersistHook,
                     "+= CreateAndUpdateConfig;",
-                    "            OnFetchCompleteWithSuccess += PersistRemoteToggles;"),
+                    withSuccess
+                        ? "            OnFetchCompleteWithSuccess += PersistRemoteToggles;"
+                        : "            OnFetchComplete += PersistRemoteToggles;"),
                 MeticaPaths.RemoteConfigManager,
                 "subscribe PersistRemoteToggles alongside CreateAndUpdateConfig");
 
             Run(log, "PersistRemoteToggles method",
                 SourcePatcher.InsertBeforeLine(MeticaPaths.RemoteConfigManager, MarkerPersistMethod,
                     "public static void AddOrUpdateValue",
-                    "        static void PersistRemoteToggles(bool success, string message)\n" +
-                    "        {\n" +
-                    "            if (!success || m_Configuration == null) return;\n" +
-                    "            MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);\n" +
-                    "        }\n"),
+                    withSuccess
+                        ? "        static void PersistRemoteToggles(bool success, string message)\n" +
+                          "        {\n" +
+                          "            if (!success || m_Configuration == null) return;\n" +
+                          "            MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);\n" +
+                          "        }\n"
+                        : "        static void PersistRemoteToggles()\n" +
+                          "        {\n" +
+                          "            if (m_Configuration == null) return;\n" +
+                          "            MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);\n" +
+                          "        }\n"),
                 MeticaPaths.RemoteConfigManager,
                 "add a PersistRemoteToggles method that copies UseMetica into MonetizationPreferences");
         }
@@ -254,6 +317,13 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         private static void PatchAnalyticsManager(List<string> log)
         {
+            // Only exists from v5.3.0. Without it there is no event to move onto the main thread.
+            if (!HasRevenueEvent)
+            {
+                log.Add("OnAdRevenuePaidEvent is not in this GD SDK version — nothing to dispatch.");
+                return;
+            }
+
             Run(log, "OnAdRevenuePaidEvent thread dispatch",
                 SourcePatcher.ReplaceFirst(MeticaPaths.AnalyticsManager, MarkerRevenueDispatch,
                     "OnAdRevenuePaidEvent?.Invoke(adRevenueInfo);",
@@ -263,6 +333,10 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────
+
+        /// <summary>AnalyticsManager.OnAdRevenuePaidEvent was added in GD SDK v5.3.0.</summary>
+        private static bool HasRevenueEvent =>
+            SourcePatcher.Contains(MeticaPaths.AnalyticsManager, "event Action<AdRevenueInfo> OnAdRevenuePaidEvent");
 
         private static void Run(List<string> log, string what, O outcome, string path, string manualHint)
         {
