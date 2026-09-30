@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -76,6 +77,13 @@ namespace GameDistrict.MeticaIntegrationTools
                 return result.Seal();
             }
 
+            // A folder that is not a JDK breaks the Gradle build outright.
+            if (!IsJdk(jdkHome))
+            {
+                result.Problem($"Not a JDK (no bin/java): {jdkHome}");
+                return result.Seal();
+            }
+
             var found = VersionAt(jdkHome);
             if (found == null)
             {
@@ -93,16 +101,120 @@ namespace GameDistrict.MeticaIntegrationTools
 
         internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
+            // An installed JDK 17+ is offered directly, when this machine has one and it is not
+            // already the one set.
+            var installed = FindInstalledJdk();
+            if (installed != null && !result.Ok)
+                yield return new StepButton($"Use JDK {installed.Value.version} at {installed.Value.home}",
+                    () => UseJdk(installed.Value.home));
+
+            if (!result.Ok)
+                yield return new StepButton("Download JDK 17…", DownloadAndUse, icon: StepIcon.Folder);
+
             yield return new StepButton("Choose a JDK folder…", ChooseJdkFolder, icon: StepIcon.Folder);
+        }
+
+        /// <summary>
+        /// Asks for a folder, downloads the latest Eclipse Temurin 17 for this OS and CPU from
+        /// Adoptium's API, unpacks it there and sets it as org.gradle.java.home — Metica's step 3.
+        /// </summary>
+        private static void DownloadAndUse()
+        {
+            const string title = "JDK 17 for Gradle";
+            var parent = EditorUtility.OpenFolderPanel("Where should JDK 17 go?", string.Empty, string.Empty);
+            if (string.IsNullOrEmpty(parent)) return;
+
+            var windows = Application.platform == RuntimePlatform.WindowsEditor;
+            var os = windows ? "windows" : Application.platform == RuntimePlatform.OSXEditor ? "mac" : "linux";
+            var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
+                       System.Runtime.InteropServices.Architecture.Arm64 ? "aarch64" : "x64";
+            var url = $"https://api.adoptium.net/v3/binary/latest/17/ga/{os}/{arch}/jdk/hotspot/normal/eclipse";
+            var archive = Path.Combine(Application.temporaryCachePath, windows ? "jdk17.zip" : "jdk17.tar.gz");
+
+            var before = Directory.GetDirectories(parent);
+
+            if (!Downloads.TryDownload(url, archive, "Downloading JDK 17", out var error))
+            {
+                MeticaIntegrationLog.Record(title, $"Could not download JDK 17: {error}");
+                return;
+            }
+
+            if (!Unpack(archive, parent, windows, out error))
+            {
+                MeticaIntegrationLog.Record(title, $"Could not unpack JDK 17: {error}");
+                return;
+            }
+
+            File.Delete(archive);
+
+            // The archive holds one top folder (jdk-17.0.x+y); on macOS the JDK itself is in Contents/Home.
+            var home = Directory.GetDirectories(parent)
+                .Except(before)
+                .Concat(Directory.GetDirectories(parent, "jdk-17*"))
+                .Select(folder => IsJdk(folder) ? folder : Path.Combine(folder, "Contents", "Home"))
+                .FirstOrDefault(IsJdk);
+
+            if (home == null)
+            {
+                MeticaIntegrationLog.Record(title, $"Unpacked into {parent}, but found no JDK there. Choose its folder by hand.");
+                return;
+            }
+
+            MeticaIntegrationLog.Record(title, $"Downloaded JDK {VersionAt(home)} to {home}");
+            UseJdk(home);
+        }
+
+        /// <summary>Windows gets a .zip; macOS and Linux a .tar.gz, unpacked with the system tar (keeps permissions).</summary>
+        private static bool Unpack(string archive, string folder, bool zip, out string error)
+        {
+            if (zip) return Downloads.TryUnzip(archive, folder, "Unpacking JDK 17", out error);
+
+            error = null;
+            try
+            {
+                EditorUtility.DisplayProgressBar("Unpacking JDK 17", archive, 0.5f);
+                var tar = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "tar",
+                    Arguments = $"-xzf \"{archive}\" -C \"{folder}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                tar?.WaitForExit();
+                if (tar == null || tar.ExitCode != 0) error = "tar failed.";
+                return error == null;
+            }
+            catch (Exception e)
+            {
+                error = e.Message;
+                return false;
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
         }
 
         // ── Actions ────────────────────────────────────────────────────────────
 
         private static void ChooseJdkFolder()
         {
-            var chosen = EditorUtility.OpenFolderPanel("JDK 17 or later", string.Empty, string.Empty);
+            var chosen = EditorUtility.OpenFolderPanel("JDK 17 or later — the folder that holds bin/", string.Empty, string.Empty);
             if (string.IsNullOrEmpty(chosen)) return;
 
+            if (!IsJdk(chosen))
+            {
+                EditorUtility.DisplayDialog("Not a JDK",
+                    $"{chosen} is not a JDK — it has no bin/java.\n\nPick the JDK's own folder, e.g. " +
+                    "C:\\Program Files\\Eclipse Adoptium\\jdk-17…", "OK");
+                return;
+            }
+
+            UseJdk(chosen);
+        }
+
+        private static void UseJdk(string chosen)
+        {
             var found = VersionAt(chosen);
             if (found != null && found < Required
                 && !EditorUtility.DisplayDialog("JDK is too old",
@@ -178,6 +290,60 @@ namespace GameDistrict.MeticaIntegrationTools
             log.Add("Enabled Custom Gradle Properties Template by copying Unity's default into " +
                      MeticaPaths.GradleProperties);
             return log;
+        }
+
+        // ── Finding a JDK ───────────────────────────────────────────────────────
+
+        /// <summary>A JDK has its launcher in bin/ — java.exe on Windows, java elsewhere.</summary>
+        private static bool IsJdk(string directory) =>
+            !string.IsNullOrEmpty(directory)
+            && (File.Exists(Path.Combine(directory, "bin", "java.exe")) || File.Exists(Path.Combine(directory, "bin", "java")));
+
+        /// <summary>
+        /// The newest JDK 17+ on this machine: JAVA_HOME, the JDK set in Unity's External Tools,
+        /// and the usual install folders (Adoptium, Oracle, Corretto, Microsoft, Zulu; macOS's
+        /// JavaVirtualMachines). Null when there is none.
+        /// </summary>
+        private static (string home, Version version)? FindInstalledJdk()
+        {
+            var candidates = new List<string>
+            {
+                Environment.GetEnvironmentVariable("JAVA_HOME"),
+                EditorPrefs.GetString("JdkPath", string.Empty),
+                EditorPrefs.GetString("Jdk11Path", string.Empty)
+            };
+
+            var roots = Application.platform == RuntimePlatform.OSXEditor
+                ? new[] { "/Library/Java/JavaVirtualMachines" }
+                : new[]
+                {
+                    @"C:\Program Files\Eclipse Adoptium", @"C:\Program Files\Java", @"C:\Program Files\Amazon Corretto",
+                    @"C:\Program Files\Microsoft", @"C:\Program Files\Zulu"
+                };
+
+            foreach (var root in roots)
+            {
+                try
+                {
+                    if (!Directory.Exists(root)) continue;
+                    foreach (var folder in Directory.GetDirectories(root))
+                        candidates.Add(Application.platform == RuntimePlatform.OSXEditor
+                            ? Path.Combine(folder, "Contents", "Home")
+                            : folder);
+                }
+                catch
+                {
+                    // Unreadable folder — skip it.
+                }
+            }
+
+            return candidates
+                .Where(IsJdk)
+                .Select(home => (home, version: VersionAt(home)))
+                .Where(jdk => jdk.version != null && jdk.version >= Required)
+                .OrderByDescending(jdk => jdk.version)
+                .Select(jdk => ((string, Version)?)jdk)
+                .FirstOrDefault();
         }
 
         // ── Version detection ───────────────────────────────────────────────────

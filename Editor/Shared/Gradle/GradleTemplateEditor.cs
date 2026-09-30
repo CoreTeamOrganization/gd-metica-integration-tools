@@ -105,7 +105,27 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>Applies the three rules. Safe to run twice — a compliant file is left alone.</summary>
-        public static List<string> Fix()
+        public static List<string> Fix() => Apply(null, bumpForTarget: true, ensureKotlin: true);
+
+        /// <summary>
+        /// Only the Kotlin wiring: a buildscript above plugins, an AGP classpath equal to the
+        /// current com.android.application version, and the Kotlin plugin. AGP itself is left as is.
+        /// </summary>
+        public static List<string> AddKotlin() => Apply(null, bumpForTarget: false, ensureKotlin: true);
+
+        /// <summary>
+        /// Only the AGP version: com.android.application / library set to
+        /// <see cref="RecommendedAgpVersion"/>, and an existing buildscript classpath kept equal to it.
+        /// </summary>
+        public static List<string> BumpAgp() => Apply(RecommendedAgpVersion, bumpForTarget: false, ensureKotlin: false);
+
+        /// <summary>True when <paramref name="version"/> is at least <paramref name="floor"/>.</summary>
+        public static bool AtLeast(string version, string floor) =>
+            System.Version.TryParse(version ?? string.Empty, out var v)
+            && System.Version.TryParse(floor, out var f)
+            && v >= f;
+
+        private static List<string> Apply(string forceAgp, bool bumpForTarget, bool ensureKotlin)
         {
             var log = new List<string>();
 
@@ -129,7 +149,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var agp = application.Groups[1].Value;
 
-            if (RequiresAgp8() && !AtLeastAgp8(agp))
+            if (forceAgp != null && agp != forceAgp)
+            {
+                agp = forceAgp;
+                if (SetPluginVersions(lines, agp))
+                    log.Add($"Set com.android.application and com.android.library to AGP {agp}");
+            }
+            else if (bumpForTarget && RequiresAgp8() && !AtLeastAgp8(agp))
             {
                 agp = RecommendedAgpVersion;
                 if (SetPluginVersions(lines, agp))
@@ -140,7 +166,11 @@ namespace GameDistrict.MeticaIntegrationTools
             var plugins = IndexOfBlockStart(lines, "plugins");
             var buildscript = IndexOfBlockStart(lines, "buildscript");
 
-            if (buildscript < 0)
+            if (buildscript < 0 && !ensureKotlin)
+            {
+                // AGP bump alone: there is no classpath to keep in step.
+            }
+            else if (buildscript < 0)
             {
                 var block = new[]
                 {
@@ -183,7 +213,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 }
 
                 close = EnsureAgpClasspath(lines, open, close, agp, log);
-                EnsureKotlinClasspath(lines, open, close, log);
+                if (ensureKotlin) EnsureKotlinClasspath(lines, open, close, log);
             }
 
             if (log.Count == 0)
@@ -210,6 +240,9 @@ namespace GameDistrict.MeticaIntegrationTools
             var target = (int)PlayerSettings.Android.targetSdkVersion;
             return target < 0 || target >= MinimumApiForAgp8;
         }
+
+        /// <summary>Whether this project's Target API makes AGP 8+ mandatory.</summary>
+        public static bool TargetNeedsAgp8 => RequiresAgp8();
 
         private static bool AtLeastAgp8(string version) =>
             version != null && int.TryParse(version.Split('.')[0], out var major) && major >= 8;

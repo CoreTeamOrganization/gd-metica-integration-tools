@@ -45,6 +45,7 @@ $Paths = @(
     'Runtime/Scripts/Remote/RemoteConfigManager.cs',
     'Runtime/Scripts/Ads/Core/AdsManager.cs',
     'Runtime/Scripts/Analytics/AnalyticsManager.cs',
+    'Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs',
     'Runtime/Scripts/Configurations/SDKConfiguration.cs',       # Remote Metica switch
     'Runtime/Scripts/Ads/Core/IAdNetworkService.cs',            # Remove the unused async init path
     'Runtime/Scripts/Ads/Core/AdNetworkController.cs',

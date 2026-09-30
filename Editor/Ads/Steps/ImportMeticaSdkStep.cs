@@ -21,22 +21,44 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Title => "Metica SDK";
 
         public override string Summary =>
-            TargetVersion() is string target ? $"Install the Metica SDK v{target}." : "Install the Metica SDK.";
+            TargetVersion() is string target
+                ? $"Install the Metica SDK v{target} and resolve its Android libraries."
+                : "Install the Metica SDK and resolve its Android libraries.";
 
         public override string Why =>
             "Downloads the pinned Metica SDK release from GitHub and imports it. Any other installed " +
             "version is removed first — importing over it would leave old files behind that still " +
-            "compile. Use Change target version to pin a different release for this project only.";
+            "compile. Then External Dependency Manager's Force Resolve pulls every Android library the " +
+            "project's SDKs declare into mainTemplate.gradle (turning Custom Main Gradle Template on if " +
+            "needed); the step passes only once all of them are there. It needs Android as the build " +
+            "target. Enable iOS also ticks iOS on MeticaSDKFramework.xcframework, which Metica's iOS " +
+            "build step needs. Change target version pins a different release for this project only.";
 
         public override string ActionLabel => ActionForState();
 
         public override IEnumerable<string> TouchedPaths => new[]
         {
             MeticaPaths.MeticaSdkRoot,
-            MeticaPaths.MeticaSdkAsmdef
+            MeticaPaths.MainTemplateGradle,
+            MeticaPaths.MeticaXcFramework + ".meta",
+            "ProjectSettings/AndroidResolverDependencies.xml"
         };
 
-        public override string ReviewHint => "Only Assets/MeticaSdk should change.";
+        public override string ReviewHint => "Assets/MeticaSdk, plus the resolved libraries in mainTemplate.gradle.";
+
+        /// <summary>
+        /// Off by default: most runs are Android-only, and enabling iOS unasked would make the
+        /// step demand an iOS framework state nobody touched. Per project. Also read by the
+        /// Metica settings step, which only asks for iOS keys when this is on.
+        /// </summary>
+        internal static bool EnableIos
+        {
+            get => EditorPrefs.GetBool(EnableIosKey, false);
+            set => EditorPrefs.SetBool(EnableIosKey, value);
+        }
+
+        private static string EnableIosKey =>
+            $"GameDistrict.MeticaIntegrationTools.ResolveLibraries.EnableIos.{Application.dataPath.GetHashCode():X8}";
 
         // ── Verify ─────────────────────────────────────────────────────────────
 
@@ -84,9 +106,32 @@ namespace GameDistrict.MeticaIntegrationTools
             if (result.Problems.Count > 0) return result.Seal();
 
             if (!TemplateWriter.TypeIsLoaded("Metica.MeticaSdk"))
+            {
                 result.Problem("Metica SDK hasn't compiled — check the Console.");
-            else
-                result.Note($"Metica {installed}");
+                return result.Seal();
+            }
+
+            result.Note($"Metica {installed}");
+
+            // Installed is not done: its Android libraries have to reach the build too.
+            AndroidDependencies.Report(result, MeticaPaths.MeticaSdkRoot);
+
+            if (MeticaPaths.FileExists(MeticaPaths.GradleProperties))
+            {
+                var properties = SourcePatcher.ReadAll(MeticaPaths.GradleProperties);
+                if (!properties.Contains("android.useAndroidX=true"))
+                    result.Problem("gradleTemplate.properties needs android.useAndroidX=true.");
+                if (!properties.Contains("android.enableJetifier=true"))
+                    result.Problem("gradleTemplate.properties needs android.enableJetifier=true.");
+            }
+
+            if (EnableIos)
+            {
+                var importer = LoadXcFrameworkImporter();
+                if (importer == null) result.Note("Couldn't check the iOS framework.");
+                else if (!importer.GetCompatibleWithPlatform(BuildTarget.iOS)) result.Problem("iOS framework isn't enabled for iOS.");
+                else result.Note("iOS enabled");
+            }
 
             return result.Seal();
         }
@@ -110,7 +155,25 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
+            if (installed != null && (AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot) || IosPending))
+            {
+                if (IosPending) EnableIosFramework();
+                if (AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot)) AndroidDependencies.Resolve(Title);
+                return;
+            }
+
             InstallSelectedRelease();
+        }
+
+        /// <summary>Enable iOS is on, and the framework is not enabled for iOS yet.</summary>
+        private static bool IosPending
+        {
+            get
+            {
+                if (!EnableIos) return false;
+                var importer = LoadXcFrameworkImporter();
+                return importer != null && !importer.GetCompatibleWithPlatform(BuildTarget.iOS);
+            }
         }
 
         /// <summary>Standalone projects, and GD SDK 5.3.0 or newer (or unreadable).</summary>
@@ -122,6 +185,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var installed = InstalledVersion();
             if (installed != null && IsStale(installed, out _)) return $"Remove Metica {installed}";
+            if (installed != null && AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot))
+                return IosPending ? "Resolve Android, enable iOS" : "Resolve Android dependencies";
+            if (installed != null && IosPending) return "Enable iOS framework";
             if (installed != null) return "Re-import";
 
             var target = TargetVersion();
@@ -130,40 +196,41 @@ namespace GameDistrict.MeticaIntegrationTools
 
         // ── UI ─────────────────────────────────────────────────────────────────
 
-        /// <summary>Only before the SDK is imported: after that the version is settled.</summary>
+        /// <summary>
+        /// Change target version only before the SDK is imported — after that the version is
+        /// settled; the Enable iOS switch once it is.
+        /// </summary>
         internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
-            if (!Supported || InstalledVersion() != null) yield break;
-            yield return new StepButton("Change target version…", OpenTargetVersionOverride);
+            if (!Supported) yield break;
+
+            if (InstalledVersion() == null)
+                yield return new StepButton("Change target version…", TargetVersions.OpenOverride);
+            else
+                yield return new StepToggle("Enable iOS", EnableIos, value => EnableIos = value);
         }
 
-        /// <summary>
-        /// Selects this project's own target-version asset, copying the packaged default into
-        /// the project first if there is none yet — the packaged one is shared across every
-        /// project on this package version and is often read-only (git packages live in
-        /// Library/PackageCache).
-        /// </summary>
-        private static void OpenTargetVersionOverride()
+        private static void EnableIosFramework()
         {
-            if (!MeticaPaths.FileExists(MeticaPaths.TargetVersionAsset))
+            var importer = LoadXcFrameworkImporter();
+            if (importer == null)
             {
-                if (MeticaPaths.PackagedTargetVersionAsset == null ||
-                    !MeticaPaths.FileExists(MeticaPaths.PackagedTargetVersionAsset))
-                {
-                    MeticaIntegrationLog.Record("Metica SDK", "Could not find the packaged default to copy.");
-                    return;
-                }
-
-                var folder = Path.GetDirectoryName(MeticaPaths.ToAbsolute(MeticaPaths.TargetVersionAsset));
-                Directory.CreateDirectory(folder ?? ".");
-                AssetDatabase.Refresh();
-
-                AssetDatabase.CopyAsset(MeticaPaths.PackagedTargetVersionAsset, MeticaPaths.TargetVersionAsset);
-                MeticaIntegrationLog.Record("Metica SDK", $"Created {MeticaPaths.TargetVersionAsset}");
+                MeticaIntegrationLog.Record("Metica SDK",
+                    "Metica xcframework importer not found — tick iOS on it in the Inspector by hand.");
+                return;
             }
 
-            Selection.activeObject = AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.TargetVersionAsset);
+            if (importer.GetCompatibleWithPlatform(BuildTarget.iOS)) return;
+
+            importer.SetCompatibleWithPlatform(BuildTarget.iOS, true);
+            importer.SaveAndReimport();
+            MeticaIntegrationLog.Record("Metica SDK", "Enabled the Metica xcframework for iOS");
         }
+
+        private static PluginImporter LoadXcFrameworkImporter() =>
+            MeticaPaths.DirectoryExists(MeticaPaths.MeticaXcFramework)
+                ? AssetImporter.GetAtPath(MeticaPaths.MeticaXcFramework) as PluginImporter
+                : null;
 
         // ── Install / remove ───────────────────────────────────────────────────
 
@@ -206,9 +273,12 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private void RemoveInstalledSdk(string installed)
         {
-            if (!EditorUtility.DisplayDialog("Remove the Metica SDK",
-                $"Delete {MeticaPaths.MeticaSdkRoot} (Metica {installed})?", "Delete", "Cancel"))
-                return;
+            // The whole folder goes; its contents are listed so it is clear what that means.
+            var contents = DeleteConfirm.Contents(MeticaPaths.MeticaSdkRoot);
+            var paths = new List<string> { $"{MeticaPaths.MeticaSdkRoot}/  (the whole folder)" };
+            paths.AddRange(contents.Select(path => "    " + path));
+
+            if (!DeleteConfirm.Ask($"Remove Metica {installed}", paths)) return;
 
             AssetDatabase.DeleteAsset(MeticaPaths.MeticaSdkRoot);
             AssetDatabase.Refresh();
@@ -242,21 +312,7 @@ namespace GameDistrict.MeticaIntegrationTools
             return target != null && installed != target;
         }
 
-        /// <summary>
-        /// The project's own override if it created one, otherwise the version the package
-        /// ships with by default.
-        /// </summary>
-        private static string TargetVersion()
-        {
-            var path = MeticaPaths.FileExists(MeticaPaths.TargetVersionAsset)
-                ? MeticaPaths.TargetVersionAsset
-                : MeticaPaths.PackagedTargetVersionAsset;
-
-            if (path == null || !MeticaPaths.FileExists(path)) return null;
-
-            var asset = AssetDatabase.LoadAssetAtPath<MeticaTargetVersion>(path);
-            return string.IsNullOrEmpty(asset?.Version) ? null : asset.Version;
-        }
+        private static string TargetVersion() => TargetVersions.MeticaSdk;
 
         private static void Require(VerifyResult result, string path)
         {

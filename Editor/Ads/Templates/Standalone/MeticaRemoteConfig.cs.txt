@@ -13,8 +13,11 @@ namespace MeticaIntegration
     /// says, and the next session reads it at boot. The same trade the GD Monetization SDK
     /// makes — a change takes effect on the session after the one that received it.</para>
     ///
-    /// <para>Off by default. A game that leaves <c>UseRemoteSwitch</c> unticked in
-    /// MeticaAdsConfig never touches any of this, and Metica simply always initializes.</para>
+    /// <para>Metica is off by default: MeticaAdsConfig has <c>UseRemoteSwitch</c> on and
+    /// <c>DefaultUseMetica</c> off, so Metica stays off until your remote config calls
+    /// <see cref="Apply"/> with true — and then from the next session. A game that never
+    /// calls Apply never runs Metica. Unticking <c>UseRemoteSwitch</c> skips all of this and
+    /// Metica always initializes.</para>
     /// </summary>
     public static class MeticaRemoteConfig
     {

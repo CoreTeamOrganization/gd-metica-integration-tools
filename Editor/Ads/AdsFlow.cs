@@ -9,17 +9,20 @@ namespace GameDistrict.MeticaIntegrationTools
     /// Metica ads runtime is written instead). Which one runs is decided on every refresh, so
     /// dropping the SDK in or taking it out switches the run on the next check.
     ///
-    /// <para>In both, the integration comes first and the Gradle steps last: both are
-    /// optional and neither can be judged until there is a build to judge.</para>
+    /// <para>In both, AppLovin MAX comes first (only when it is below 8.1.0 — Metica needs
+    /// it), then the integration, and the optional Android build fixes last, in one
+    /// checklist: none of them can be judged until there is a build to judge.</para>
     /// </summary>
     internal static class AdsFlow
     {
         public const string Name = "Ads Integration";
 
+        // AppLovinMaxStep only shows while MAX is below 8.1.0 (MeticaStep.Applies). Resolving
+        // Android libraries is part of the SDK steps themselves, not a step of its own.
         private static readonly MeticaStep[] GDSdkSteps =
         {
+            new AppLovinMaxStep(),
             new ImportMeticaSdkStep(),
-            new ResolveLibrariesStep(),
             new WrapperFilesStep(),
             new PatchCoreFilesStep(),
             new RemoteSwitchStep(),
@@ -27,20 +30,16 @@ namespace GameDistrict.MeticaIntegrationTools
             new AdUnitsStep(),
             new AsyncCleanupStep(),
             new FinishUpStep(),
-            new DependenciesStep(),
-            new GradleVersionStep(),
-            new KotlinTemplateStep()
+            new TroubleshootingStep()
         };
 
         private static readonly MeticaStep[] StandaloneSteps =
         {
+            new AppLovinMaxStep(),
             new ImportMeticaSdkStep(),
-            new ResolveLibrariesStep(),
             new StandaloneRuntimeStep(),
             new StandaloneConfigStep(),
-            new DependenciesStep(),
-            new GradleVersionStep(),
-            new KotlinTemplateStep()
+            new TroubleshootingStep()
         };
 
         /// <summary>Every Ads step id, both lists — what Reset sign-offs clears.</summary>

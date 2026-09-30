@@ -121,8 +121,8 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             if (!MeticaPaths.DirectoryExists(MeticaPaths.StandaloneRoot)) yield break;
 
-            yield return new StepButton("Select the folder", () =>
-                    Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>(MeticaPaths.StandaloneRoot),
+            yield return new StepButton("Select the folder",
+                () => SelectAndPing(AssetDatabase.LoadAssetAtPath<Object>(MeticaPaths.StandaloneRoot)),
                 icon: StepIcon.Folder);
         }
     }

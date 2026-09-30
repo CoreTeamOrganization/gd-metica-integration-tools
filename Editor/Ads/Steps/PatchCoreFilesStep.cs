@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using O = GameDistrict.MeticaIntegrationTools.SourcePatcher.Outcome;
 
@@ -11,11 +12,10 @@ namespace GameDistrict.MeticaIntegrationTools
     /// this twice changes nothing. When an anchor cannot be found the edit is reported instead
     /// of guessed, with the change to make by hand.
     ///
-    /// <para>The one analytics-file edit: AnalyticsManager.ReportAdRevenue fires
-    /// OnAdRevenuePaidEvent directly. Metica's revenue callbacks can land on a native thread,
-    /// so a subscriber doing Unity API work there would fail intermittently — this step wraps
-    /// the invoke in ThreadDispatcher.Enqueue, the same fix already applied elsewhere in the
-    /// SDK.</para>
+    /// <para>Two analytics-file edits. AdjustAnalyticsNetwork.GetAdSource gets a METICA case —
+    /// without it every Metica revenue event goes to Adjust with a null source and Adjust
+    /// drops it. And AnalyticsManager.ReportAdRevenue keeps firing OnAdRevenuePaidEvent
+    /// directly: a ThreadDispatcher wrap an earlier version of this tool added is undone.</para>
     /// </summary>
     public sealed class PatchCoreFilesStep : MeticaStep
     {
@@ -26,8 +26,11 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Why =>
             "Additions only: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
             "AdRevenueInfo payload, the AdUnits Metica section, the UseMetica preference and remote flag, " +
-            "the AdsManager network switch, and OnAdRevenuePaidEvent dispatched onto the main thread. " +
-            "AdNetworkController, AdNetworkAdmob and AdNetworkAppLovin are not touched. Originals are " +
+            "the AdsManager network switch, and a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
+            "(\"applovin_max_sdk\" — without it Adjust drops Metica revenue). OnAdRevenuePaidEvent stays " +
+            "invoked directly — an older " +
+            "ThreadDispatcher wrap around it is undone. AdNetworkController, AdNetworkAdmob and " +
+            "AdNetworkAppLovin are not touched. Originals are " +
             "backed up to <project>/MeticaIntegrationBackups/ first; an edit whose anchor isn't found is " +
             "logged with what to add by hand rather than guessed.";
 
@@ -46,7 +49,25 @@ namespace GameDistrict.MeticaIntegrationTools
         private const string MarkerPersistHook = "PersistRemoteToggles;";
         private const string MarkerPersistMethod = "static void PersistRemoteToggles";
         private const string MarkerAdsManager = "new AdNetworkMetica()";
-        private const string MarkerRevenueDispatch = "ThreadDispatcher.Enqueue(() => OnAdRevenuePaidEvent";
+        /// <summary>The wrap an earlier version of this tool added; it must not be there.</summary>
+        private const string WrappedRevenueDispatch = "ThreadDispatcher.Enqueue(() => OnAdRevenuePaidEvent?.Invoke(adRevenueInfo));";
+        private const string DirectRevenueDispatch = "OnAdRevenuePaidEvent?.Invoke(adRevenueInfo);";
+
+        /// <summary>Metica mediates through MAX, so Adjust gets MAX's ad source.</summary>
+        private const string MeticaAdSource = "AdPlatforms.METICA => \"applovin_max_sdk\",";
+        private const string AdSourceAnchor = "AdPlatforms.APPLOVIN =>";
+
+        /// <summary>
+        /// AdPlatforms.METICA mapped to a string, in a switch expression (METICA => "…") or a
+        /// switch statement (case METICA: return "…";). Any non-empty string counts — a game may
+        /// have mapped it by hand. Run on code with comments stripped.
+        /// </summary>
+        private static readonly Regex MeticaMapped =
+            new Regex(@"AdPlatforms\.METICA\s*(?:=>|:\s*return)\s*""[^""]+""");
+
+        /// <summary>AdPlatforms.METICA mapped to null, or to "".</summary>
+        private static readonly Regex MeticaMappedToNothing =
+            new Regex(@"AdPlatforms\.METICA\s*(?:=>|:\s*return)\s*(?:null\b|"""")");
 
         public override IEnumerable<string> TouchedPaths => new[]
         {
@@ -59,7 +80,8 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaPaths.RemoteConfiguration,
             MeticaPaths.RemoteConfigManager,
             MeticaPaths.AdsManager,
-            MeticaPaths.AnalyticsManager
+            MeticaPaths.AnalyticsManager,
+            MeticaPaths.AdjustAnalyticsNetwork
         };
 
         public override string ReviewHint =>
@@ -88,17 +110,19 @@ namespace GameDistrict.MeticaIntegrationTools
                 (MeticaPaths.RemoteConfiguration, MarkerRemoteFlag, "RemoteConfiguration.UseMetica"),
                 (MeticaPaths.RemoteConfigManager, MarkerPersistHook, "PersistRemoteToggles subscription"),
                 (MeticaPaths.RemoteConfigManager, MarkerPersistMethod, "PersistRemoteToggles method"),
-                (MeticaPaths.AdsManager, MarkerAdsManager, "AdsManager Metica network"),
-                (MeticaPaths.AnalyticsManager, MarkerRevenueDispatch, "OnAdRevenuePaidEvent main-thread dispatch")
+                (MeticaPaths.AdsManager, MarkerAdsManager, "AdsManager Metica network")
             };
-
-            // A GD SDK version without the event has nothing to dispatch, so nothing to check.
-            if (!HasRevenueEvent) checks = checks.Where(c => c.marker != MarkerRevenueDispatch).ToArray();
 
             var missing = checks
                 .Where(c => !SourcePatcher.Contains(c.path, c.marker))
                 .Select(c => c.what)
                 .ToList();
+
+            if (RevenueDispatchWrapped())
+                missing.Add("OnAdRevenuePaidEvent is inside ThreadDispatcher — it has to be invoked directly");
+
+            if (!AdjustKnowsMetica())
+                missing.Add("AdPlatforms.METICA case in AdjustAnalyticsNetwork.GetAdSource — Adjust drops Metica revenue without it");
 
             if (missing.Count == 0)
             {
@@ -107,7 +131,8 @@ namespace GameDistrict.MeticaIntegrationTools
             }
 
             // One count up front; the list itself goes under "Why?" as the extra problems.
-            result.Problem($"{missing.Count} of {checks.Length} patches missing.");
+            // The direct-invoke rule and the Adjust ad source count as patches too.
+            result.Problem($"{missing.Count} of {checks.Length + 2} patches missing.");
             foreach (var what in missing)
                 result.Problem($"Missing: {what}");
 
@@ -154,6 +179,7 @@ namespace GameDistrict.MeticaIntegrationTools
             PatchRemoteConfig(log);
             PatchAdsManager(log);
             PatchAnalyticsManager(log);
+            PatchAdjustAnalyticsNetwork(log);
 
             return log;
         }
@@ -309,34 +335,122 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>
-        /// Metica's revenue callbacks can land on a native thread, so firing
-        /// OnAdRevenuePaidEvent directly risks a subscriber doing Unity API work off the main
-        /// thread. ThreadDispatcher already ships with the SDK (Dispatcher/ThreadDispatcher.cs)
-        /// and AnalyticsManager.cs already has the Monetization.Runtime.Utilities using it
-        /// lives in, so this is a one-line wrap, not a new dependency.
+        /// OnAdRevenuePaidEvent is invoked directly, never inside ThreadDispatcher.Enqueue. An
+        /// earlier version of this tool added that wrap; it is undone here, on live code lines
+        /// only — a commented-out copy is left as it is.
         /// </summary>
         private static void PatchAnalyticsManager(List<string> log)
         {
-            // Only exists from v5.3.0. Without it there is no event to move onto the main thread.
-            if (!HasRevenueEvent)
+            if (!RevenueDispatchWrapped()) return;
+
+            var path = MeticaPaths.AnalyticsManager;
+            var text = SourcePatcher.ReadAll(path);
+            var newline = text.Contains("\r\n") ? "\r\n" : "\n";
+            var lines = text.Replace("\r\n", "\n").Split('\n')
+                .Select(line => line.TrimStart().StartsWith(WrappedRevenueDispatch)
+                    ? line.Replace(WrappedRevenueDispatch, DirectRevenueDispatch)
+                    : line);
+
+            SourcePatcher.WriteWithBackup(path, string.Join(newline, lines));
+            log.Add($"{path}: OnAdRevenuePaidEvent is invoked directly again (removed the ThreadDispatcher wrap)");
+        }
+
+        /// <summary>A live (not commented-out) line still wraps OnAdRevenuePaidEvent in ThreadDispatcher.</summary>
+        private static bool RevenueDispatchWrapped() =>
+            SourcePatcher.Exists(MeticaPaths.AnalyticsManager)
+            && SourcePatcher.ReadAll(MeticaPaths.AnalyticsManager).Replace("\r\n", "\n").Split('\n')
+                .Any(line => line.TrimStart().StartsWith(WrappedRevenueDispatch));
+
+        /// <summary>
+        /// AdjustAnalyticsNetwork.GetAdSource maps APPLOVIN and ADMOB and returns null for
+        /// anything else, and Adjust drops a revenue event with a null source. Metica mediates
+        /// through MAX, so METICA gets MAX's source, on the line after APPLOVIN's.
+        ///
+        /// <para>Only the stock shape is edited: the APPLOVIN arm has to sit inside
+        /// GetAdSource's switch, ahead of its "_ =>" default. Anything else — or METICA already
+        /// mapped to null — is reported with the line to add, never guessed at.</para>
+        /// </summary>
+        private static void PatchAdjustAnalyticsNetwork(List<string> log)
+        {
+            const string what = "Adjust ad source for Metica";
+            var path = MeticaPaths.AdjustAnalyticsNetwork;
+            var hint = $"in GetAdSource, add {MeticaAdSource} after the AdPlatforms.APPLOVIN line";
+
+            if (!SourcePatcher.Exists(path))
             {
-                log.Add("OnAdRevenuePaidEvent is not in this GD SDK version — nothing to dispatch.");
+                Run(log, what, O.FileMissing, path, hint);
                 return;
             }
 
-            Run(log, "OnAdRevenuePaidEvent thread dispatch",
-                SourcePatcher.ReplaceFirst(MeticaPaths.AnalyticsManager, MarkerRevenueDispatch,
-                    "OnAdRevenuePaidEvent?.Invoke(adRevenueInfo);",
-                    "ThreadDispatcher.Enqueue(() => OnAdRevenuePaidEvent?.Invoke(adRevenueInfo));"),
-                MeticaPaths.AnalyticsManager,
-                "wrap the OnAdRevenuePaidEvent invoke in ThreadDispatcher.Enqueue(() => ...)");
+            if (AdjustKnowsMetica())
+            {
+                Run(log, what, O.AlreadyApplied, path, hint);
+                return;
+            }
+
+            var text = SourcePatcher.ReadAll(path);
+            if (MeticaMappedToNothing.IsMatch(WithoutComments(text)))
+            {
+                log.Add($"{what}: {path} maps AdPlatforms.METICA to no source, so Adjust drops Metica " +
+                        "revenue. Change that line by hand to " + MeticaAdSource);
+                return;
+            }
+
+            var newline = text.Contains("\r\n") ? "\r\n" : "\n";
+            var lines = text.Replace("\r\n", "\n").Split('\n').ToList();
+
+            var anchor = AdSourceAnchorLine(lines);
+            if (anchor < 0)
+            {
+                Run(log, what, O.AnchorNotFound, path, hint);
+                return;
+            }
+
+            // Same indentation as the APPLOVIN arm.
+            var indent = lines[anchor].Substring(0, lines[anchor].Length - lines[anchor].TrimStart().Length);
+            lines.Insert(anchor + 1, indent + MeticaAdSource);
+
+            SourcePatcher.WriteWithBackup(path, string.Join(newline, lines));
+            Run(log, what, O.Applied, path, hint);
         }
+
+        /// <summary>
+        /// The line of GetAdSource's APPLOVIN arm, or -1 unless the method has the stock shape:
+        /// a switch expression whose APPLOVIN arm comes before its "_ =>" default.
+        /// </summary>
+        private static int AdSourceAnchorLine(List<string> lines)
+        {
+            var method = lines.FindIndex(line => line.Contains("GetAdSource(string"));
+            if (method < 0) return -1;
+
+            var anchor = -1;
+            for (var i = method + 1; i < lines.Count; i++)
+            {
+                var line = lines[i].Trim();
+                if (line.StartsWith("//")) continue;
+                if (line == "};") return -1; // end of the switch, no default seen
+                if (anchor < 0 && line.StartsWith(AdSourceAnchor)) anchor = i;
+                else if (line.StartsWith("_ =>")) return anchor;
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// AdjustAnalyticsNetwork maps AdPlatforms.METICA to a real source — this tool's line or
+        /// a mapping the game added itself.
+        /// </summary>
+        private static bool AdjustKnowsMetica() =>
+            SourcePatcher.Exists(MeticaPaths.AdjustAnalyticsNetwork)
+            && MeticaMapped.IsMatch(WithoutComments(SourcePatcher.ReadAll(MeticaPaths.AdjustAnalyticsNetwork)));
+
+        private static readonly Regex Comments = new Regex(@"/\*.*?\*/|//[^\n]*", RegexOptions.Singleline);
+
+        /// <summary>The code with // and /* */ comments blanked, so a commented-out mapping doesn't count.</summary>
+        private static string WithoutComments(string code) => Comments.Replace(code, " ");
 
         // ── Helpers ────────────────────────────────────────────────────────────
 
-        /// <summary>AnalyticsManager.OnAdRevenuePaidEvent was added in GD SDK v5.3.0.</summary>
-        private static bool HasRevenueEvent =>
-            SourcePatcher.Contains(MeticaPaths.AnalyticsManager, "event Action<AdRevenueInfo> OnAdRevenuePaidEvent");
 
         private static void Run(List<string> log, string what, O outcome, string path, string manualHint)
         {

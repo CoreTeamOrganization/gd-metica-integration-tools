@@ -102,6 +102,68 @@ namespace GameDistrict.MeticaIntegrationTools
 
         // ── Actions ────────────────────────────────────────────────────────────
 
+        public const string DownloadVersion = "8.6";
+        private const string DownloadUrl = "https://services.gradle.org/distributions/gradle-8.6-all.zip";
+
+        /// <summary>
+        /// Asks for a folder, downloads Gradle 8.6 there, unzips it, and points Unity at it —
+        /// with "Gradle installed with Unity" turned off. A folder that already holds the
+        /// unzipped release is reused instead of downloading again.
+        /// </summary>
+        internal static void DownloadAndUse()
+        {
+            const string title = "Gradle 8.6 or later";
+            var parent = EditorUtility.OpenFolderPanel($"Where should Gradle {DownloadVersion} go?", string.Empty, string.Empty);
+            if (string.IsNullOrEmpty(parent)) return;
+
+            var home = Path.Combine(parent, $"gradle-{DownloadVersion}");
+            if (!Directory.Exists(Path.Combine(home, "lib")))
+            {
+                var zip = Path.Combine(Application.temporaryCachePath, $"gradle-{DownloadVersion}-all.zip");
+                if (!Downloads.TryDownload(DownloadUrl, zip, $"Downloading Gradle {DownloadVersion}", out var error))
+                {
+                    MeticaIntegrationLog.Record(title, $"Could not download Gradle {DownloadVersion}: {error}");
+                    return;
+                }
+
+                if (!Downloads.TryUnzip(zip, parent, $"Unzipping Gradle {DownloadVersion}", out error))
+                {
+                    MeticaIntegrationLog.Record(title, $"Could not unzip Gradle {DownloadVersion}: {error}");
+                    return;
+                }
+
+                File.Delete(zip);
+                MakeLauncherExecutable(home);
+                MeticaIntegrationLog.Record(title, $"Downloaded Gradle {DownloadVersion} to {home}");
+            }
+
+            if (!WriteGradlePath(home))
+            {
+                MeticaIntegrationLog.Record(title,
+                    $"Gradle is at {home}, but the path could not be set. Set it in Edit → Preferences → External Tools.");
+                return;
+            }
+
+            MeticaIntegrationLog.Record(title, $"Unity now builds with Gradle {DownloadVersion} at {home}");
+        }
+
+        /// <summary>A zip carries no Unix permissions, so on macOS bin/gradle has to be made executable again.</summary>
+        private static void MakeLauncherExecutable(string home)
+        {
+            if (Application.platform != RuntimePlatform.OSXEditor && Application.platform != RuntimePlatform.LinuxEditor)
+                return;
+
+            try
+            {
+                var chmod = System.Diagnostics.Process.Start("chmod", $"+x \"{Path.Combine(home, "bin", "gradle")}\"");
+                chmod?.WaitForExit(5000);
+            }
+            catch (Exception e)
+            {
+                MeticaIntegrationLog.Record("Gradle 8.6 or later", $"Could not make bin/gradle executable: {e.Message}");
+            }
+        }
+
         private void ChooseGradleFolder()
         {
             var chosen = EditorUtility.OpenFolderPanel("Gradle 8.6 or later", string.Empty, string.Empty);
@@ -142,28 +204,56 @@ namespace GameDistrict.MeticaIntegrationTools
                 .FirstOrDefault(type => type != null)
                 ?.GetProperty("gradlePath", BindingFlags.Public | BindingFlags.Static);
 
+        /// <summary>
+        /// The editor preferences behind External Tools' Gradle fields: "Gradle installed with
+        /// Unity" and the custom path. Read and written directly — setting the path through
+        /// AndroidExternalToolsSettings alone did not persist it.
+        /// </summary>
+        private const string GradleEmbeddedPref = "GradleUseEmbedded";
+        private const string GradlePathPref = "GradlePath";
+
         private static string ReadGradlePath(out bool readable)
         {
-            var property = GradlePathProperty();
-            readable = property != null && property.CanRead;
-
-            if (!readable) return null;
-
-            try { return property.GetValue(null) as string; }
-            catch { readable = false; return null; }
+            readable = true;
+            return EditorPrefs.GetBool(GradleEmbeddedPref, true)
+                ? string.Empty
+                : EditorPrefs.GetString(GradlePathPref, string.Empty);
         }
 
+        /// <summary>
+        /// Sets the Gradle path, and the "Gradle installed with Unity" tick to match: off for a
+        /// custom path, on for an empty one — otherwise Unity keeps using its bundled Gradle.
+        /// </summary>
         private static bool WriteGradlePath(string path)
         {
-            var property = GradlePathProperty();
-            if (property == null || !property.CanWrite) return false;
+            var custom = !string.IsNullOrEmpty(path);
+            EditorPrefs.SetBool(GradleEmbeddedPref, !custom);
+            if (custom) EditorPrefs.SetString(GradlePathPref, path.Replace('/', Path.DirectorySeparatorChar));
 
+            // Keep Unity's own settings object in step too, where it can be reached.
             try
             {
-                property.SetValue(null, path);
-                return true;
+                var property = GradlePathProperty();
+                if (property != null && property.CanWrite) property.SetValue(null, custom ? path : string.Empty);
             }
-            catch { return false; }
+            catch
+            {
+                // The preferences above are what Unity reads; this is only a courtesy.
+            }
+
+            // Confirm it stuck.
+            var now = ReadGradlePath(out _);
+            return custom
+                ? string.Equals(Path.GetFullPath(now), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)
+                : now.Length == 0;
+        }
+
+        /// <summary>The Gradle version Unity builds with right now: the custom one, else the bundled one.</summary>
+        internal static Version InUse()
+        {
+            var custom = ReadGradlePath(out var readable);
+            if (!readable) return null;
+            return string.IsNullOrEmpty(custom) ? BundledVersion() : VersionAt(custom);
         }
 
         // ── Version detection ──────────────────────────────────────────────────

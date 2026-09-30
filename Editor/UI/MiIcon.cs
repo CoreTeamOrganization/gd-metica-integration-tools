@@ -17,7 +17,7 @@ namespace GameDistrict.MeticaIntegrationTools
         public enum Kind
         {
             Home, Status, More, ChevronRight, ChevronDown, ChevronLeft, Check, Lock, Error,
-            Download, Refresh, Copy, Chip, Skip, Folder, Trash, File, Columns, Undo, Ad, Chart
+            Download, Refresh, Copy, Chip, Skip, Folder, Trash, File, Columns, Undo, Ad, Chart, Eye, EyeOff
         }
 
         private static readonly Dictionary<Kind, string[]> Paths = new Dictionary<Kind, string[]>
@@ -42,7 +42,9 @@ namespace GameDistrict.MeticaIntegrationTools
             [Kind.Columns] = new[] { Rect(3, 4, 8, 16, 1.5f), Rect(13, 4, 8, 16, 1.5f) },
             [Kind.Undo] = new[] { "M9 14L4 9l5-5", "M4 9h10a6 6 0 0 1 0 12h-3" },
             [Kind.Ad] = new[] { Rect(3, 5, 18, 14, 2), "M7 15l2.5-6 2.5 6", "M7.8 13h3.4", "M15 9v6h1.5a2.5 3 0 0 0 0-6z" },
-            [Kind.Chart] = new[] { "M4 20V10", "M10 20V4", "M16 20v-7", "M22 20H2" }
+            [Kind.Chart] = new[] { "M4 20V10", "M10 20V4", "M16 20v-7", "M22 20H2" },
+            [Kind.Eye] = new[] { "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z", Circle(12, 12, 3) },
+            [Kind.EyeOff] = new[] { "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z", Circle(12, 12, 3), "M4 4l16 16" }
         };
 
         private static readonly Dictionary<Kind, List<List<Vector2>>> Cache = new Dictionary<Kind, List<List<Vector2>>>();

@@ -18,6 +18,12 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Non-blocking remarks worth showing (versions found, things skipped).</summary>
         public readonly List<string> Notes = new List<string>();
 
+        /// <summary>
+        /// Something the developer still has to do that does not block the step — keys left
+        /// empty, say. Shown as one warning line when there is no problem to show.
+        /// </summary>
+        public readonly List<string> Warnings = new List<string>();
+
         public static VerifyResult Pass(params string[] notes)
         {
             var r = new VerifyResult { Ok = true };
@@ -42,6 +48,12 @@ namespace GameDistrict.MeticaIntegrationTools
         public VerifyResult Note(string message)
         {
             Notes.Add(message);
+            return this;
+        }
+
+        public VerifyResult Warning(string message)
+        {
+            Warnings.Add(message);
             return this;
         }
 
@@ -70,6 +82,13 @@ namespace GameDistrict.MeticaIntegrationTools
         /// about it is unchanged — it still verifies, and skipping is reversible.
         /// </summary>
         public virtual bool Optional => false;
+
+        /// <summary>
+        /// False when this project has nothing for the step to do, so the run leaves it out
+        /// entirely — the AppLovin MAX step only appears when MAX is older than Metica needs.
+        /// Re-read on every refresh.
+        /// </summary>
+        internal virtual bool Applies => true;
 
         /// <summary>One or two sentences describing what this step is for.</summary>
         public abstract string Summary { get; }
@@ -111,5 +130,13 @@ namespace GameDistrict.MeticaIntegrationTools
         /// command. Null when the step changes nothing.
         /// </summary>
         public virtual string ReviewHint => null;
+
+        /// <summary>Selects an asset (the Inspector shows it) and flashes it in the Project window.</summary>
+        protected static void SelectAndPing(UnityEngine.Object asset)
+        {
+            if (asset == null) return;
+            UnityEditor.Selection.activeObject = asset;
+            UnityEditor.EditorGUIUtility.PingObject(asset);
+        }
     }
 }

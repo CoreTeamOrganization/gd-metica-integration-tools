@@ -58,7 +58,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public void Refresh()
         {
-            Steps = _steps();
+            Steps = _steps().Where(step => step.Applies).ToArray();
             _results = new VerifyResult[Steps.Length];
 
             for (var i = 0; i < Steps.Length; i++)

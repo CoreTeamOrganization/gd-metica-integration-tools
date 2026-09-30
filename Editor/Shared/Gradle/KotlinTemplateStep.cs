@@ -102,7 +102,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// written from scratch because it carries the AGP version that matches this Unity
         /// install, and guessing that wrong would break the build.
         /// </summary>
-        private static List<string> EnableCustomBaseTemplate()
+        internal static List<string> EnableCustomBaseTemplate()
         {
             var log = new List<string>();
 

@@ -143,7 +143,7 @@ namespace GameDistrict.MeticaIntegrationTools
         internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
             if (MeticaPaths.FileExists(MeticaPaths.AdUnitsSettingsAsset))
-                yield return new StepButton("Open AdUnitsSettings", () => Selection.activeObject = LoadAsset(),
+                yield return new StepButton("Select AdUnitsSettings", () => SelectAndPing(LoadAsset()),
                     icon: StepIcon.File);
         }
 

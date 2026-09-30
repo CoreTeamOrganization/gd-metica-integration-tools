@@ -115,6 +115,10 @@
 .mi-problem__more:hover { color: var(--error); }
 .mi-success { flex-direction: row; align-items: center; padding: 8px 10px; border-radius: 6px; border-width: 1px; background-color: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
 .mi-success > Label { -unity-font-style: bold; color: var(--ok); flex-shrink: 1; }
+.mi-warning { flex-direction: row; align-items: center; padding: 8px 10px; border-radius: 6px; border-width: 1px; background-color: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.mi-warning > .mi-icon { margin-right: 8px; }
+.mi-warning > Label { -unity-font-style: bold; color: var(--warn); flex-shrink: 1; }
+.mi-root .mi-notes > .mi-warning { margin-bottom: 8px; }
 .mi-kept-note { flex-direction: row; align-items: center; padding: 8px 10px; border-radius: 6px; border-width: 1px; background-color: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
 .mi-root .mi-notes > * { margin-bottom: 2px; }
 .mi-root .mi-notes > .mi-problem, .mi-root .mi-notes > .mi-success { margin-bottom: 8px; }
@@ -132,6 +136,28 @@
 .mi-switch--on .mi-switch__track { justify-content: flex-end; background-color: var(--yellow); border-color: var(--yellow); }
 .mi-switch--on .mi-switch__knob { background-color: var(--ink); }
 .mi-switch__label { font-size: 13px; color: var(--text); }
+/* ---------- Checklist rows (StepItem) ---------- */
+.mi-item { background-color: var(--surface); border-width: 1px; border-color: var(--border); border-radius: 8px; }
+.mi-item--done { border-color: var(--ok-border); }
+.mi-item--todo { border-color: var(--error-border); }
+.mi-root .mi-item__head { flex-direction: row; align-items: center; padding: 10px 12px; background-color: rgba(0, 0, 0, 0); border-width: 0; border-radius: 8px; -unity-text-align: upper-left; cursor: link; }
+.mi-item__head:hover { background-color: var(--surface-2); }
+.mi-item__mark { margin-right: 10px; }
+.mi-item--done .mi-item__mark { color: var(--ok); }
+.mi-item--todo .mi-item__mark { color: var(--error); }
+.mi-item__text { flex-grow: 1; flex-shrink: 1; }
+.mi-item__title { font-size: 13px; -unity-font-style: bold; color: var(--text); }
+.mi-item__status { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.mi-item__chevron { color: var(--text-2); margin-left: 8px; }
+.mi-item__body { padding: 0 12px 12px 38px; }
+
+.mi-field { flex-direction: row; align-items: center; }
+.mi-field__label { width: 110px; flex-shrink: 0; font-size: 13px; color: var(--text-2); }
+.mi-root .mi-text { flex-grow: 1; flex-shrink: 1; margin: 0; max-width: 420px; }
+.mi-text .unity-base-text-field__input { height: 32px; padding: 0 10px; background-color: var(--surface-2); border-width: 1px; border-color: var(--border-strong); border-radius: 6px; color: var(--text); font-size: 13px; -unity-text-align: middle-left; }
+.mi-text:hover .unity-base-text-field__input { border-color: var(--text-3); }
+.mi-text:focus .unity-base-text-field__input { border-color: var(--yellow); }
+.mi-field__reveal { margin-left: 8px; }
 .mi-choice { flex-direction: row; align-items: center; }
 .mi-choice__label { font-size: 13px; color: var(--text-2); margin-right: 10px; }
 .mi-root .mi-select { height: 32px; padding: 0 10px; flex-direction: row; align-items: center; background-color: var(--surface-2); border-width: 1px; border-color: var(--border-strong); border-radius: 6px; color: var(--text); cursor: link; }

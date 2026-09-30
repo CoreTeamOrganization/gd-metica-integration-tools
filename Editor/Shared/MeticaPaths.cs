@@ -113,6 +113,7 @@ namespace GameDistrict.MeticaIntegrationTools
         public static string RemoteConfiguration => Combine(RuntimeScripts, "Configurations/RemoteConfiguration.cs");
         public static string RemoteConfigManager => Combine(RuntimeScripts, "Remote/RemoteConfigManager.cs");
         public static string AnalyticsManager => Combine(RuntimeScripts, "Analytics/AnalyticsManager.cs");
+        public static string AdjustAnalyticsNetwork => Combine(RuntimeScripts, "Analytics/Services/AdjustAnalyticsNetwork.cs");
         public static string MonetizationRemover => Combine(EditorScripts, "MenuItems/MonetizationRemover.cs");
 
         public static string MeticaSettingsAsset => Combine(ResourcesConfigurations, "MeticaSettings.asset");

@@ -132,7 +132,76 @@
   - The review panel's diff command and Copy button are hidden for now
     (`ShowDiffCommand`, kept, not removed).
   - New tab icon: a black bolt on a yellow tile — the wide logo was unreadable at 16 px.
+- The Metica key steps now take the keys in the step instead of leaving the asset empty:
+  - Metica ads config (standalone): App ID and API Key fields, written into
+    `MeticaAdsConfig.asset` on create; the MAX SDK key is copied from AppLovinSettings.
+  - Metica settings asset (GD SDK): Android App ID / API Key, plus iOS when Enable iOS is on,
+    written into `MeticaSettings.asset` on create.
+  - After creating, the fields show the asset's values. The Create action disappears once
+    the asset exists, and **Save keys** only shows while a field differs from the asset
+    (re-checked as you type).
+  - "Open …" buttons renamed **Select MeticaAdsConfig / MeticaSettings / AdUnitsSettings**;
+    they select the asset and ping it in the Project window.
+  - `MeticaAdsConfig.MeticaSdkLogging` now defaults to on (Metica's own SDK logs).
+  - Blank keys show one warning line ("App ID and API Key are empty — fill them in before
+    you build.") and never block the step. New `VerifyResult.Warning`, `StepText`,
+    `AssetKeyFields`.
+- New first step **AppLovin MAX version**, only while MAX is missing or below 8.1.0
+  (`MeticaStep.Applies` leaves a step out of the run when it has nothing to do). Mandatory —
+  the old "my Metica version supports this MAX" tick is gone.
+  - Installs the MAX version in `MeticaTargetVersion.asset` (new `maxVersion`, 8.1.0 by
+    default): AppLovin's Unity plugin package from their GitHub releases.
+  - Two actions, like the Metica SDK: **Remove MAX x** first — keeping
+    `Assets/MaxSdk/Mediation` (adapters) and `AppLovinSettings.asset` (SDK key) — then
+    **Download and import MAX 8.1.0**, so each is its own change to review and commit.
+- New last step **Dependencies & troubleshooting** replaces "Dependencies and Moloco version",
+  "Gradle 8.6 or later" and "Kotlin in the base Gradle template" in both Ads runs. One optional
+  checklist that never blocks; each row is green or red and opens to its fix (`StepItem`):
+  - Moloco — only if the project has it; fix each platform's adapter to 4.3.1.0.
+  - Gradle 8.6 — **Download Gradle 8.6…** picks a folder, downloads `gradle-8.6-all.zip`, unzips
+    it and sets it in External Tools with "Gradle installed with Unity" off. On Gradle 8+,
+    **Fix dexing property** changes MAX's `android.enableDexingArtifactTransform` (still in
+    MAX 8.1.0 and 8.2.0) to `android.useFullClasspathForDexingTransform`.
+  - JDK 17, Kotlin (added on its own now, `GradleTemplateEditor.AddKotlin`), AGP 8.4.0
+    (`GradleTemplateEditor.BumpAgp`).
+  - The Genre Creator flow keeps its separate Gradle / JDK / Kotlin steps until its rework.
+- Resolving Android libraries is now part of each SDK step, not a step of its own ("Resolve
+  libraries" removed). New `AndroidDependencies`: reads every `*Dependencies.xml` in Assets
+  (Metica, MAX, mediation networks, Firebase…) and checks each declared `group:artifact` reached
+  `mainTemplate.gradle` — generic, nothing hardcoded per SDK.
+  - The **Metica SDK** and **AppLovin MAX** steps don't pass until every declared library is
+    resolved; after an import their action becomes **Resolve Android dependencies** (EDM Force
+    Resolve), turning Custom Main Gradle Template on first if it is off.
+  - Metica SDK step also takes over **Enable iOS** and the AndroidX / Jetifier checks.
+  - The MAX step stays in the run after an upgrade (until done), so the resolve happens there.
+  - The troubleshooting step's Moloco row gains a Resolve button.
+- `OnAdRevenuePaidEvent` stays invoked directly — the patch step no longer wraps it in
+  `ThreadDispatcher.Enqueue`, and undoes that wrap where an earlier run added it (live lines only;
+  a commented-out copy is left alone).
+- Fixed: "Download Gradle 8.6…" unzipped Gradle but did not set it — the path was written through
+  `AndroidExternalToolsSettings`, which did not persist it. The Gradle step now reads and writes
+  Unity's own preferences (`GradleUseEmbedded`, `GradlePath`) and confirms the write.
+- Fixed: the JDK row accepted any folder (it showed green with "version unknown" and wrote that
+  folder into `org.gradle.java.home`, which breaks the build). A folder without `bin/java` is now
+  refused, a bad `java.home` shows red, and an installed JDK 17+ (JAVA_HOME, External Tools,
+  Adoptium / Oracle / Corretto / Microsoft / Zulu folders) is offered as **Use JDK … at …**.
+- Moloco row: green or red by the active build target's platform only.
+- API Key fields are masked, with an eye button to show them.
+- Fixed: after Reviewed, the window could stop refreshing for good. Deferred work used
+  `EditorApplication.delayCall`, which Unity drops when any other editor code's delayCall throws,
+  and a "refresh queued" flag then stayed set. It now runs on the next `EditorApplication.update`.
+- Fixed: a later SDK adding libraries un-did an earlier step's sign-off — each SDK step now only
+  checks the libraries declared under its own folder (`Assets/MaxSdk`, `Assets/MeticaSdk`).
 - GD SDK 5.3.0 is now the minimum (`GdSdkVersion`). On an older version the Metica SDK step
   stops with "GD SDK x isn't supported — needs 5.3.0+." and the Home card says so. The
   wrapper files do not compile against the 5.0–5.2 ad-unit base classes (checked in Unity);
   5.3.0–5.5.0 all compile with the patches and wrappers. Results in `Editor/Ads/README.md`.
+- Fixed: Metica ad revenue never reached Adjust. `AdjustAnalyticsNetwork.GetAdSource` maps only
+  APPLOVIN and ADMOB and returns null otherwise, so every Metica revenue event went out as
+  `new AdjustAdRevenue(null)` and Adjust dropped it (seen in Draw-One-Puzzle: Adjust revenue
+  below actual once Metica was on). The patch step now adds
+  `AdPlatforms.METICA => "applovin_max_sdk",` after the APPLOVIN line — Metica mediates through
+  MAX. The line is only added to the stock shape (APPLOVIN arm ahead of the `_ =>` default);
+  otherwise the step says what to add by hand. The step's check fails while METICA has no
+  source; any non-null mapping a game added itself counts as done, a null one does not.
+  `AdjustAnalyticsNetwork.cs` added to the stock copies (3 variants across v5.0.0–v5.5.0).

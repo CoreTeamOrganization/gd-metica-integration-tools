@@ -13,3 +13,4 @@ MonoBehaviour:
   m_Name: MeticaTargetVersion
   m_EditorClassIdentifier:
   version: 2.45.2
+  maxVersion: 8.1.0

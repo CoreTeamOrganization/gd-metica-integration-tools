@@ -37,22 +37,20 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
 
 The tool looks for the GD Monetization SDK and picks a run from what it finds.
 
-**With the GD SDK** — twelve steps, below. Metica is wired into the ads layer that is
-already there.
+**With the GD SDK** — nine steps, below (ten while AppLovin MAX is below 8.1.0). Metica is
+wired into the ads layer that is already there.
 
-**Without it** — seven steps. There is nothing to patch, no remote flag and no async path,
-so those four steps do not exist. Instead the tool writes a self-contained Metica ads
-runtime to `Assets/MeticaAds/`:
+**Without it** — four steps (five with the MAX step). There is nothing to patch, no remote flag
+and no async path, so those steps do not exist. Instead the tool writes a self-contained Metica
+ads runtime to `Assets/MeticaAds/`:
 
 | # | Step | What it does |
 |---|---|---|
-| 1 | Metica SDK | as below |
-| 2 | Resolve libraries | as below |
-| 3 | Metica ads runtime | Writes fourteen files to `Assets/MeticaAds/` and waits for them to compile |
-| 4 | Metica ads config | Creates `Resources/MeticaAdsConfig.asset` and waits while you fill in the keys |
-| 5 | Dependencies and Moloco version | as below |
-| 6 | Gradle 8.6 or later *(optional)* | as below |
-| 7 | Kotlin in the base Gradle template *(optional)* | as below |
+| – | AppLovin MAX version | as below — only while MAX is below 8.1.0 |
+| 1 | Metica SDK | as below, including resolving its Android libraries |
+| 2 | Metica ads runtime | Writes fourteen files to `Assets/MeticaAds/` and waits for them to compile |
+| 3 | Metica ads config | Creates `Resources/MeticaAdsConfig.asset` with the App ID and API Key typed into the step; the MAX SDK key is copied from AppLovinSettings |
+| 4 | Dependencies & troubleshooting | as below |
 
 The ad units, ad network and initializer are the GD SDK's, unchanged in everything that
 faces Metica. What they leaned on the SDK for — the ad unit base classes, the logger,
@@ -77,16 +75,21 @@ MeticaAdsHooks.HasUserConsent = () => MyConsent.PersonalizedAdsAllowed;
 
 Both are optional — leave them unset and ads still serve.
 
-`MeticaRemoteConfig` is the remote on/off switch, off unless **Use Remote Switch** is ticked
-in the config. Feed it from whatever remote config the game already has:
+**Metica is off by default.** `MeticaRemoteConfig` is the remote on/off switch: the config
+asset is created with **Use Remote Switch** on and **Default Use Metica** off, so Metica
+stays off until the game calls `MeticaRemoteConfig.Apply(true)`. Feed it from whatever remote
+config the game already has:
 
 ```csharp
 MeticaRemoteConfig.Apply(myRemoteConfig.GetBool("use_metica"));
 ```
 
-The value applies to the **next** session — Metica initializes long before a remote fetch
+The value applies from the **next** session — Metica initializes long before a remote fetch
 returns, so the flag is persisted and read at boot, the same trade the GD SDK makes with
-`MonetizationPreferences.UseMetica`.
+`MonetizationPreferences.UseMetica`. So a first install runs its first session without
+Metica. Unticking **Use Remote Switch** makes Metica always on.
+
+> **Warning:** if the game never calls `MeticaRemoteConfig.Apply`, Metica never runs.
 
 **If the tool will not do it**, `Documentation/Metica-Standalone/` in the
 `Monetization-SDK-Unity` repo has the same files as ordinary `.cs` (outside `Assets/`, so
@@ -97,24 +100,32 @@ integration by hand.
 
 | # | Step | What it does |
 |---|---|---|
-| 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind |
-| 2 | Resolve libraries | Runs the Android resolver (Force Resolve) so `com.metica:metica-sdk` reaches Gradle. With **Enable iOS** ticked, also enables the xcframework for iOS |
-| 3 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
-| 4 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` preference and remote flag, the `AdsManager` network switch. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
-| 5 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.UseMetica` instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
-| 6 | Metica settings asset | Creates `MeticaSettings.asset`, empty. The API Key / App ID are per-game — the developer fills them |
-| 7 | Metica ad units | Copies the Applovin App Key and ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values |
-| 8 | Remove the unused async init path | Only bites on a project that already had the async Metica integration: strips `IAsyncAdNetworkService` and the `AdNetworkController` overload built for it. Leaves them if `AdNetworkAdmob` / `AdNetworkAppLovin` still implement the interface |
-| 9 | Finish up | Teaches the Remove SDK menu about Metica. The Metica on/off switch stays on remote config — there is no local override |
-| 10 | Dependencies and Moloco version | Checks the floors Metica publishes: AppLovin MAX Unity plugin **8.1.0+**, Moloco SDK and adapters **4.3.1+**. Per-platform **Fix Moloco** buttons rewrite the declared version in `Dependencies.xml`; MAX is upgraded in AppLovin's Integration Manager |
-| 11 | Gradle 8.6 or later *(optional)* | Metica needs Gradle 8.6+; Unity 2022.3 bundles 7.5.1. Reads the editor's Android Gradle preference, works out the version in use, and can point it at a folder you choose. An editor preference, not a project setting — per machine, never committed |
-| 12 | Kotlin in the base Gradle template *(optional)* | Enables Custom Base Gradle Template if it is off (by copying Unity's own default, which carries the right AGP version), then writes the `buildscript` block above `plugins` with the Kotlin plugin classpath and an AGP classpath matching `com.android.application` |
+| – | AppLovin MAX version | **Only while MAX is missing or below 8.1.0**, which Metica needs; mandatory. Installs the MAX version set in `MeticaTargetVersion.asset` (**8.1.0** by default): AppLovin's own Unity plugin package from their GitHub releases. The old MAX is removed first, like the Metica SDK, keeping `Mediation/` (your adapters) and `AppLovinSettings.asset` (SDK key). Integration Manager as a fallback |
+| 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
+| 2 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
+| 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` preference and remote flag, the `AdsManager` network switch; plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
+| 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.UseMetica` instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
+| 5 | Metica settings asset | Creates `MeticaSettings.asset` with the App ID and API Key typed into the step — Android, plus iOS when Enable iOS is on. Blank keys are a warning, never a block |
+| 6 | Metica ad units | Copies the Applovin App Key and ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values |
+| 7 | Remove the unused async init path | Only bites on a project that already had the async Metica integration: strips `IAsyncAdNetworkService` and the `AdNetworkController` overload built for it. Leaves them if `AdNetworkAdmob` / `AdNetworkAppLovin` still implement the interface |
+| 8 | Finish up | Teaches the Remove SDK menu about Metica. The Metica on/off switch stays on remote config — there is no local override |
+| 9 | Dependencies & troubleshooting | One optional checklist, see below. Never blocks |
 
-Steps 11 and 12 are the two halves of Metica's own Gradle setup, and both are **optional**.
-They sit last on purpose: neither can really be judged until there is an Android build to
-judge, so the run reaches them once the integration is in place and a build has been tried,
-rather than stopping on them beforehand.
+### Dependencies & troubleshooting
 
+The Android build fixes Metica can need, one row each. A row is green when set and red when
+not; click it for the controls that set it. None of them block the run — many projects build
+without them.
+
+| Row | Shows | Fix |
+|---|---|---|
+| Moloco | only if the project has Moloco | Fix Android / iOS adapter → 4.3.1.0 (rewrites `Dependencies.xml`; Resolve libraries fetches it) |
+| Gradle 8.6 | always | **Download Gradle 8.6…**: pick a folder, the tool downloads `gradle-8.6-all.zip`, unzips it and points Unity at it with "Gradle installed with Unity" off. Or choose an existing folder. On Gradle 8+, also **Fix dexing property**: MAX 8.1.0 / 8.2.0 write `android.enableDexingArtifactTransform`, which Gradle 8 removed; it becomes `android.useFullClasspathForDexingTransform` (MAX 8.2.1+ already has it) |
+| JDK 17 | always | Choose a JDK folder — `org.gradle.java.home` in `gradleTemplate.properties` |
+| Kotlin | always | Add the Kotlin plugin and a matching AGP classpath to `baseProjectTemplate.gradle`, turning on Custom Base Gradle Template if needed |
+| AGP 8.4.0 | always | Bump `com.android.application` / `library` to 8.4.0 (and an existing buildscript classpath with them) |
+
+Gradle and JDK are editor preferences, per machine; nothing is committed for them.
 An optional step has a **Skip this step** button that unlocks the next one without the step
 verifying. The skip is remembered, reversible from the same button, and cleared by **Reset
 sign-offs**. A step you have finished or skipped stays open: expand it any time to see
@@ -149,7 +160,7 @@ Version differences the patches handle on their own:
 | `PersistRemoteToggles` subscription | 5.3.6 | `OnFetchComplete` (no arguments) instead of `OnFetchCompleteWithSuccess` |
 | MeticaSettings resource path | 5.1.0 | anchored after `AppMetrica`, since there is no `InApps` |
 | `MonetizationPreferences.UseMetica` | 5.3.0 | anchored after `SessionCount`, one-argument `Preferences` constructor |
-| `OnAdRevenuePaidEvent` main-thread dispatch | 5.3.0 | skipped — the event does not exist |
+| `OnAdRevenuePaidEvent` invoked directly (an older `ThreadDispatcher` wrap is undone) | 5.3.0 | nothing to check — the event does not exist |
 | Remove SDK menu (Finish up) | 5.2.0 | skipped — `MonetizationRemover.cs` does not exist |
 
 ## Getting the Metica SDK

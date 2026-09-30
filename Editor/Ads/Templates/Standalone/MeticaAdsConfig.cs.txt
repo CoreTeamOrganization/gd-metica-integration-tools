@@ -39,17 +39,18 @@ namespace MeticaIntegration
         public string IosMRec;
 
         [Header("Remote switch")]
-        [Tooltip("Gate Metica on a value from your own remote config. Off means Metica always " +
-                 "initializes, and MeticaRemoteConfig is never consulted.")]
-        public bool UseRemoteSwitch;
+        [Tooltip("Gate Metica on a value from your own remote config. On (the default): Metica stays " +
+                 "off until the backend turns it on through MeticaRemoteConfig.Apply(true). Unticked: " +
+                 "Metica is always on, and MeticaRemoteConfig is never consulted.")]
+        public bool UseRemoteSwitch = true;
 
         [Tooltip("What the switch reads until your remote config has landed once on this device. " +
-                 "Off is the cautious choice: Metica stays dark until the backend says otherwise.")]
+                 "Off (the default): Metica stays off until the backend turns it on.")]
         public bool DefaultUseMetica;
 
         [Header("Behaviour")]
-        [Tooltip("Print Metica's own SDK logs. Leave off in release.")]
-        public bool MeticaSdkLogging;
+        [Tooltip("Print Metica's own SDK logs. On by default while integrating; turn off for release.")]
+        public bool MeticaSdkLogging = true;
 
         [Tooltip("Print this integration's logs. Warnings and errors print either way.")]
         public bool Logging = true;

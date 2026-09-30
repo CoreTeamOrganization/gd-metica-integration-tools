@@ -11,6 +11,7 @@
                   "Runtime/Scripts/Remote/RemoteConfigManager.cs",
                   "Runtime/Scripts/Ads/Core/AdsManager.cs",
                   "Runtime/Scripts/Analytics/AnalyticsManager.cs",
+                  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
                   "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                   "Runtime/Scripts/Ads/Core/IAdNetworkService.cs",
                   "Runtime/Scripts/Ads/Core/AdNetworkController.cs",
@@ -62,6 +63,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "e5be464017b8e2bf.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "56d7a703e0c39f5a.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -131,6 +136,10 @@
                                            "file":  "e5be464017b8e2bf.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "56d7a703e0c39f5a.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -196,6 +205,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "e5be464017b8e2bf.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "56d7a703e0c39f5a.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -265,6 +278,10 @@
                                            "file":  "7e2b694025b11c73.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "acdb4eec28130ede.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -330,6 +347,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "7e2b694025b11c73.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "acdb4eec28130ede.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -399,6 +420,10 @@
                                            "file":  "d55e159d2d1d82f0.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "acdb4eec28130ede.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -464,6 +489,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "7c7371ab380a3d59.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -533,6 +562,10 @@
                                            "file":  "7c7371ab380a3d59.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -598,6 +631,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "7c7371ab380a3d59.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -667,6 +704,10 @@
                                            "file":  "7c7371ab380a3d59.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -732,6 +773,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "7c7371ab380a3d59.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -801,6 +846,10 @@
                                            "file":  "7c7371ab380a3d59.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -866,6 +915,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "7c7371ab380a3d59.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
@@ -935,6 +988,10 @@
                                            "file":  "7c7371ab380a3d59.txt"
                                        },
                                        {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
+                                       },
+                                       {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",
                                            "file":  "9991e2161e77d609.txt"
                                        },
@@ -1000,6 +1057,10 @@
                                        {
                                            "path":  "Runtime/Scripts/Analytics/AnalyticsManager.cs",
                                            "file":  "7c7371ab380a3d59.txt"
+                                       },
+                                       {
+                                           "path":  "Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs",
+                                           "file":  "da35366fd5f86e6c.txt"
                                        },
                                        {
                                            "path":  "Runtime/Scripts/Configurations/SDKConfiguration.cs",

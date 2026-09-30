@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.PackageManager;
 
@@ -32,10 +33,11 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
-            if (!EditorUtility.DisplayDialog("Remove Metica Integration Tools",
-                    $"Remove {PackageName} from this project?\n\nYour Metica integration stays — only the " +
-                    "tool goes.",
-                    "Remove", "Cancel"))
+            var paths = new List<string> { $"The package {PackageName} (Packages/manifest.json entry)" };
+            if (AssetDatabase.IsValidFolder(SettingsFolder)) paths.Add($"{SettingsFolder}/");
+
+            if (!DeleteConfirm.Ask("Remove Metica Integration Tools", paths,
+                    "your Metica integration — everything the tool wrote into the project stays"))
                 return;
 
             // Its assets' script lives in this package, so left behind they would show up as

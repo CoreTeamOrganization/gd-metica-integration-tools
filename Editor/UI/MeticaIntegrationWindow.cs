@@ -29,6 +29,9 @@ namespace GameDistrict.MeticaIntegrationTools
         [SerializeField] private bool _logOpen;
         [SerializeField] private List<string> _whyOpen = new List<string>();
 
+        /// <summary>Checklist rows (<see cref="StepItem"/>) currently expanded, by title.</summary>
+        [SerializeField] private List<string> _openItems = new List<string>();
+
         private MeticaFlow _ads;
         private MeticaFlow _genre;
 
@@ -116,26 +119,52 @@ namespace GameDistrict.MeticaIntegrationTools
             RefreshNow();
         }
 
-        /// <summary>Re-verifies on the next editor tick — never inside a UI callback.</summary>
+        /// <summary>
+        /// Runs <paramref name="action"/> on the next editor update, once — never inside a UI
+        /// callback. Not EditorApplication.delayCall: when any other editor code's delayCall
+        /// throws, Unity drops everything queued after it, and a refresh lost that way left
+        /// the window ignoring every click. An update handler that misses a frame to someone
+        /// else's exception simply runs on the next one.
+        /// </summary>
+        private static void NextTick(Action action)
+        {
+            EditorApplication.CallbackFunction tick = null;
+            tick = () =>
+            {
+                EditorApplication.update -= tick;
+                action();
+            };
+            EditorApplication.update += tick;
+        }
+
+        /// <summary>Re-verifies on the next editor tick. Extra calls in the same frame fold into one.</summary>
         private void QueueRefresh()
         {
             if (_refreshQueued) return;
             _refreshQueued = true;
 
-            EditorApplication.delayCall += () =>
+            NextTick(() =>
             {
                 _refreshQueued = false;
                 if (this != null) RefreshNow();
-            };
+            });
         }
 
         private void RefreshNow()
         {
             if (_root == null) return;
 
-            MeticaPaths.ForgetCache();
-            _ads.Refresh();
-            _genre.Refresh();
+            try
+            {
+                MeticaPaths.ForgetCache();
+                _ads.Refresh();
+                _genre.Refresh();
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+
             Rebuild();
         }
 
@@ -146,13 +175,19 @@ namespace GameDistrict.MeticaIntegrationTools
             _busy = true;
             Rebuild();
 
-            EditorApplication.delayCall += () =>
+            NextTick(() =>
             {
-                flow.Apply(index);
-                _busy = false;
-                _viewedStepId = null;
-                if (this != null) RefreshNow();
-            };
+                try
+                {
+                    flow.Apply(index);
+                }
+                finally
+                {
+                    _busy = false;
+                    _viewedStepId = null;
+                    if (this != null) RefreshNow();
+                }
+            });
         }
 
         // ── Screens ────────────────────────────────────────────────────────────
@@ -270,7 +305,7 @@ namespace GameDistrict.MeticaIntegrationTools
             }
 
             _menu.Add(MenuRow(MiIcon.Kind.Trash, "Remove Metica Integration Tools…",
-                () => EditorApplication.delayCall += ToolRemover.Remove));
+                () => NextTick(ToolRemover.Remove)));
 
             _root.Add(_menu);
             _moreButton.AddToClassList("mi-icon-btn--active");
@@ -474,6 +509,10 @@ namespace GameDistrict.MeticaIntegrationTools
                         .With("mi-link", "mi-problem__more"));
                 status.Add(problem);
             }
+            else if (result.Warnings.Count > 0)
+            {
+                status.Add(Box("mi-warning", MiIcon.Kind.Error, result.Warnings[0]));
+            }
 
             foreach (var note in result.Notes) status.Add(Text("• " + note, "mi-note"));
             if (status.childCount > 0) _content.Add(status);
@@ -616,6 +655,14 @@ namespace GameDistrict.MeticaIntegrationTools
             var block = El("mi-controls");
             VisualElement buttons = null;
 
+            // Buttons that only show under a condition, re-checked whenever a text field changes.
+            var conditional = new List<(VisualElement element, Func<bool> showWhen)>();
+            void UpdateConditional()
+            {
+                foreach (var (element, showWhen) in conditional)
+                    element.style.display = showWhen() ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
             foreach (var control in controls)
             {
                 switch (control)
@@ -627,12 +674,23 @@ namespace GameDistrict.MeticaIntegrationTools
                             : IconTextButton(button.Icon == StepIcon.Folder ? MiIcon.Kind.Folder : MiIcon.Kind.File,
                                 button.Label, () => RunControl(button.OnClick), "mi-btn--secondary");
                         element.SetEnabled(button.Enabled && !_busy);
+                        if (button.ShowWhen != null) conditional.Add((element, button.ShowWhen));
                         buttons.Add(element);
                         break;
 
                     case StepToggle toggle:
                         buttons = null;
                         block.Add(Switch(toggle));
+                        break;
+
+                    case StepText text:
+                        buttons = null;
+                        block.Add(TextRow(text, UpdateConditional));
+                        break;
+
+                    case StepItem item:
+                        buttons = null;
+                        block.Add(ItemRow(item));
                         break;
 
                     case StepChoice choice:
@@ -643,7 +701,40 @@ namespace GameDistrict.MeticaIntegrationTools
                 }
             }
 
+            UpdateConditional();
             return block;
+        }
+
+        /// <summary>
+        /// A checklist row: status mark, title and status line, green or red by whether it is
+        /// set. Click it to open the controls that set it.
+        /// </summary>
+        private VisualElement ItemRow(StepItem item)
+        {
+            var open = _openItems.Contains(item.Title);
+            var row = El("mi-item", item.Done ? "mi-item--done" : "mi-item--todo");
+
+            var head = new Button(() =>
+            {
+                if (!_openItems.Remove(item.Title)) _openItems.Add(item.Title);
+                Rebuild();
+            }).With("mi-item__head");
+            head.Add(new MiIcon(item.Done ? MiIcon.Kind.Check : MiIcon.Kind.Error, 2f, "mi-icon--16").With("mi-item__mark"));
+
+            var text = El("mi-item__text");
+            text.Add(Text(item.Title, "mi-item__title"));
+            if (!string.IsNullOrEmpty(item.Status)) text.Add(Text(item.Status, "mi-item__status"));
+            head.Add(text);
+            head.Add(new MiIcon(open ? MiIcon.Kind.ChevronDown : MiIcon.Kind.ChevronRight, 2f).With("mi-item__chevron"));
+            row.Add(head);
+
+            if (!open) return row;
+
+            var body = El("mi-item__body");
+            if (item.Actions.Count > 0) body.Add(ControlsBlock(item.Actions));
+            else body.Add(Text(item.Done ? "Nothing to do here." : item.Status, "mi-caption"));
+            row.Add(body);
+            return row;
         }
 
         private Button Switch(StepToggle toggle)
@@ -655,6 +746,44 @@ namespace GameDistrict.MeticaIntegrationTools
             track.Add(El("mi-switch__knob"));
             row.Add(track);
             row.Add(Text(toggle.Label, "mi-switch__label"));
+            return row;
+        }
+
+        /// <summary>
+        /// A labelled text field. Typing goes straight to the step, with no re-check — a
+        /// rebuild would take the focus away mid-word.
+        /// </summary>
+        private VisualElement TextRow(StepText text, Action afterChange)
+        {
+            var row = El("mi-field");
+            row.Add(Text(text.Label, "mi-field__label"));
+
+            var field = new TextField { value = text.Value ?? string.Empty };
+            field.AddToClassList("mi-text");
+            field.RegisterValueChangedCallback(change =>
+            {
+                text.OnChanged(change.newValue);
+                afterChange();
+            });
+            field.SetEnabled(!_busy);
+            row.Add(field);
+
+            if (text.Secret)
+            {
+                // Masked by default; the eye shows it, without a rebuild that would lose the focus.
+                field.isPasswordField = true;
+                var reveal = new Button { tooltip = "Show" }.With("mi-icon-btn", "mi-field__reveal");
+                reveal.Add(new MiIcon(MiIcon.Kind.Eye, 1.75f, "mi-icon--16"));
+                reveal.clicked += () =>
+                {
+                    field.isPasswordField = !field.isPasswordField;
+                    reveal.tooltip = field.isPasswordField ? "Show" : "Hide";
+                    reveal.Clear();
+                    reveal.Add(new MiIcon(field.isPasswordField ? MiIcon.Kind.Eye : MiIcon.Kind.EyeOff, 1.75f, "mi-icon--16"));
+                };
+                row.Add(reveal);
+            }
+
             return row;
         }
 
@@ -687,7 +816,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         private void RunControl(Action action)
         {
-            EditorApplication.delayCall += () =>
+            NextTick(() =>
             {
                 try
                 {
@@ -699,7 +828,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 }
 
                 if (this != null) RefreshNow();
-            };
+            });
         }
 
         // ── Finished ───────────────────────────────────────────────────────────
