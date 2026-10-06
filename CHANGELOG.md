@@ -263,7 +263,8 @@
   5.3.0+ templates by `Tools~/MakePre530Templates.py`; banner for 5.0.0 – 5.0.1 hand-ported from
   that SDK's ApplovinBanner). New patch on 5.0 – 5.2: `MeticaConsentSettings` added to
   `ConsentManager`'s fixed consent list (it skips until Metica is initialized; AdNetworkMetica
-  applies consent right after init). Patch tests pass on all 15 v5 releases; the Unity compile
-  of 5.0 – 5.2 was still running at push time.
+  applies consent right after init). Patch tests pass on all 15 v5 releases; compiled in Unity
+  2022.3 batchmode with 0 errors on 5.0.0, 5.0.1, 5.0.2, 5.1.0, 5.1.1, 5.2.0, and re-checked on
+  5.3.0 and 5.5.0.
 - New optional first step "Compare with original GD SDK" (GD SDK flow): counts what the project
   changed, opens the Compare window, skip or sign off in one click.

@@ -149,25 +149,26 @@ hand-ported banner for 5.0.0 – 5.0.1) and one more patch: `MeticaConsentSettin
 `ConsentManager`'s fixed consent list. The wrapper step picks them by reading the project's
 own ad-unit classes, not the version number. On 5.0 – 5.2 the Metica banner / MREC cannot be
 repositioned at runtime and the interstitial has no close callback — as that SDK's own
-AppLovin units. **The Unity compile test of the 5.0 – 5.2 set was still running when this was
-pushed** — the table below is the earlier 5.3.0-only result.
+AppLovin units.
 
 How that was checked, on every non-beta v5 release (stock copies in `Stock/`):
 
 | GD SDK | Patches apply (in memory) | Compiles in Unity with the patches + wrapper files |
 |---|---|---|
-| 5.3.0 – 5.5.0 | ✅ all | ✅ 5.3.0, 5.3.1, 5.3.2, 5.3.3, 5.3.4, 5.3.5, 5.3.6, 5.4.0, 5.5.0 |
-| 5.0.0 – 5.2.0 | ✅ all | ❌ the wrapper files — tested on 5.0.0 and 5.2.0 |
+| 5.3.0 – 5.5.0 | ✅ all | ✅ 5.3.0, 5.3.1, 5.3.2, 5.3.3, 5.3.4, 5.3.5, 5.3.6, 5.4.0, 5.5.0 (5.3.0 and 5.5.0 re-checked with the Pre530 change) |
+| 5.0.0 – 5.2.0 | ✅ all, plus the consent patch | ✅ 5.0.0, 5.0.1, 5.0.2, 5.1.0, 5.1.1, 5.2.0 — with the `Pre530` wrapper files |
 
 - **Patches apply**: every patch finds its anchor, the patch step's own check passes, and a
   second run changes nothing. Run by the real patch code on the stock copies, in memory.
 - **Compiles**: each release exported from its tag, the patches and the GD wrapper files
   applied, Metica SDK 2.45.2 added, then compiled in Unity 2022.3.62f2 batchmode.
-- **Why 5.3.0**: before it the GD SDK's ad-unit base classes are different — no
-  interstitial close callback (`ShowInterstitial(string, Action)`), no banner
-  `RepositionBanner` / `IsBannerActive`, no `MRecPosition` — so `MeticaInterstitial`,
-  `MeticaBanner` and `MeticaMRec` do not compile. Supporting them would need a second set
-  of wrapper files; no game has been seen below 5.3.1.
+- **What differs before 5.3.0** (why 5.0 – 5.2 get the `Pre530` files): no interstitial
+  close callback (`ShowInterstitial(string, Action)`), no banner / MREC reposition, no
+  `MRecPosition` (the MREC position is a `BannerPosition`), no
+  `ConsentManager.AddAndUpdateConsentService`, and `DelayedActionManager.Add` needs an
+  `ignoreTimeScale` argument. 5.0.0 – 5.0.1 also have a different banner model (per-unit
+  `bannerStatus`, priorities, a private `AdsManager.BannerStatus`), hence the hand-ported
+  banner. The current wrappers do not compile there — found by the same Unity compile.
 
 Version differences the patches handle on their own:
 
