@@ -273,3 +273,7 @@
   values, so nothing moves until someone changes them). Applied when the units are created;
   RepositionBanner / RepositionMRec still move them at runtime. Checked by compiling the whole
   standalone runtime with the Metica 2.45.2 and MAX sources.
+- Standalone: `MeticaAdsManager.LoadInterstitial()` / `LoadRewarded()` — load at a moment the game
+  chooses. Optional: the runtime already loads at start, after each close and after a failed
+  load. They do nothing before Metica is ready, without an ad unit id, or when an ad is
+  already loaded (so a ready ad is never replaced).

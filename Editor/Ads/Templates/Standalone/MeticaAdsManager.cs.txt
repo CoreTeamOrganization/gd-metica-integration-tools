@@ -118,6 +118,18 @@ namespace MeticaIntegration
             _interstitial != null && _interstitial.HasInterstitial(doRequest);
 
         /// <summary>
+        /// Starts loading an interstitial now. Not needed in the usual flow — the runtime loads
+        /// one at start, after each close and after a failed load — but there for loading at
+        /// another moment. Does nothing before Metica is ready, with no interstitial ad unit
+        /// id, or when one is already loaded.
+        /// </summary>
+        public static void LoadInterstitial()
+        {
+            if (_interstitial == null || _interstitial.HasInterstitial(false)) return;
+            _interstitial.LoadInterstitial();
+        }
+
+        /// <summary>
         /// Shows an interstitial if one is ready. <paramref name="onClosed"/> runs when the ad
         /// is dismissed — and immediately when there was no ad, so a caller that gates
         /// gameplay on it never stalls. The bool says whether an ad was actually shown.
@@ -138,6 +150,18 @@ namespace MeticaIntegration
 
         public static bool HasRewarded(bool doRequest = true) =>
             _rewarded != null && _rewarded.HasRewarded(doRequest);
+
+        /// <summary>
+        /// Starts loading a rewarded ad now. Not needed in the usual flow — the runtime loads
+        /// one at start, after each close and after a failed load — but there for loading at
+        /// another moment. Does nothing before Metica is ready, with no rewarded ad unit id, or
+        /// when one is already loaded.
+        /// </summary>
+        public static void LoadRewarded()
+        {
+            if (_rewarded == null || _rewarded.HasRewarded(false)) return;
+            _rewarded.LoadRewarded();
+        }
 
         /// <summary>
         /// Shows a rewarded ad. <paramref name="onComplete"/> gets true only if the user
