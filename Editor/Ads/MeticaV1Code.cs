@@ -39,7 +39,6 @@ namespace GameDistrict.MeticaIntegrationTools
             (new Regex(@"\bMetica\.ADS\b"), "v1 namespace — remove it"),
             (new Regex(@"\busing\s+Metica\.SDK\s*;"), "v1 namespace — remove it"),
             (new Regex(@"\bMetica\.SDK\.\w"), "v1 namespace — remove it"),
-            (new Regex(@"\bIsMeticaAdsEnabled\b"), "v1 per-user switch — now MeticaAdsManager.IsEnabled (the remote switch)"),
             (new Regex(@"\bInitializeWithResultAsync\b|\bMeticaAdsInitializationResult\b"), "v1 init — now MeticaAdsManager.Initialize()"),
             (new Regex(@"\bNotifyAd(LoadAttempt|LoadFailed|LoadSuccess|ShowSuccess)\b"), "v1 MAX reporting — remove, there is no 2.x equivalent"),
             (new Regex(@"\bToMeticaAd\b|\bToAdInfo\b"), "v1 conversion — remove, 2.x has none"),
@@ -48,6 +47,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary>Names both versions have: v1 only inside a file that uses a v1 namespace.</summary>
         private static readonly Regex Shared = new Regex(@"\b(MeticaAds|MeticaAdsCallbacks|MeticaSdk)\.\w");
+
+        /// <summary>
+        /// v1's usual name for its per-user switch — but a game's own variable, not Metica API,
+        /// and a game may keep the name for the 2.x switch. Counts only in a file that also has
+        /// real v1 API.
+        /// </summary>
+        private static readonly Regex V1SwitchName = new Regex(@"\bIsMeticaAdsEnabled\b");
 
         private static readonly Regex V1Namespace = new Regex(@"\bMetica\.ADS\b|\busing\s+Metica\.SDK\s*;");
 
@@ -109,6 +115,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
                 var hint = Markers.FirstOrDefault(m => m.pattern.IsMatch(line)).hint;
                 if (hint == null && v1File && Shared.IsMatch(line)) hint = "v1 API — replace with MeticaAdsManager, or remove";
+                if (hint == null && v1File && V1SwitchName.IsMatch(line))
+                    hint = "v1 per-user switch — now MeticaAdsManager.IsEnabled (the remote switch)";
                 if (hint == null) continue;
 
                 found.Add(new V1Reference { Path = relativePath, Line = i + 1, Text = lines[i].Trim(), Hint = hint });
