@@ -1,0 +1,105 @@
+namespace Monetization.Runtime.Analytics
+{
+    public class SimulationJobDayCompleted
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int   Day               { get; }
+        public float PlayTime          { get; }
+        public float CashSpent         { get; }
+        public float CashEarned        { get; }
+        public float CashBalance       { get; }
+        public float EnergySpent       { get; }
+        public float EnergyEarned      { get; }
+        public float EnergyBalance     { get; }
+        public int   RewardedCount     { get; }
+        public int   InterstitialCount { get; }
+        public int   IapCount          { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public int? Level              { get; set; }
+        public int? Hour               { get; set; }
+        public int? CustomersProcessed { get; set; }
+        public int? ItemsCollected     { get; set; }
+        public int? ItemsSold          { get; set; }
+
+        public SimulationJobDayCompleted(int day, float playTime,
+            float cashSpent, float cashEarned, float cashBalance,
+            float energySpent, float energyEarned, float energyBalance,
+            int rewardedCount, int interstitialCount, int iapCount)
+        {
+            Day               = day;
+            PlayTime          = playTime;
+            CashSpent         = cashSpent;
+            CashEarned        = cashEarned;
+            CashBalance       = cashBalance;
+            EnergySpent       = energySpent;
+            EnergyEarned      = energyEarned;
+            EnergyBalance     = energyBalance;
+            RewardedCount     = rewardedCount;
+            InterstitialCount = interstitialCount;
+            IapCount          = iapCount;
+        }
+    }
+
+    public class SimulationJobLevelFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int   Day               { get; }
+        public float PlayTime          { get; }
+        public float CashSpent         { get; }
+        public float CashEarned        { get; }
+        public float CashBalance       { get; }
+        public float EnergySpent       { get; }
+        public float EnergyEarned      { get; }
+        public float EnergyBalance     { get; }
+        public int   RewardedCount     { get; }
+        public int   InterstitialCount { get; }
+        public int   IapCount          { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public int? Level              { get; set; }
+        public int? Hour               { get; set; }
+        public int? CustomersProcessed { get; set; }
+        public int? ItemsCollected     { get; set; }
+        public int? ItemsSold          { get; set; }
+
+        public SimulationJobLevelFinished(int day, float playTime,
+            float cashSpent, float cashEarned, float cashBalance,
+            float energySpent, float energyEarned, float energyBalance,
+            int rewardedCount, int interstitialCount, int iapCount)
+        {
+            Day               = day;
+            PlayTime          = playTime;
+            CashSpent         = cashSpent;
+            CashEarned        = cashEarned;
+            CashBalance       = cashBalance;
+            EnergySpent       = energySpent;
+            EnergyEarned      = energyEarned;
+            EnergyBalance     = energyBalance;
+            RewardedCount     = rewardedCount;
+            InterstitialCount = interstitialCount;
+            IapCount          = iapCount;
+        }
+    }
+
+    public class SimulationJobTutorialCompleted
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Day      { get; }
+        public float  PlayTime { get; }
+        public int    Step     { get; }
+        public string StepName { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public int? Level { get; set; }
+        public int? Hour  { get; set; }
+
+        public SimulationJobTutorialCompleted(int day, float playTime, int step, string stepName)
+        {
+            Day      = day;
+            PlayTime = playTime;
+            Step     = step;
+            StepName = stepName;
+        }
+    }
+}

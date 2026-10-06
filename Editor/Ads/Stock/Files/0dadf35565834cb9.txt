@@ -1,0 +1,109 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using Io.AppMetrica;
+using Monetization.Runtime.Ads;
+using Newtonsoft.Json;
+using UnityEngine;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Sdk;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class AppMetricaAnalyticsNetwork : IAnalyticsEventsService, IAnalyticsAdRevenueService
+    {
+        private static readonly StringBuilder stringBuilder = new StringBuilder();
+
+        public static void Activate()
+        {
+            var config = Resources.Load<AppMetricaConfiguration>(MonetizationConfigurationsPath.AppMetrica);
+            AppMetrica.Activate(new AppMetricaConfig(config.ApiKey)
+            {
+                SessionsAutoTrackingEnabled = config.SessionsAutoTracking,
+                NativeCrashReporting = config.NativeCrashReporting,
+                CrashReporting = config.CrashReporting,
+                SessionTimeout = config.SessionTimeout,
+                Logs = config.Logs,
+                FirstActivationAsUpdate = !IsFirstLaunch(),
+            });
+        }
+
+        private static bool IsFirstLaunch()
+        {
+            return MonetizationPreferences.SessionCount.Equals(1);
+        }
+
+        public void SendEvent(string name)
+        {
+            AppMetrica.ReportEvent(name);
+        }
+
+        public void SendEvent(string name, Dictionary<string, object> parameters)
+        {
+            AppMetrica.ReportEvent(name, JsonConvert.SerializeObject(parameters));
+        }
+
+        public void SendEvent(string name, params string[] parameters)
+        {
+            AppMetrica.ReportEvent(name, GetJsonFromParams(parameters));
+        }
+
+        public void SendEvent(string name, string json)
+        {
+            AppMetrica.ReportEvent(name, json);
+        }
+
+        string GetJsonFromParams(params string[] data)
+        {
+            stringBuilder.Clear();
+            int dataLength = data.Length;
+            for (int i = 0; i < dataLength; i++)
+            {
+                if (i == dataLength - 1)
+                {
+                    stringBuilder.Append($"\"{data[i]}\"");
+                    break;
+                }
+
+                stringBuilder.Append($"{{\"{data[i]}\":");
+            }
+
+            stringBuilder.Append('}', data.Length - 1);
+            return stringBuilder.ToString();
+        }
+
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            AdRevenue rev = new AdRevenue(adRevenueInfo.Revenue, adRevenueInfo.Currency)
+            {
+                AdNetwork = adRevenueInfo.AdSource,
+                AdUnitId = adRevenueInfo.AdUnitName,
+                AdPlacementName = adRevenueInfo.AdPlacement,
+                AdType = GetAdType(adRevenueInfo.AdFormat),
+                Payload = new Dictionary<string, string>()
+                {
+                    { MonetizationInitializeOnLoad.Version, adRevenueInfo.Platform }
+                }
+            };
+
+
+            AppMetrica.ReportAdRevenue(rev);
+        }
+
+        static AdType GetAdType(AdFormat format)
+        {
+            switch (format)
+            {
+                case AdFormat.CollapsibleBanner: return AdType.Banner;
+                case AdFormat.Banner: return AdType.Banner;
+                case AdFormat.Interstitial: return AdType.Interstitial;
+                case AdFormat.Rewarded: return AdType.Rewarded;
+                case AdFormat.AppOpen: return AdType.Other;
+                case AdFormat.MRec: return AdType.Mrec;
+                default: return AdType.Other;
+            }
+        }
+    }
+}

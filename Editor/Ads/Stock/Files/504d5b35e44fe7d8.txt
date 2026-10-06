@@ -1,0 +1,17 @@
+package com.gamedistrict.utils;
+
+import android.util.Log;
+import android.content.Context;
+
+public class Logger {
+    private static final String TAG = "Monetization";
+    public static void logMessage(String message) {
+        Log.d(TAG, message);
+    }
+    public static void logWarning(String message) {
+        Log.w(TAG, message);
+    }
+    public static void logError(String message) {
+        Log.e(TAG, message);
+    }
+}

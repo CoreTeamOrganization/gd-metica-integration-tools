@@ -1,0 +1,28 @@
+using Monetization.Runtime.Configurations;
+
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class BannerAdUnit : AdUnit
+    {
+        protected bool isLoading = false;
+        protected bool hasBanner = false;
+        protected bool _isBannerActive = false;
+
+        protected AdUnitsConfiguration.BannerInfo bannerInfo;
+        public override AdFormat AdType => AdFormat.Banner;
+
+        public void SetBannerPosition(AdUnitsConfiguration.BannerInfo bannerInfo)
+        {
+            this.bannerInfo = bannerInfo;
+        }
+
+        public abstract void LoadBanner();
+        public abstract bool HasBanner();
+        public abstract void ShowBanner();
+        public abstract void HideBanner();
+        public abstract void DestroyBanner();
+        public abstract bool IsBannerActive();
+        public abstract void RepositionBanner(BannerPosition newPosition);
+
+    }
+}

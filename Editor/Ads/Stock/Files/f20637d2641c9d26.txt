@@ -1,0 +1,40 @@
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    class ConsentPreferencesButton : MonoBehaviour
+    {
+        [SerializeField] GameObject buttonParent;
+        bool isLoading = false;
+
+        private void Start()
+        {
+            DisableButtonIfCosentNotRequired();
+        }
+
+        void DisableButtonIfCosentNotRequired()
+        {
+            bool value = ConsentManager.UMP.PrivacyOptionsRequired;
+            buttonParent.SetActive(value);
+        }
+
+        public void OpenSettings() // Btn Listener
+        {
+            if (isLoading) return;
+
+            isLoading = true;
+            MobileToast.Show("Loading Consent!", false);
+
+            ConsentManager.UMP.ShowPrivacyOptionsForm((error) =>
+            {
+                isLoading = false;
+                if (error != null)
+                {
+                    Message.LogError(Logger.Tag.UMP, $"Failed to show privacy options with error : {error}");
+                }
+            });
+        }
+    }
+}

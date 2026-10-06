@@ -1,0 +1,35 @@
+using System;
+using AdjustSdk;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+using UnityEngine.Purchasing;
+using UnityEngine.Purchasing.Security;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public class CrossPlatformIAPVerifier : IIAPVerifier
+    {
+        public void Verify(InAppRevenueInfo product, Action<IAPVerifyResult> callback)
+        {
+            try
+            {
+#if UNITY_EDITOR
+                callback?.Invoke(new IAPVerifyResult(true));
+#else
+                CrossPlatformValidator validator =
+                    new CrossPlatformValidator(GooglePlayTangle.Data(), AppleTangle.Data(), Application.identifier);
+                validator.Validate(product.Receipt);
+                callback?.Invoke(new IAPVerifyResult(true));
+
+                Message.Log(Tag.InAppPurchasing, "CrossPlatform verification successful");
+#endif
+            }
+            catch (IAPSecurityException exception)
+            {
+                Message.LogWarning(Tag.InAppPurchasing, "CrossPlatform verification failed");
+                Message.LogException(Tag.InAppPurchasing, exception);
+                callback?.Invoke(new IAPVerifyResult(false));
+            }
+        }
+    }
+}

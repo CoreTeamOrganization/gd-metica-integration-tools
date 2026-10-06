@@ -1,0 +1,15 @@
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Metica analytics interface for the Simulation (Vehicle) genre.
+    /// Retrieve via <c>AnalyticsManager.Game</c> using this interface as the type parameter.
+    /// </summary>
+    public interface ISimulationVehicleAnalytics : IGDMeticaAnalytics
+    {
+        /// <summary>Logs a levelStarted event when the player enters a vehicle simulation level.</summary>
+        void LevelStarted(SimulationVehicleLevelStarted data);
+
+        /// <summary>Logs a levelFinished event when a vehicle simulation level ends (win or fail).</summary>
+        void LevelFinished(SimulationVehicleLevelFinished data);
+    }
+}

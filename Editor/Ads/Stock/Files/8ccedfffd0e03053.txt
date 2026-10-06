@@ -1,0 +1,63 @@
+using UnityEngine;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AdjustSdk;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdNetworkAppLovin : IAdNetworkService
+    {
+        private Action callback;
+        public static bool CountryFound;
+        public void Initialize(string appID, Action onInitialized)
+        {
+            if (RemoteConfigManager.Configuration.DisableMaxOn2GBDevices)
+            {
+                if (SystemInfo.systemMemorySize <= 2048)
+                {
+                    Message.LogWarning(Tag.Applovin,
+                        "Failed to initialize MAX because 2GB devices are disabled via remote config!");
+                    return;
+                }
+            }
+
+            callback = onInitialized;
+            Message.Log(Tag.Applovin, "Initializing...");
+
+            if (AdsManager.TestAds)
+            {
+                string id = MonetizationConstants.GetAdvertisingID();
+                if (id != null)
+                    MaxSdk.SetTestDeviceAdvertisingIdentifiers(new string[1] { id });
+            }
+
+            MaxSdkCallbacks.OnSdkInitializedEvent += MaxSdkCallbacks_OnSdkInitializedEvent;
+
+            MaxSdkBase.InvokeEventsOnUnityMainThread = false;
+            MaxSdk.SetVerboseLogging(MonetizationConstants.UseLogs);
+            MaxSdk.InitializeSdk();
+        }
+
+        private void MaxSdkCallbacks_OnSdkInitializedEvent(MaxSdkBase.SdkConfiguration obj)
+        {
+            callback?.Invoke();
+            Message.Log(Tag.Applovin, "Successfully Initialized");
+
+            if (!string.IsNullOrEmpty(obj.CountryCode))
+            {
+                CountryFound = true;
+            }
+            else
+            {
+                CountryFound = false;
+            }
+        }
+    }
+}

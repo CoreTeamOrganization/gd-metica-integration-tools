@@ -1,0 +1,1056 @@
+// =============================================================================
+// GDMonetization Package Exporter
+// -----------------------------------------------------------------------------
+// Location : Assets/GDMonetization/Editor/PackageExporter.cs
+// Menu     : GDMonetization > Create Package
+//
+// Two-window flow:
+//   1. Folder tree (tri-state) -> expandable foldouts, pre-ticks the 8 folders
+//                                 shipped in v6.0.1, excluded folders hidden,
+//                                 cascading parent/child tick behavior.
+//   2. Changelog editor        -> Added / Changed / Fixed / Removed sections,
+//                                 reads version from MonetizationInitializeOnLoad.cs
+//                                 (public const string Version = "x.y.z"),
+//                                 writes CHANGELOG.md in Keep-a-Changelog format
+//                                 (parser-friendly for GitHub Actions release notes).
+//
+// Buttons on changelog window:
+//   - Close                          : cancel everything
+//   - Generate Package               : export .unitypackage only
+//   - Generate Package with Changelog: export .unitypackage + write/update
+//                                      Assets/GDMonetization/CHANGELOG.md
+//
+// Export behavior:
+//   - Enumerates files explicitly (no IncludeDependencies). What you tick is
+//     what gets exported, nothing more, nothing less.
+//   - Skips Unity's confirmation dialog (no Interactive flag).
+//   - Filters out gradle templates and other studio-specific files via
+//     ExcludedFileNames / ExcludedExtensions.
+//
+// Output:
+//   <RepoRoot>/Releases/Monetization_v{ver}.unitypackage
+//   (Releases is a sibling of Assets/, so Unity does NOT re-import the package.)
+// =============================================================================
+
+#if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using UnityEditor;
+using UnityEngine;
+
+namespace GDMonetization.EditorTools
+{
+    // -------------------------------------------------------------------------
+    // Shared paths + exclusion rules (single source of truth)
+    // -------------------------------------------------------------------------
+    internal static class ExporterPaths
+    {
+        public const string VersionFileRel =
+            "Assets/GDMonetization/Runtime/Scripts/MonetizationInitializeOnLoad.cs";
+
+        public const string ChangelogRel =
+            "Assets/GDMonetization/CHANGELOG.md";
+
+        public static string ReleasesFolderAbs
+        {
+            get
+            {
+                var repoRoot = Directory.GetParent(Application.dataPath).FullName;
+                return Path.Combine(repoRoot, "Releases").Replace('\\', '/');
+            }
+        }
+
+        // Folder name patterns hidden from the tree and never exported.
+        public static readonly string[] ExcludedFolderNames = new[]
+        {
+            "_Samples",
+            "_SampleAssets",
+            "Samples~",
+            "Editor Default Resources",
+            "Gizmos",
+            "StreamingAssets",
+        };
+
+        // Exact asset paths (or path prefixes) excluded regardless of folder name.
+        public static readonly string[] ExcludedFolderPaths = new[]
+        {
+            "Assets/Plugins/Android/FirebaseApp.androidlib/res",
+        };
+
+        public static readonly HashSet<string> ExcludedFileNames =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "baseProjectTemplate.gradle",
+                "mainTemplate.gradle",
+                "launcherTemplate.gradle",
+                "settingsTemplate.gradle",
+                "gradleTemplate.properties",
+            };
+
+        public static readonly HashSet<string> ExcludedExtensions =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".unitypackage",
+                ".DS_Store",
+            };
+
+        public static bool IsFolderExcluded(string assetPath)
+        {
+            var normalized = assetPath.TrimEnd('/');
+            var name = Path.GetFileName(normalized);
+            if (ExcludedFolderNames.Any(ex => string.Equals(ex, name, StringComparison.OrdinalIgnoreCase)))
+                return true;
+            return ExcludedFolderPaths.Any(p =>
+                string.Equals(normalized, p, StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static bool IsFileExcluded(string assetPath)
+        {
+            var name = Path.GetFileName(assetPath);
+            if (ExcludedFileNames.Contains(name)) return true;
+            var ext = Path.GetExtension(assetPath);
+            if (ExcludedExtensions.Contains(ext)) return true;
+            return false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Tree node (one per folder OR file in the tree)
+    // -------------------------------------------------------------------------
+    internal class FolderNode
+    {
+        public string Path;             // "Assets/Foo/Bar" or "Assets/Foo/file.cs"
+        public string DisplayName;      // "Bar" or "file.cs"
+        public bool IsDefault;          // shipped in v6.0.1 defaults
+        public bool IsFile;             // true = leaf file, false = folder
+        public bool Expanded;
+        public List<FolderNode> Children = new List<FolderNode>();
+
+        // State semantics: a node is "ticked" if its own checkbox is on. Children
+        // can override. During export we walk the tree and treat a node as
+        // exportable when EITHER it is ticked OR any descendant is ticked.
+        public bool Ticked;
+
+        // Computed at draw-time for tri-state visual
+        public bool IsPartiallyTicked
+        {
+            get
+            {
+                if (Children.Count == 0) return false;
+                bool anyOn = false, anyOff = false;
+                ForEachDescendant(this, n =>
+                {
+                    if (n.Ticked) anyOn = true; else anyOff = true;
+                });
+                return anyOn && anyOff && !Ticked;
+            }
+        }
+
+        public static void ForEachDescendant(FolderNode root, Action<FolderNode> visit)
+        {
+            foreach (var c in root.Children)
+            {
+                visit(c);
+                ForEachDescendant(c, visit);
+            }
+        }
+
+        // Recursively set tick state on this node and every descendant.
+        public void SetTickedCascade(bool value)
+        {
+            Ticked = value;
+            foreach (var c in Children) c.SetTickedCascade(value);
+        }
+
+        // After a child's state changes, recompute this node's tick to match
+        // its children: all children ticked -> ticked, otherwise untick.
+        // (Partial visual is computed live in IsPartiallyTicked.)
+        public void RecomputeFromChildren()
+        {
+            if (Children.Count == 0) return;
+            bool allOn = Children.All(c => c.Ticked && c.AllDescendantsTicked());
+            Ticked = allOn;
+        }
+
+        public bool AllDescendantsTicked()
+        {
+            if (Children.Count == 0) return Ticked;
+            return Ticked && Children.All(c => c.AllDescendantsTicked());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Window 1: folder selection (tri-state tree)
+    // -------------------------------------------------------------------------
+    public class PackageExporterWindow : EditorWindow
+    {
+        private static readonly string[] DefaultFolders = new[]
+        {
+            "Assets/GDMonetization",
+            "Assets/Adjust",
+            "Assets/AppMetrica",
+            "Assets/ExternalDependencyManager",
+            "Assets/Firebase",
+            "Assets/GoogleMobileAds",
+            "Assets/MaxSdk",
+            "Assets/MeticaSdk",
+            "Assets/Plugins",
+        };
+
+        // Root list = all top-level Assets/* folders (each has a tree under it).
+        private List<FolderNode> _roots = new List<FolderNode>();
+        private Vector2 _scroll;
+        private string _customFolderToAdd = "";
+
+        [MenuItem("GameDistrict/Monetization/Export Package", false, 100)]
+        public static void Open()
+        {
+            var win = GetWindow<PackageExporterWindow>(true, "GDMonetization - Create Package", true);
+            win.minSize = new Vector2(620, 540);
+            win.Init();
+            win.Show();
+        }
+
+        private void Init()
+        {
+            _roots.Clear();
+
+            // Build a node for every top-level Assets/* folder, skipping excluded
+            foreach (var dir in Directory.GetDirectories("Assets").OrderBy(d => d))
+            {
+                var rel = dir.Replace('\\', '/');
+                if (ExporterPaths.IsFolderExcluded(rel)) continue;
+
+                var isDefault = DefaultFolders.Contains(rel);
+                var node = BuildNode(rel, isDefault);
+                node.IsDefault = isDefault;
+
+                // Tick the folder nodes (so the visual reflects "on") but leave
+                // file ticks alone - BuildNode already set non-excluded files
+                // ticked and excluded files unticked.
+                if (isDefault)
+                    SetFolderTicksRecursive(node, true);
+
+                // Defaults expanded so user immediately sees inside; others collapsed
+                node.Expanded = isDefault;
+
+                _roots.Add(node);
+            }
+        }
+
+        // Tick only folder nodes, never files. Used at init time so the file
+        // ticks set by BuildNode (with exclusion list applied) survive.
+        private static void SetFolderTicksRecursive(FolderNode node, bool value)
+        {
+            if (!node.IsFile) node.Ticked = value;
+            foreach (var c in node.Children) SetFolderTicksRecursive(c, value);
+        }
+
+        // Recursively build a FolderNode for the given asset path.
+        // Build a node for the given folder. Adds subfolder children first,
+        // then file children. Excluded folders are skipped entirely from the
+        // tree (still hidden hard). Excluded files are SHOWN but start unticked
+        // when the parent is in the defaults set.
+        private static FolderNode BuildNode(string assetPath, bool parentIsDefault)
+        {
+            var node = new FolderNode
+            {
+                Path = assetPath,
+                DisplayName = Path.GetFileName(assetPath.TrimEnd('/')),
+                IsFile = false,
+            };
+
+            // Subfolders
+            foreach (var sub in Directory.GetDirectories(assetPath).OrderBy(d => d))
+            {
+                var subRel = sub.Replace('\\', '/');
+                if (ExporterPaths.IsFolderExcluded(subRel)) continue;
+                node.Children.Add(BuildNode(subRel, parentIsDefault));
+            }
+
+            // Files (skip .meta - Unity regenerates these on export)
+            foreach (var fileAbs in Directory.GetFiles(assetPath).OrderBy(f => f))
+            {
+                var file = fileAbs.Replace('\\', '/');
+                if (file.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var fileNode = new FolderNode
+                {
+                    Path = file,
+                    DisplayName = Path.GetFileName(file),
+                    IsFile = true,
+                };
+
+                // Default tick behavior:
+                //  - parent is a default folder AND file is NOT in exclusion list -> on
+                //  - excluded files (gradleTemplate.properties etc) -> always start off,
+                //    user can still tick them manually
+                if (parentIsDefault && !ExporterPaths.IsFileExcluded(file))
+                    fileNode.Ticked = true;
+
+                node.Children.Add(fileNode);
+            }
+
+            return node;
+        }
+
+        private void OnGUI()
+        {
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("Select folders to include in the package",
+                EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(
+                "Folders and files are tickable. Excluded files (like gradle templates) " +
+                "start unticked but can still be included manually.",
+                EditorStyles.miniLabel);
+            EditorGUILayout.Space(6);
+
+            // Toolbar
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Select All", GUILayout.Width(90)))
+                    foreach (var r in _roots) r.SetTickedCascade(true);
+                if (GUILayout.Button("Select None", GUILayout.Width(90)))
+                    foreach (var r in _roots) r.SetTickedCascade(false);
+                if (GUILayout.Button("Reset to Defaults", GUILayout.Width(140)))
+                    Init();
+                if (GUILayout.Button("Expand All", GUILayout.Width(90)))
+                    foreach (var r in _roots) SetExpandedRecursive(r, true);
+                if (GUILayout.Button("Collapse All", GUILayout.Width(100)))
+                    foreach (var r in _roots) SetExpandedRecursive(r, false);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Refresh List", GUILayout.Width(100)))
+                    Init();
+            }
+
+            EditorGUILayout.Space(4);
+            DrawLine();
+
+            // Tree
+            _scroll = EditorGUILayout.BeginScrollView(_scroll);
+            foreach (var root in _roots)
+                DrawNode(root, 0);
+            EditorGUILayout.EndScrollView();
+
+            DrawLine();
+
+            // Add custom path
+            EditorGUILayout.LabelField("Add a custom folder path", EditorStyles.miniBoldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _customFolderToAdd = EditorGUILayout.TextField(_customFolderToAdd);
+                if (GUILayout.Button("Add", GUILayout.Width(60)))
+                    HandleAddCustom();
+                if (GUILayout.Button("Browse", GUILayout.Width(70)))
+                    HandleBrowse();
+            }
+
+            DrawLine();
+
+            // Footer
+            var selectedCount = CountSelectedRoots();
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField($"Folders with selections: {selectedCount}",
+                    GUILayout.Width(220));
+                GUILayout.FlexibleSpace();
+                using (new EditorGUI.DisabledScope(selectedCount == 0))
+                {
+                    if (GUILayout.Button("Next  >", GUILayout.Width(120), GUILayout.Height(28)))
+                    {
+                        var missing = GetMissingDefaultFolders();
+                        if (missing.Count > 0)
+                        {
+                            var list = string.Join("\n• ", missing);
+                            if (!EditorUtility.DisplayDialog(
+                                "Missing Default Folders",
+                                $"The following default folders were not found in the project:\n\n• {list}\n\n" +
+                                "They will be absent from the package. Proceed anyway?",
+                                "Proceed", "Cancel"))
+                                return;
+                        }
+                        var assets = CollectExportAssets();
+                        ChangelogWindow.Open(assets);
+                        Close();
+                    }
+                }
+            }
+            EditorGUILayout.Space(6);
+        }
+
+        // -- Tree drawing --
+
+        // Draw one node as a SINGLE fixed-height row. We use a rect-based
+        // layout (GUILayoutUtility.GetRect + manual EditorGUI calls) instead
+        // of stacking EditorGUILayout widgets in a HorizontalScope, because
+        // the latter let auto-flow push children into a second column when
+        // sibling widgets had different intrinsic widths. With a manual rect
+        // every row has the same shape, so columns stay aligned at every depth.
+        private const float RowHeight = 20f;
+        private const float IndentPerLevel = 16f;
+        private const float FoldoutWidth = 14f;
+        private const float CheckboxWidth = 16f;
+        private const float IconWidth = 16f;
+
+        private void DrawNode(FolderNode node, int depth)
+        {
+            // Reserve a full-width row of fixed height
+            var row = GUILayoutUtility.GetRect(
+                GUIContent.none, EditorStyles.label,
+                GUILayout.ExpandWidth(true), GUILayout.Height(RowHeight));
+
+            float x = row.x + depth * IndentPerLevel;
+
+            // Foldout triangle (only if has children); leaves get an empty spacer
+            // to keep checkboxes aligned across rows of different types.
+            var foldoutRect = new Rect(x, row.y, FoldoutWidth, row.height);
+            if (node.Children.Count > 0)
+            {
+                node.Expanded = EditorGUI.Foldout(foldoutRect, node.Expanded, GUIContent.none, true);
+            }
+            x += FoldoutWidth;
+
+            // Tri-state checkbox
+            var checkRect = new Rect(x, row.y + 1, CheckboxWidth, row.height - 2);
+            var partial = node.IsPartiallyTicked;
+            var prevMixed = EditorGUI.showMixedValue;
+            EditorGUI.showMixedValue = partial;
+
+            EditorGUI.BeginChangeCheck();
+            var newVal = EditorGUI.Toggle(checkRect, node.Ticked);
+            if (EditorGUI.EndChangeCheck())
+            {
+                // Partial -> first click ticks the whole subtree
+                if (partial) newVal = true;
+                node.SetTickedCascade(newVal);
+                PropagateUpwards(node);
+            }
+            EditorGUI.showMixedValue = prevMixed;
+            x += CheckboxWidth + 4f;
+
+            // Asset icon (yellow folder for folders, C# logo for .cs, gear for
+            // .asset, prefab cube, etc). AssetDatabase.GetCachedIcon returns
+            // the same icon Unity shows in the Project window.
+            var iconRect = new Rect(x, row.y + 1, IconWidth, row.height - 2);
+            var icon = AssetDatabase.GetCachedIcon(node.Path);
+            if (icon == null)
+            {
+                // Fallback: generic folder vs file icon (built into the editor skin)
+                icon = node.IsFile
+                    ? EditorGUIUtility.IconContent("DefaultAsset Icon").image
+                    : EditorGUIUtility.IconContent("Folder Icon").image;
+            }
+            if (icon != null) GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit);
+            x += IconWidth + 4f;
+
+            // Label.
+            //  - Folder:  "Name  (default)  [N sub]"
+            //  - File:    "name.ext"  (italic + dim grey if it's in the exclusion list,
+            //                          so user sees why it wasn't auto-ticked)
+            var labelRect = new Rect(x, row.y, row.xMax - x, row.height);
+            string label;
+            GUIStyle labelStyle;
+            if (node.IsFile)
+            {
+                var isExcluded = ExporterPaths.IsFileExcluded(node.Path);
+                label = node.DisplayName + (isExcluded ? "   (excluded by default)" : "");
+                labelStyle = isExcluded ? GetDimItalicStyle() : EditorStyles.label;
+            }
+            else
+            {
+                var subCount = node.Children.Count;
+                label = node.DisplayName
+                        + (node.IsDefault ? "   (default)" : "")
+                        + (subCount > 0 ? $"  [{subCount} item{(subCount == 1 ? "" : "s")}]" : "");
+                labelStyle = EditorStyles.label;
+            }
+            EditorGUI.LabelField(labelRect, label, labelStyle);
+
+            // Children (if expanded). Each child renders as another row below.
+            if (node.Expanded)
+            {
+                foreach (var child in node.Children)
+                    DrawNode(child, depth + 1);
+            }
+        }
+
+        // Lazy-init dim italic style for excluded file labels.
+        private static GUIStyle _dimItalicStyle;
+        private static GUIStyle GetDimItalicStyle()
+        {
+            if (_dimItalicStyle == null)
+            {
+                _dimItalicStyle = new GUIStyle(EditorStyles.label)
+                {
+                    fontStyle = FontStyle.Italic,
+                };
+                _dimItalicStyle.normal.textColor = new Color(0.6f, 0.6f, 0.6f, 1f);
+            }
+            return _dimItalicStyle;
+        }
+
+        // Find the parent of the changed node and recompute its tick state.
+        // We don't store parent refs, so walk from each root.
+        private void PropagateUpwards(FolderNode changed)
+        {
+            foreach (var root in _roots)
+                PropagateInTree(root, changed);
+        }
+
+        private bool PropagateInTree(FolderNode current, FolderNode target)
+        {
+            // Returns true if target is in this subtree (so caller can recompute)
+            if (current == target) return true;
+            foreach (var c in current.Children)
+            {
+                if (PropagateInTree(c, target))
+                {
+                    current.RecomputeFromChildren();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static void SetExpandedRecursive(FolderNode node, bool expanded)
+        {
+            node.Expanded = expanded;
+            foreach (var c in node.Children) SetExpandedRecursive(c, expanded);
+        }
+
+        // -- Custom add / browse --
+
+        private void HandleAddCustom()
+        {
+            var p = (_customFolderToAdd ?? "").Trim().Replace('\\', '/');
+            if (string.IsNullOrEmpty(p))
+            {
+                EditorUtility.DisplayDialog("Empty path", "Type a path first.", "OK");
+                return;
+            }
+            if (!AssetDatabase.IsValidFolder(p))
+            {
+                EditorUtility.DisplayDialog("Not found",
+                    $"'{p}' is not a valid project folder.\n\n" +
+                    "Path must start with 'Assets/' and exist on disk.", "OK");
+                return;
+            }
+            if (ExporterPaths.IsFolderExcluded(p))
+            {
+                EditorUtility.DisplayDialog("Excluded",
+                    $"'{p}' is in the exclusion list and cannot be exported.", "OK");
+                return;
+            }
+
+            // Find or add the appropriate root, then drill in to tick the node.
+            // Simpler: just ensure root exists and tick the node by path lookup.
+            var topLevel = "Assets/" + p.Substring("Assets/".Length).Split('/')[0];
+            var root = _roots.FirstOrDefault(r => r.Path == topLevel);
+            if (root == null)
+            {
+                root = BuildNode(topLevel, false);
+                _roots.Add(root);
+                _roots = _roots.OrderBy(r => r.Path).ToList();
+            }
+
+            var target = FindNode(root, p);
+            if (target != null)
+            {
+                target.SetTickedCascade(true);
+                PropagateUpwards(target);
+                ExpandAncestors(p);
+            }
+            _customFolderToAdd = "";
+            Repaint();
+        }
+
+        private void HandleBrowse()
+        {
+            var abs = EditorUtility.OpenFolderPanel("Pick a folder inside Assets/", "Assets", "");
+            if (string.IsNullOrEmpty(abs)) return;
+            var proj = Application.dataPath.Replace('\\', '/');
+            var absN = abs.Replace('\\', '/');
+            if (absN.StartsWith(proj))
+                _customFolderToAdd = "Assets" + absN.Substring(proj.Length);
+            else
+                EditorUtility.DisplayDialog("Outside project",
+                    "Pick a folder inside this project's Assets/ directory.", "OK");
+        }
+
+        // -- Node lookup helpers --
+
+        private static FolderNode FindNode(FolderNode root, string path)
+        {
+            if (root.Path == path) return root;
+            foreach (var c in root.Children)
+            {
+                var found = FindNode(c, path);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private void ExpandAncestors(string path)
+        {
+            // Expand the topmost root + every ancestor segment of `path`
+            foreach (var root in _roots)
+            {
+                if (!path.StartsWith(root.Path)) continue;
+                var current = root;
+                current.Expanded = true;
+                var remaining = path.Substring(root.Path.Length).TrimStart('/');
+                while (!string.IsNullOrEmpty(remaining))
+                {
+                    var seg = remaining.Split('/')[0];
+                    var nextPath = current.Path + "/" + seg;
+                    var next = current.Children.FirstOrDefault(c => c.Path == nextPath);
+                    if (next == null) break;
+                    next.Expanded = true;
+                    current = next;
+                    remaining = remaining.Length > seg.Length
+                        ? remaining.Substring(seg.Length + 1)
+                        : "";
+                }
+                break;
+            }
+        }
+
+        // -- Selection -> export asset list --
+
+        // Walk the TREE (not the disk) and return a flat list of asset paths
+        // to feed to ExportPackage. Every tick decision was already made in
+        // BuildNode (defaults) or by the user (manual ticks/unticks), and the
+        // exclusion list only controlled the INITIAL tick state - it is no
+        // longer used to filter here. The tree's tick state is the single
+        // source of truth.
+        private List<string> CollectExportAssets()
+        {
+            var result = new List<string>();
+            foreach (var root in _roots)
+                CollectAssetsFromNode(root, result);
+            return result.Distinct().ToList();
+        }
+
+        // For files: include if ticked.
+        // For folders: include the folder path itself if EITHER the folder is
+        // ticked OR any descendant is ticked (so Unity has the folder meta to
+        // place the included files in). Then descend.
+        private static void CollectAssetsFromNode(FolderNode node, List<string> output)
+        {
+            if (node.IsFile)
+            {
+                if (node.Ticked) output.Add(node.Path);
+                return;
+            }
+
+            // Folder node. Include the folder if it or any descendant is ticked.
+            if (HasAnyTickedDescendant(node) || node.Ticked)
+                output.Add(node.Path);
+
+            foreach (var c in node.Children)
+                CollectAssetsFromNode(c, output);
+        }
+
+        private static bool HasAnyTickedDescendant(FolderNode node)
+        {
+            foreach (var c in node.Children)
+            {
+                if (c.Ticked) return true;
+                if (HasAnyTickedDescendant(c)) return true;
+            }
+            return false;
+        }
+
+        // Count folders that contribute to the export (any ticked folder
+        // node, regardless of file children).
+        private static List<string> GetMissingDefaultFolders()
+        {
+            return DefaultFolders.Where(f => !AssetDatabase.IsValidFolder(f)).ToList();
+        }
+
+        private int CountSelectedRoots()
+        {
+            int count = 0;
+            foreach (var root in _roots) count += CountTickedFolders(root);
+            return count;
+        }
+
+        private static int CountTickedFolders(FolderNode node)
+        {
+            int count = (!node.IsFile && node.Ticked) ? 1 : 0;
+            foreach (var c in node.Children)
+            {
+                if (node.Ticked && !node.IsFile) break; // already counted as 1
+                count += CountTickedFolders(c);
+            }
+            return count;
+        }
+
+        private static void DrawLine()
+        {
+            var r = EditorGUILayout.GetControlRect(false, 1);
+            EditorGUI.DrawRect(r, new Color(0, 0, 0, 0.2f));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Window 2: changelog editor + export
+    // -------------------------------------------------------------------------
+    public class ChangelogWindow : EditorWindow
+    {
+        // Pre-filtered list of asset paths (files + folders) from window 1.
+        // Already has exclusion rules applied; window 2 must not re-walk.
+        private List<string> _exportAssets;
+        private string _version = "";
+        private string _versionSource = "";
+        private string _added = "";
+        private string _changed = "";
+        private string _fixed = "";
+        private string _removed = "";
+        private Vector2 _scroll;
+
+        public static void Open(List<string> exportAssets)
+        {
+            var win = GetWindow<ChangelogWindow>(true, "GDMonetization - Changelog", true);
+            win.minSize = new Vector2(620, 580);
+            win._exportAssets = exportAssets;
+            win._version = ReadVersionFromSource(out win._versionSource);
+            win.Show();
+        }
+
+        private void OnGUI()
+        {
+            if (_exportAssets == null || _exportAssets.Count == 0)
+            {
+                EditorGUILayout.HelpBox("No assets selected. Go back and pick at least one folder.",
+                    MessageType.Warning);
+                if (GUILayout.Button("Back")) { PackageExporterWindow.Open(); Close(); }
+                return;
+            }
+
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("What changed in this package?", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(
+                "One bullet per line. Empty sections are skipped in the changelog.",
+                EditorStyles.miniLabel);
+            EditorGUILayout.Space(6);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Version", GUILayout.Width(70));
+                _version = EditorGUILayout.TextField(_version);
+                if (GUILayout.Button("Reload from source", GUILayout.Width(140)))
+                    _version = ReadVersionFromSource(out _versionSource);
+            }
+            EditorGUILayout.LabelField("  " + _versionSource, EditorStyles.miniLabel);
+
+            EditorGUILayout.Space(4);
+            DrawLine();
+
+            _scroll = EditorGUILayout.BeginScrollView(_scroll);
+
+            DrawSection("Added",   ref _added,   "New features, new SDKs, new public APIs.");
+            DrawSection("Changed", ref _changed, "Behavior changes, refactors, version bumps.");
+            DrawSection("Fixed",   ref _fixed,   "Bug fixes.");
+            DrawSection("Removed", ref _removed, "Deletions, deprecations.");
+
+            EditorGUILayout.EndScrollView();
+
+            DrawLine();
+
+            EditorGUILayout.LabelField("Output folder:", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("  " + ExporterPaths.ReleasesFolderAbs,
+                EditorStyles.miniLabel);
+            EditorGUILayout.Space(2);
+            // Derive top-level folders from the asset list for a compact preview
+            var topLevels = _exportAssets
+                .Where(p => p.StartsWith("Assets/"))
+                .Select(p =>
+                {
+                    var parts = p.Split('/');
+                    return parts.Length >= 2 ? "Assets/" + parts[1] : p;
+                })
+                .Distinct()
+                .OrderBy(p => p)
+                .ToList();
+            EditorGUILayout.LabelField($"Included assets: {_exportAssets.Count} " +
+                                       $"(across {topLevels.Count} top-level folder(s))",
+                EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("  " + string.Join(",  ", topLevels),
+                EditorStyles.miniLabel);
+            EditorGUILayout.Space(6);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("< Back", GUILayout.Width(80), GUILayout.Height(28)))
+                {
+                    PackageExporterWindow.Open();
+                    Close();
+                    return;
+                }
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Close", GUILayout.Width(100), GUILayout.Height(28)))
+                {
+                    Close();
+                    return;
+                }
+                if (GUILayout.Button("Generate Package", GUILayout.Width(170), GUILayout.Height(28)))
+                {
+                    GeneratePackage(writeChangelog: false);
+                }
+                using (new EditorGUI.DisabledScope(!HasAnyChangelogContent()))
+                {
+                    var prev = GUI.backgroundColor;
+                    GUI.backgroundColor = new Color(0.4f, 0.75f, 0.4f);
+                    if (GUILayout.Button("Generate Package with Changelog",
+                        GUILayout.Width(240), GUILayout.Height(28)))
+                    {
+                        GeneratePackage(writeChangelog: true);
+                    }
+                    GUI.backgroundColor = prev;
+                }
+            }
+            EditorGUILayout.Space(6);
+        }
+
+        private void DrawSection(string label, ref string buffer, string hint)
+        {
+            EditorGUILayout.LabelField(label, EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(hint, EditorStyles.miniLabel);
+            buffer = EditorGUILayout.TextArea(buffer, GUILayout.MinHeight(70));
+            EditorGUILayout.Space(6);
+        }
+
+        private static void DrawLine()
+        {
+            var r = EditorGUILayout.GetControlRect(false, 1);
+            EditorGUI.DrawRect(r, new Color(0, 0, 0, 0.2f));
+        }
+
+        private bool HasAnyChangelogContent()
+        {
+            return !string.IsNullOrWhiteSpace(_added)
+                || !string.IsNullOrWhiteSpace(_changed)
+                || !string.IsNullOrWhiteSpace(_fixed)
+                || !string.IsNullOrWhiteSpace(_removed);
+        }
+
+        // ---------- Export ----------
+
+        private void GeneratePackage(bool writeChangelog)
+        {
+            if (string.IsNullOrWhiteSpace(_version))
+            {
+                EditorUtility.DisplayDialog("Missing version",
+                    "Version field is empty. Set MonetizationInitializeOnLoad.Version " +
+                    "or type one manually.", "OK");
+                return;
+            }
+
+            var releasesDir = ExporterPaths.ReleasesFolderAbs;
+            try
+            {
+                if (!Directory.Exists(releasesDir))
+                    Directory.CreateDirectory(releasesDir);
+            }
+            catch (Exception e)
+            {
+                EditorUtility.DisplayDialog("Cannot create Releases folder",
+                    $"Could not create:\n{releasesDir}\n\n{e.Message}", "OK");
+                return;
+            }
+
+            var fileName = $"Monetization_v{SafeVersionForFile(_version)}.unitypackage";
+            var savePath = Path.Combine(releasesDir, fileName).Replace('\\', '/');
+
+            if (File.Exists(savePath))
+            {
+                if (!EditorUtility.DisplayDialog("Overwrite?",
+                    $"This file already exists:\n{savePath}\n\nOverwrite it?",
+                    "Overwrite", "Cancel"))
+                    return;
+            }
+
+            // Use the pre-filtered asset list from window 1. CRITICAL: do NOT
+            // re-collect or pass folder paths to Unity - that would let gradle
+            // templates and other excluded files sneak back in via Unity's
+            // recurse.
+            var assets = new List<string>(_exportAssets);
+            if (assets.Count == 0)
+            {
+                EditorUtility.DisplayDialog("Nothing to export",
+                    "After filtering, no assets remained to export.", "OK");
+                return;
+            }
+
+            Debug.Log($"[PackageExporter] Exporting {assets.Count} asset paths " +
+                      $"-> {savePath}");
+
+            if (writeChangelog)
+            {
+                try
+                {
+                    WriteChangelog();
+                    AssetDatabase.Refresh();
+                    // Ensure the freshly-written CHANGELOG.md is in the export
+                    // list (it lives in Assets/GDMonetization, which the user
+                    // almost always has ticked). If GDMonetization wasn't
+                    // selected, the changelog still gets written to disk for
+                    // git tracking but won't ship inside this particular
+                    // package - that's the right behaviour.
+                    if (File.Exists(ExporterPaths.ChangelogRel)
+                        && !assets.Contains(ExporterPaths.ChangelogRel)
+                        && assets.Any(a => a.StartsWith("Assets/GDMonetization")))
+                    {
+                        assets.Add(ExporterPaths.ChangelogRel);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("[PackageExporter] Failed writing CHANGELOG.md: " + e);
+                    if (!EditorUtility.DisplayDialog("Changelog failed",
+                        "Could not write CHANGELOG.md:\n\n" + e.Message +
+                        "\n\nContinue exporting the package anyway?",
+                        "Yes", "Cancel"))
+                        return;
+                }
+            }
+
+            const string resFolderPath = "Assets/Plugins/Android/FirebaseApp.androidlib/res";
+            if (Directory.Exists(resFolderPath))
+                Debug.LogWarning($"<color=red>[PackageExporter] '{resFolderPath}' exists on disk and is excluded from the package.</color>");
+            else
+                Debug.Log($"<color=green>[PackageExporter] '{resFolderPath}' not present — nothing to exclude.</color>");
+
+            try
+            {
+                EditorUtility.DisplayProgressBar("Exporting Package",
+                    $"Building .unitypackage ({assets.Count} assets)...", 0.5f);
+
+                AssetDatabase.ExportPackage(
+                    assets.ToArray(),
+                    savePath,
+                    ExportPackageOptions.Default);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+
+            var msg = $"Package created:\n{savePath}\n\n" +
+                      $"Assets exported: {assets.Count}";
+            if (writeChangelog) msg += $"\n\nCHANGELOG.md updated at:\n{ExporterPaths.ChangelogRel}";
+            if (EditorUtility.DisplayDialog("Done", msg, "Reveal", "OK"))
+                EditorUtility.RevealInFinder(savePath);
+
+            Close();
+        }
+
+        // ---------- Version reading ----------
+
+        private static string ReadVersionFromSource(out string sourceLabel)
+        {
+            try
+            {
+                if (File.Exists(ExporterPaths.VersionFileRel))
+                {
+                    var text = File.ReadAllText(ExporterPaths.VersionFileRel);
+                    var m = Regex.Match(text,
+                        @"public\s+const\s+string\s+Version\s*=\s*""([^""]+)""\s*;");
+                    if (m.Success)
+                    {
+                        sourceLabel = "Read from MonetizationInitializeOnLoad.cs";
+                        return m.Groups[1].Value;
+                    }
+                    sourceLabel = "WARNING: Version constant not found in " +
+                                  ExporterPaths.VersionFileRel;
+                    return "";
+                }
+                sourceLabel = "WARNING: " + ExporterPaths.VersionFileRel + " not found";
+                return "";
+            }
+            catch (Exception e)
+            {
+                sourceLabel = "WARNING: error reading version: " + e.Message;
+                return "";
+            }
+        }
+
+        private static string SafeVersionForFile(string v)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return "0_0_0";
+            return v.Trim().TrimStart('v', 'V').Replace('.', '_');
+        }
+
+        // ---------- Changelog writing (Keep a Changelog format) ----------
+
+        private void WriteChangelog()
+        {
+            var date = DateTime.Now.ToString("yyyy-MM-dd");
+            var version = _version.Trim().TrimStart('v', 'V');
+
+            var newEntry = new StringBuilder();
+            newEntry.AppendLine($"## [{version}] - {date}");
+            newEntry.AppendLine();
+            AppendBullets(newEntry, "Added",   _added);
+            AppendBullets(newEntry, "Changed", _changed);
+            AppendBullets(newEntry, "Fixed",   _fixed);
+            AppendBullets(newEntry, "Removed", _removed);
+
+            string finalContent;
+            if (File.Exists(ExporterPaths.ChangelogRel))
+            {
+                var existing = File.ReadAllText(ExporterPaths.ChangelogRel);
+                var firstSection = existing.IndexOf("\n## ", StringComparison.Ordinal);
+                if (firstSection >= 0)
+                {
+                    var header = existing.Substring(0, firstSection + 1);
+                    var rest   = existing.Substring(firstSection + 1);
+                    finalContent = header + newEntry + "\n" + rest;
+                }
+                else
+                {
+                    finalContent = existing.TrimEnd() + "\n\n" + newEntry;
+                }
+            }
+            else
+            {
+                var header = new StringBuilder();
+                header.AppendLine("# Changelog");
+                header.AppendLine();
+                header.AppendLine("All notable changes to the GDMonetization SDK are documented here.");
+                header.AppendLine();
+                header.AppendLine("The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ");
+                header.AppendLine("and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).");
+                header.AppendLine();
+                finalContent = header + newEntry.ToString();
+            }
+
+            var dir = Path.GetDirectoryName(ExporterPaths.ChangelogRel);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            File.WriteAllText(ExporterPaths.ChangelogRel, finalContent, new UTF8Encoding(false));
+            Debug.Log($"[PackageExporter] CHANGELOG.md updated for v{version}");
+        }
+
+        private static void AppendBullets(StringBuilder sb, string section, string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            sb.AppendLine($"### {section}");
+            foreach (var line in raw.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var t = line.Trim().TrimStart('-', '*', '\u2022', ' ').Trim();
+                if (t.Length == 0) continue;
+                sb.AppendLine("- " + t);
+            }
+            sb.AppendLine();
+        }
+    }
+}
+#endif

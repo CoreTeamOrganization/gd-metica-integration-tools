@@ -1,0 +1,9 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    public abstract class AnalyticsGenreSO : ScriptableObject
+    {
+        public abstract GDMeticaAnalytics GetAnalytics();
+    }
+}

@@ -1,0 +1,17 @@
+using Monetization.Runtime.Logger;
+
+namespace Monetization.Runtime.Consent
+{
+    public class ApplovinConsentSettings : IConsentSettingsService
+    {
+        public void ApplySettings(ConsentInfo consentInfo)
+        {
+            bool personalized = consentInfo.IsPersonalized;
+            MaxSdk.SetDoNotSell(!personalized);
+            MaxSdk.SetHasUserConsent(personalized);
+
+            Message.Log(Tag.Applovin, $"DoNotSell : {!personalized}");
+            Message.Log(Tag.Applovin, $"HasUserConsent : {personalized}");
+        }
+    }
+}

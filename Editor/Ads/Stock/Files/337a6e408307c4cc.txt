@@ -1,0 +1,19 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class IntersitialAdUnit : AdUnit
+    {
+        protected string placementName;
+        protected Action onAdClosed;
+
+        public override AdFormat AdType => AdFormat.Interstitial;
+
+        public abstract void LoadInterstitial();
+        public abstract void ShowInterstitial(string placementName, Action onClosed);
+        public abstract bool HasInterstitial(bool doRequest);
+    }
+}

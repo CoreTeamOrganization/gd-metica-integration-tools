@@ -1,0 +1,15 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Core
+{
+    [Serializable]
+    public abstract class DependentStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.Dependent;
+        public override int SubStepCount => dependentSteps.Count;
+
+        [SubStepList, SerializeReference] protected List<LoadingStepBase> dependentSteps = new();
+    }
+}

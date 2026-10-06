@@ -1,17 +1,24 @@
 <#
 .SYNOPSIS
-    Exports the stock GD SDK files the Ads Integration tool edits, one copy per unique file,
-    for every GD SDK v5 release.
+    Exports every stock GD SDK code file, one copy per unique file, for every GD SDK v5 and
+    v6 release.
 
 .DESCRIPTION
-    Reads each non-beta v5.x.y tag of Monetization-SDK-Unity and writes, into
+    Reads each non-beta v5.x.y and v6.x.y tag of Monetization-SDK-Unity and writes, into
     Editor/Ads/Stock/ of this package:
 
       Files/<hash>.txt   each unique file once (normalized: LF line endings, no trailing
                          whitespace), stored as .txt so Unity never compiles it
-      manifest.json      version -> reported version string -> path -> stored file
+      manifest.json      the releases, the files the tool patches, and for every path
+                         which stored file each release has
 
-    A file that does not exist in a version is recorded with "file": null.
+    Covered: the code and text files (see $Extensions) under the GD SDK root and the
+    Monetization services folder next to it. Assets, prefabs and scenes are left out: they
+    hold each game's own ids and settings, so they always differ and say nothing.
+
+    Paths are relative to the GD SDK root; the services folder's are "../Monetization/...".
+    A path a release does not have is simply not listed for it.
+
     Stable .meta files are written alongside, since a git-installed package is read-only
     and Unity ignores any asset without one. Stored files nothing references any more are
     removed.
@@ -23,7 +30,7 @@
     is never touched.
 
 .PARAMETER Tags
-    Optional explicit tag list. Default: every v5.x.y tag without a pre-release suffix.
+    Optional explicit tag list. Default: every v5.x.y and v6.x.y tag without a suffix.
 #>
 param(
     [string]$SdkRepo = (Join-Path $PSScriptRoot "..\..\Monetization-SDK-Unity"),
@@ -32,8 +39,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Every GD SDK file the tool edits, relative to the GD SDK root, plus the file the SDK
+# The GD SDK files the tool edits, relative to the GD SDK root, plus the file the SDK
 # version is read from. Keep in step with the steps that call SourcePatcher on GD SDK files.
+# The modified-file check and the patch harness use this list; the compare window uses all.
 $Paths = @(
     'Runtime/Scripts/Ads/AdPlatforms.cs',                       # Patch the existing SDK files
     'Runtime/Scripts/Logger/Tag.cs',
@@ -52,6 +60,9 @@ $Paths = @(
     'Editor/Scripts/MenuItems/MonetizationRemover.cs',          # Finish up
     'Runtime/Scripts/MonetizationInitializeOnLoad.cs'           # version source, never patched
 )
+
+# Code and text files. Keep in step with StockFiles.Extensions in the tool.
+$Extensions = @('.cs', '.asmdef', '.asmref', '.java', '.kt', '.xml', '.json', '.gradle', '.m', '.mm', '.h', '.txt', '.md')
 
 $VersionFile = 'Runtime/Scripts/MonetizationInitializeOnLoad.cs'
 $SdkRepo = (Resolve-Path $SdkRepo).Path
@@ -84,11 +95,11 @@ function Get-GitText([string[]]$Arguments) {
     return $Utf8.GetString($result.Bytes)
 }
 
-# Raw file bytes at a tag, or $null when the file is not in that release. Read as bytes
-# so PowerShell's console encoding cannot mangle non-ASCII characters.
-function Get-BlobBytes([string]$Tag, [string]$RepoPath) {
-    $result = Invoke-Git @('cat-file', 'blob', "`"${Tag}:$RepoPath`"")
-    if ($result.Code -ne 0) { return $null }
+# Raw blob bytes by object id. Read as bytes so PowerShell's console encoding cannot mangle
+# non-ASCII characters.
+function Get-BlobBytes([string]$Sha) {
+    $result = Invoke-Git @('cat-file', 'blob', $Sha)
+    if ($result.Code -ne 0) { throw "git cat-file failed for $Sha" }
     return $result.Bytes
 }
 
@@ -128,56 +139,78 @@ function ConvertTo-VersionKey([string]$Version) {
 # -- export ----------------------------------------------------------------------
 
 if (-not $Tags) {
-    $Tags = (Get-GitText @('tag', '--list', '"v5.*"')).Split("`n") |
+    $Tags = (Get-GitText @('tag', '--list')).Split("`n") |
         ForEach-Object { $_.Trim() } |
-        Where-Object { $_ -match '^v5\.\d+\.\d+$' }
+        Where-Object { $_ -match '^v[56]\.\d+\.\d+$' }
 }
 $Tags = $Tags | Sort-Object { ConvertTo-VersionKey $_.TrimStart('v') }
-if (-not $Tags) { throw "No v5 release tags found in $SdkRepo" }
+if (-not $Tags) { throw "No v5/v6 release tags found in $SdkRepo" }
 
 New-Item -ItemType Directory -Force $FilesRoot | Out-Null
 
 $versions = @()
-$stored = @{}   # file name -> normalized text
+$stored = @{}      # stored file name -> normalized text
+$byBlob = @{}      # git blob id -> stored file name, so each unique blob is read once
+$files = [ordered]@{}   # path -> stored file name -> versions that have it
 
 foreach ($tag in $Tags) {
-    # Find the GD SDK root inside the repo at this tag, the same way the tool finds it in a
-    # project: by the folder that holds Runtime/Scripts/Ads/Core/AdsManager.cs.
-    $tree = (Get-GitText @('ls-tree', '-r', '--name-only', $tag)).Split("`n")
-    $marker = $tree | Where-Object { $_ -like '*/Runtime/Scripts/Ads/Core/AdsManager.cs' } | Select-Object -First 1
-    if (-not $marker) { throw "${tag}: GD SDK root not found" }
-    $sdkRoot = $marker.Substring(0, $marker.Length - '/Runtime/Scripts/Ads/Core/AdsManager.cs'.Length)
+    $version = $tag.TrimStart('v')
 
-    $files = @()
+    # "<mode> <type> <id>`t<path>", NUL-separated so unusual paths come through as they are.
+    $entries = (Get-GitText @('ls-tree', '-r', '-z', $tag)).Split([char]0) | Where-Object { $_ }
+
+    # The GD SDK root, found the same way the tool finds it in a project: by the folder that
+    # holds Runtime/Scripts/Ads/Core/AdsManager.cs. The services folder sits next to it.
+    $tail = '/Runtime/Scripts/Ads/Core/AdsManager.cs'
+    $marker = $entries | ForEach-Object { $_.Split("`t")[1] } | Where-Object { $_.EndsWith($tail) } | Select-Object -First 1
+    if (-not $marker) { throw "${tag}: GD SDK root not found" }
+    $sdkRoot = $marker.Substring(0, $marker.Length - $tail.Length)
+    $servicesRoot = (Split-Path $sdkRoot -Parent).Replace('\', '/') + '/Monetization'
+
+    $count = 0
     $reports = $null
 
-    foreach ($path in $Paths) {
-        $bytes = Get-BlobBytes $tag "$sdkRoot/$path"
-        if ($null -eq $bytes) {
-            $files += [ordered]@{ path = $path; file = $null }
-            continue
+    foreach ($entry in $entries) {
+        $head, $path = $entry.Split("`t", 2)
+        $kind, $sha = $head.Split(' ')[1, 2]
+        if ($kind -ne 'blob') { continue }
+        if ($Extensions -notcontains [System.IO.Path]::GetExtension($path).ToLowerInvariant()) { continue }
+
+        if ($path.StartsWith("$sdkRoot/")) { $relative = $path.Substring($sdkRoot.Length + 1) }
+        elseif ($path.StartsWith("$servicesRoot/")) { $relative = '../Monetization/' + $path.Substring($servicesRoot.Length + 1) }
+        else { continue }
+
+        if (-not $byBlob.ContainsKey($sha)) {
+            $text = ConvertTo-Normalized (Get-BlobBytes $sha)
+            $name = (Get-Hash $text).Substring(0, 16) + '.txt'
+            $stored[$name] = $text
+            $byBlob[$sha] = $name
         }
+        $name = $byBlob[$sha]
 
-        $text = ConvertTo-Normalized $bytes
-        $name = (Get-Hash $text).Substring(0, 16) + '.txt'
-        $stored[$name] = $text
-        $files += [ordered]@{ path = $path; file = $name }
+        if (-not $files.Contains($relative)) { $files[$relative] = [ordered]@{} }
+        if (-not $files[$relative].Contains($name)) { $files[$relative][$name] = New-Object System.Collections.Generic.List[string] }
+        $files[$relative][$name].Add($version)
+        $count++
 
-        if ($path -eq $VersionFile -and $text -match 'Version\s*=\s*"([^"]+)"') { $reports = $Matches[1] }
+        # \b: v6.2.x declares BaseVersion first, which is not the version.
+        if ($relative -eq $VersionFile -and $stored[$name] -match '\bVersion\s*=\s*"([^"]+)"') { $reports = $Matches[1] }
     }
 
     if (-not $reports) { throw "${tag}: could not read the Version string from $VersionFile" }
 
-    $versions += [ordered]@{ version = $tag.TrimStart('v'); tag = $tag; reports = $reports; files = $files }
-    Write-Host ("{0,-8} reports {1,-12} {2} of {3} files present" -f $tag, "`"$reports`"",
-        @($files | Where-Object { $_.file }).Count, $Paths.Count)
+    $versions += [ordered]@{ version = $version; tag = $tag; reports = $reports }
+    Write-Host ("{0,-8} reports {1,-10} {2} files" -f $tag, "`"$reports`"", $count)
 }
 
 # Two releases reporting the same string would make the version lookup ambiguous.
 $versions | Group-Object { $_.reports } | Where-Object Count -gt 1 | ForEach-Object {
-    Write-Warning ("Reported version `"{0}`" is shared by {1} - the tool will ask which one." -f
+    Write-Warning ("Reported version `"{0}`" is shared by {1}." -f
         $_.Name, (($_.Group | ForEach-Object { $_.tag }) -join ', '))
 }
+
+$missingPatched = $Paths | Where-Object { -not $files.Contains($_) }
+if ($missingPatched) { throw "Patched paths in no release: $($missingPatched -join ', ')" }
 
 # -- write -----------------------------------------------------------------------
 
@@ -194,21 +227,24 @@ Get-ChildItem $FilesRoot -Filter '*.txt' | Where-Object { -not $stored.ContainsK
 }
 
 $manifest = [ordered]@{
-    note = 'Generated by Tools~/ExportStockFiles.ps1 - do not edit by hand. Paths are relative to the GD SDK root; file null = not in that release.'
-    paths = $Paths
+    note = 'Generated by Tools~/ExportStockFiles.ps1 - do not edit by hand. Paths are relative to the GD SDK root ("../Monetization/..." is the services folder next to it); files maps each path to its stored copies and the releases that have each.'
+    format = 2
+    patched = $Paths
     versions = $versions
+    files = $files
 }
 $manifestPath = Join-Path $StockRoot 'manifest.json'
-[System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 6) + "`n", $Utf8)
+[System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 6 -Compress) + "`n", $Utf8)
 
 Write-Meta $manifestPath 'manifest.json'
 Write-Meta $StockRoot 'folder:Stock' $true
 Write-Meta $FilesRoot 'folder:Files' $true
 
+$bytes = ($stored.Values | ForEach-Object { $Utf8.GetByteCount($_) } | Measure-Object -Sum).Sum
 Write-Host ""
-Write-Host "$($versions.Count) versions, $($stored.Count) unique files -> $((Resolve-Path $StockRoot).Path)"
+Write-Host "$($versions.Count) versions, $($files.Count) paths, $($stored.Count) unique files ($([math]::Round($bytes / 1KB)) KB) -> $((Resolve-Path $StockRoot).Path)"
 foreach ($path in $Paths) {
-    $variants = @($versions | ForEach-Object { ($_.files | Where-Object { $_.path -eq $path }).file } | Where-Object { $_ } | Sort-Object -Unique).Count
-    $absent = @($versions | Where-Object { -not ($_.files | Where-Object { $_.path -eq $path }).file }).Count
-    Write-Host ("  {0,-58} {1} variant(s){2}" -f $path, $variants, $(if ($absent) { ", missing in $absent" } else { '' }))
+    $variants = $files[$path].Count
+    $present = ($files[$path].Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
+    Write-Host ("  {0,-58} {1} variant(s), in {2} of {3}" -f $path, $variants, $present, $versions.Count)
 }

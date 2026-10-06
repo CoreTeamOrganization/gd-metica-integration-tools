@@ -1,0 +1,132 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinMRec : MRecAdUnit
+    {
+        private bool isCreated;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                ListenEvents();
+                LoadMRec();
+            }
+        }
+
+        public void ListenEvents()
+        {
+            MaxSdkCallbacks.MRec.OnAdLoadedEvent += MRec_OnAdLoadedEvent;
+            MaxSdkCallbacks.MRec.OnAdLoadFailedEvent += MRec_OnAdLoadFailedEvent;
+            MaxSdkCallbacks.MRec.OnAdRevenuePaidEvent += MRec_OnAdRevenuePaidEvent;
+            MaxSdkCallbacks.MRec.OnAdClickedEvent += MRec_OnAdClickedEvent;
+        }
+
+        public override bool HasMRec()
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            if (!isCreated)
+            {
+                LoadMRec();
+                return false;
+            }
+
+            return isLoaded;
+        }
+
+        public override void ShowMRec()
+        {
+            MaxSdk.ShowMRec(adUnitId);
+        }
+
+        public override void HideMRec()
+        {
+            if (isCreated)
+            {
+                MaxSdk.HideMRec(adUnitId);
+            }
+        }
+
+        public override void DestroyMRec()
+        {
+            if (isCreated)
+            {
+                MaxSdk.StopMRecAutoRefresh(adUnitId);
+                MaxSdk.DestroyMRec(adUnitId);
+            }
+
+            isCreated = isLoaded = false;
+        }
+
+        public override void LoadMRec()
+        {
+            if (IsAdUnitEmpty)
+                return;
+
+            if (!isCreated)
+            {
+                MaxSdk.CreateMRec(adUnitId, GetMRecPosition());
+                MaxSdk.StartMRecAutoRefresh(adUnitId);
+                isCreated = true;
+            }
+        }
+
+        MaxSdk.AdViewPosition GetMRecPosition()
+        {
+            switch (bannerInfo.MrecPosition)
+            {
+                case BannerPosition.Top: return MaxSdk.AdViewPosition.TopCenter;
+                case BannerPosition.TopLeft: return MaxSdk.AdViewPosition.TopLeft;
+                case BannerPosition.TopRight: return MaxSdk.AdViewPosition.TopRight;
+                case BannerPosition.Bottom: return MaxSdk.AdViewPosition.BottomCenter;
+                case BannerPosition.BottomLeft: return MaxSdk.AdViewPosition.BottomLeft;
+                case BannerPosition.BottomRight: return MaxSdk.AdViewPosition.BottomRight;
+                case BannerPosition.Center: return MaxSdk.AdViewPosition.Centered;
+                default: return MaxSdk.AdViewPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void MRec_OnAdLoadedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            isLoaded = true;
+            if (AdsManager.MRecStatus)
+                ShowMRec();
+            else
+                HideMRec();
+        }
+
+        private void MRec_OnAdLoadFailedEvent(string arg1, MaxSdkBase.ErrorInfo arg2)
+        {
+            isLoaded = false;
+            HideMRec();
+        }
+
+        private void MRec_OnAdRevenuePaidEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.MRec, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, "none");
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void MRec_OnAdClickedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+    }
+}

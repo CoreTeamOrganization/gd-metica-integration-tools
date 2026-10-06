@@ -1,0 +1,15 @@
+using System;
+
+namespace GDMonetization.Runtime.Scripts.EventBusSystem
+{
+    internal readonly struct Listener<TEvent> : IListener
+        where TEvent : struct, IEvent
+    {
+        public readonly Action<TEvent> Action;
+
+        public Listener(Action<TEvent> action)
+        {
+            Action = action;
+        }
+    }
+}

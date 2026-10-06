@@ -1,0 +1,64 @@
+using System;
+using System.Collections.Generic;
+
+namespace GDMonetization.Runtime.Scripts.EventBusSystem
+{
+    public static class EventBus
+    {
+        private static readonly IDictionary<Type, List<IListener>> Subscriptions = new Dictionary<Type, List<IListener>>();
+
+        public static void Reset()
+        {
+            foreach (var kvp in Subscriptions)
+            {
+                kvp.Value.Clear();
+            }
+
+            Subscriptions.Clear();
+        }
+
+        public static void Subscribe<TEvent>(Action<TEvent> action)
+            where TEvent : struct, IEvent
+        {
+            var eventType = typeof(TEvent);
+            var listener = new Listener<TEvent>(action);
+
+            if (Subscriptions.TryGetValue(eventType, out var listeners))
+            {
+                listeners.Add(listener);
+                return;
+            }
+
+            Subscriptions.Add(eventType, new List<IListener> { listener });
+        }
+
+        public static void Unsubscribe<TEvent>(Action<TEvent> action)
+            where TEvent : struct, IEvent
+        {
+            if (!Subscriptions.TryGetValue(typeof(TEvent), out var listeners)) return;
+
+            for (var i = 0; i < listeners.Count; i++)
+            {
+                if (listeners[i] is Listener<TEvent> typed && typed.Action == action)
+                {
+                    listeners.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+
+        public static void Raise<TEvent>(TEvent @event)
+            where TEvent : struct, IEvent
+        {
+            if (!Subscriptions.TryGetValue(typeof(TEvent), out var listeners)) return;
+
+            foreach (var listener in listeners)
+            {
+                if (listener is Listener<TEvent> typed)
+                {
+                    typed.Action(@event);
+                }
+            }
+        }
+    }
+}

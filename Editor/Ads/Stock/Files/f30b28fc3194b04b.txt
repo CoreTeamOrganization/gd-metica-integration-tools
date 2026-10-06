@@ -1,0 +1,50 @@
+using System;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public class PrivacyPolicyPanel : MonoBehaviour
+    {
+        [SerializeField] Canvas m_Canvas;
+
+        private static event Action _onPolicyAcceptedCallback;
+        public static event Action OnPolicyAcceptedEvent
+        {
+            add
+            {
+                if (MonetizationPreferences.PrivacyPolicy.Get())
+                {
+                    value?.Invoke();
+                    return;
+                }
+
+                _onPolicyAcceptedCallback += value;
+            }
+            remove => _onPolicyAcceptedCallback -= value;
+        }
+
+        private void Start()
+        {
+            new GameObject("MonetizationDebugger", typeof(MonetizationDebugger));
+        }
+
+        public void Accept()
+        {
+            MonetizationPreferences.PrivacyPolicy.Set(true);
+            _onPolicyAcceptedCallback?.Invoke();
+            m_Canvas.enabled = false;
+        }
+
+        public void VisitLink()
+        {
+            MonetizationInitializeOnLoad.VisitPrivacyPolicy();
+        }
+
+        private void OnDestroy()
+        {
+            _onPolicyAcceptedCallback = null;
+        }
+    }
+}

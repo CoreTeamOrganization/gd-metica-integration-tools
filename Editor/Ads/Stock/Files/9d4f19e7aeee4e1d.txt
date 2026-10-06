@@ -1,0 +1,13 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Configurations;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public interface IAdvanceUMPService : IUserMessagingPlatformService
+    {
+        void Initialize(ConsentConfiguration settings, Action<UMPResult> onComplete);
+    }
+}

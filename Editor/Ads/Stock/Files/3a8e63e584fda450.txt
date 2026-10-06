@@ -1,0 +1,35 @@
+using UnityEditor;
+using UnityEngine;
+using Monetization.Runtime.Sdk;
+
+namespace GDMonetization.Editor.MenuItems
+{
+    public static class GDMonetizationInfo
+    {
+        [MenuItem("GameDistrict/Monetization/Info", false, 22)]
+        public static void ShowSdkInfo()
+    {
+        string version = MonetizationInitializeOnLoad.Version;
+        string releaseDate = MonetizationInitializeOnLoad.Release_Date;
+
+        // Build message dynamically
+        string message = $"GD-Monetization SDK version {version} " +
+                         $"(Released on {releaseDate}) is currently installed in your project.";
+
+        // Show dialog with two buttons: "View Release Notes" and "OK"
+        bool clickedViewReleaseNotes = EditorUtility.DisplayDialog(
+            "GD-Monetization SDK Info", // title
+            message,                    // message
+            "View Release Notes",        // first button
+            "OK"                        // second button
+        );
+
+        // Open GitHub release page dynamically if user clicks "View Release Notes"
+        if (clickedViewReleaseNotes)
+        {
+            string releaseUrl = $"https://github.com/CoreTeamOrganization/Monetization-SDK-Unity/releases/tag/v{version}";
+            Application.OpenURL(releaseUrl);
+        }
+    }
+    }
+}

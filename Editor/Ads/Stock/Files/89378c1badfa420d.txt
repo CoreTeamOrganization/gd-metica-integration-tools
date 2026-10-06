@@ -1,0 +1,58 @@
+using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Monetization.Runtime.Logger;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Core
+{
+    [Serializable]
+    public abstract class LoadingStepBase
+    {
+        public virtual BootstrapStepName StepName => BootstrapStepName.None;
+        public virtual bool ShouldExecute() => true;
+        public virtual int SubStepCount => 0;
+        public virtual bool IsCritical => false;
+        public virtual float TimeoutSeconds => 0f;
+        public virtual bool IsFixed => false;
+
+        protected abstract Task PerformStepAsync(CancellationToken cToken);
+
+        public async Task<LoadingStepResult> ExecuteAsync(CancellationToken cToken = default)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                if (TimeoutSeconds > 0)
+                {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cToken);
+                    timeoutCts.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
+                    try
+                    {
+                        await PerformStepAsync(timeoutCts.Token);
+                    }
+                    catch (OperationCanceledException) when (!cToken.IsCancellationRequested)
+                    {
+                        throw new TimeoutException($"Timed out after {TimeoutSeconds}s");
+                    }
+                }
+                else
+                {
+                    await PerformStepAsync(cToken);
+                }
+
+                Message.Log(Tag.Bootstrap, $"{GetType().Name} Completed");
+                return LoadingStepResult.Success(StepName, stopwatch.Elapsed);
+            }
+            catch (Exception ex)
+            {
+                Message.Log(Tag.Bootstrap, $"{GetType().Name} failed: {ex.Message}");
+                return LoadingStepResult.Failure(StepName, ex.Message, stopwatch.Elapsed);
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
+        }
+    }
+}

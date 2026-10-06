@@ -1,0 +1,10 @@
+using System;
+using Monetization.Runtime.Configurations;
+
+namespace Monetization.Runtime.Consent
+{
+    public interface IAdvanceUMPService : IUserMessagingPlatformService
+    {
+        void Initialize(ConsentConfiguration settings, Action<UMPResult> onComplete);
+    }
+}

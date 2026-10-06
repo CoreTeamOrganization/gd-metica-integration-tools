@@ -1,0 +1,73 @@
+using System;
+using AdjustSdk;
+using Monetization.Runtime.Logger;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public class AdjustPurchaseVerification : IIAPVerifier
+    {
+        public void Verify(InAppRevenueInfo info, Action<IAPVerifyResult> callback)
+        {
+#if UNITY_EDITOR
+            callback?.Invoke(new IAPVerifyResult(true));
+            return;
+#endif
+
+#if UNITY_ANDROID
+            AdjustEvent adjustEvent = new AdjustEvent(info.AdjustToken);
+            adjustEvent.SetRevenue(info.Price, info.Currency);
+            adjustEvent.ProductId = info.ItemId; // Android & iOS
+            adjustEvent.PurchaseToken = info.TransactionId; // Android only
+
+            Adjust.VerifyAndTrackPlayStorePurchase(adjustEvent,
+                a =>
+                {
+                    bool isSuccess = (a.VerificationStatus.Equals("success", StringComparison.OrdinalIgnoreCase))
+                                     || (a.VerificationStatus.Equals("duplicate", StringComparison.OrdinalIgnoreCase)
+                                         && info.Type == ProductType.NonConsumable);
+
+                    Message.Log(Tag.InAppPurchasing,
+                        $"Adjust.VerifyAndTrackPlayStorePurchase = ItemId : {info.ItemId}, ItemType : {info.Type}, VerificationStatus : {a.VerificationStatus}, Message : {a.Message}, Code : {a.Code}, Success : {isSuccess}");
+                    if (isSuccess)
+                    {
+                        bool isDuplicate = a.VerificationStatus.Equals("duplicate", StringComparison.OrdinalIgnoreCase);
+                        info.SetDuplicateStatus(isDuplicate);
+                        callback?.Invoke(new IAPVerifyResult(true));
+                        return;
+                    }
+
+                    callback?.Invoke(new IAPVerifyResult(false));
+                });
+#endif
+
+
+#if UNITY_IPHONE
+            AdjustEvent adjustEvent = new AdjustEvent(info.AdjustToken);
+            adjustEvent.SetRevenue(info.Price, info.Currency);
+            adjustEvent.ProductId = info.ItemId; // Android & iOS
+            adjustEvent.TransactionId = info.TransactionId; // iOS only
+
+            Adjust.VerifyAndTrackAppStorePurchase(adjustEvent,
+                a =>
+                {
+                    bool isSuccess = (a.VerificationStatus.Equals("success", StringComparison.OrdinalIgnoreCase))
+                                     || (a.VerificationStatus.Equals("duplicate", StringComparison.OrdinalIgnoreCase)
+                                         && info.Type == ProductType.NonConsumable);
+
+                    Message.Log(Tag.InAppPurchasing,
+                        $"Adjust.VerifyAndTrackAppStorePurchase = ItemId : {info.ItemId}, ItemType : {info.Type}, VerificationStatus : {a.VerificationStatus}, Message : {a.Message}, Code : {a.Code}, Success : {isSuccess}");
+                    if (isSuccess)
+                    {
+                        bool isDuplicate = a.VerificationStatus.Equals("duplicate", StringComparison.OrdinalIgnoreCase);
+                        info.SetDuplicateStatus(isDuplicate);
+                        callback?.Invoke(new IAPVerifyResult(true));
+                        return;
+                    }
+
+                    callback?.Invoke(new IAPVerifyResult(false));
+                });
+#endif
+        }
+    }
+}

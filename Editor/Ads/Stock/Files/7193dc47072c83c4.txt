@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "MiniGamesAnalyticsSO", menuName = "GDMonetization/MeticaAnalytics/GenreSO/MiniGames")]
+    public class MiniGamesAnalyticsSO : AnalyticsGenreSO
+    {
+        [SerializeField] private MiniGamesAnalytics _miniGamesAnalytics;
+
+        public override GameGenre Genre => GameGenre.MiniGames;
+        public override GDMeticaAnalytics GetAnalytics() => _miniGamesAnalytics ??= new MiniGamesAnalytics();
+    }
+}

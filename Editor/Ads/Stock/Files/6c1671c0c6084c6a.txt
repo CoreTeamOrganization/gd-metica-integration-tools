@@ -1,0 +1,41 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Events;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Core
+{
+    [Serializable]
+    public class ParallelStep : LoadingStepBase
+    {
+        [SubStepList, SerializeReference]
+        private List<LoadingStepBase> loadingSteps = new();
+
+        public override BootstrapStepName StepName => BootstrapStepName.Parallel;
+        public override int SubStepCount => loadingSteps.Count;
+
+        protected override async Task PerformStepAsync(CancellationToken cToken)
+        {
+            var tasks = loadingSteps.Select(async step =>
+            {
+                var result = await step.ExecuteAsync(cToken);
+                EventBus.Raise(new LoadingStepExecutedEvent(result));
+                return (step, result);
+            });
+
+            var outcomes = await Task.WhenAll(tasks);
+
+            var criticalFailures = outcomes
+                .Where(o => !o.result.IsSuccess && !o.result.IsSkipped && o.step.IsCritical)
+                .Select(o => o.result.StepName.ToString())
+                .ToList();
+
+            if (criticalFailures.Count > 0)
+                throw new Exception($"Critical parallel steps failed: {string.Join(", ", criticalFailures)}");
+        }
+    }
+}

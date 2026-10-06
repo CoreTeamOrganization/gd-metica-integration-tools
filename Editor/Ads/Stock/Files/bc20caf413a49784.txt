@@ -1,0 +1,16 @@
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public readonly struct PurchaseInfo
+    {
+        public readonly bool Success;
+        public readonly InAppRevenueInfo RevenueInfo;
+
+        public PurchaseInfo(bool success, InAppRevenueInfo revenueInfo)
+        {
+            Success = success;
+            RevenueInfo = revenueInfo;
+        }
+    }
+}

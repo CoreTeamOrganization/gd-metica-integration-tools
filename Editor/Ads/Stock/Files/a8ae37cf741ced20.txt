@@ -1,0 +1,76 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "MiniGamesAnalytics", menuName = "GDMonetization/MeticaAnalytics/ScriptSO/MiniGames")]
+    public class MiniGamesAnalytics : GDMeticaAnalytics, IMiniGamesAnalytics
+    {
+        public void LevelStarted(MiniGamesLevelStarted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]         = data.Level;
+            payload["game"]          = data.Game;
+            payload["game_type"]     = data.GameType;
+            payload["game_category"] = data.GameCategory;
+
+            if (data.LevelId.HasValue)    payload["level_id"]     = data.LevelId.Value;
+            if (data.StartSource != null) payload["start_source"] = data.StartSource;
+
+            LogCustomEvent("levelStarted", payload);
+        }
+
+        public void LevelFinished(MiniGamesLevelFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]         = data.Level;
+            payload["game"]          = data.Game;
+            payload["game_type"]     = data.GameType;
+            payload["game_category"] = data.GameCategory;
+            payload["level_status"]  = data.LevelStatus;
+            payload["reason"]        = data.Reason;
+            payload["play_time"]     = data.PlayTime;
+            payload["attempt_count"] = data.AttemptCount;
+
+            if (data.LevelId.HasValue)      payload["level_id"]      = data.LevelId.Value;
+            if (data.CurrentScore.HasValue) payload["current_score"] = data.CurrentScore.Value;
+            if (data.HighScore.HasValue)    payload["high_score"]    = data.HighScore.Value;
+            if (data.StartSource != null)   payload["start_source"]  = data.StartSource;
+
+            LogCustomEvent("levelFinished", payload);
+        }
+
+        public void GameStarted(MiniGamesGameStarted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["game"]          = data.Game;
+            payload["game_type"]     = data.GameType;
+            payload["game_category"] = data.GameCategory;
+            payload["order_id"]      = data.OrderId;
+            payload["badge_type"]    = data.BadgeType;
+
+            if (data.StartSource != null) payload["start_source"] = data.StartSource;
+            if (data.AdBreak.HasValue)    payload["ad_break"]     = data.AdBreak.Value;
+            if (data.Banner.HasValue)     payload["banner"]       = data.Banner.Value;
+
+            LogCustomEvent("gameStarted", payload);
+        }
+
+        public void GameFinished(MiniGamesGameFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["game"]          = data.Game;
+            payload["game_type"]     = data.GameType;
+            payload["game_category"] = data.GameCategory;
+            payload["order_id"]      = data.OrderId;
+            payload["badge_type"]    = data.BadgeType;
+            payload["status"]        = data.Status;
+            payload["play_time"]     = data.PlayTime;
+
+            if (data.StartSource != null) payload["start_source"] = data.StartSource;
+            if (data.AdBreak.HasValue)    payload["ad_break"]     = data.AdBreak.Value;
+            if (data.Banner.HasValue)     payload["banner"]       = data.Banner.Value;
+
+            LogCustomEvent("gameFinished", payload);
+        }
+    }
+}

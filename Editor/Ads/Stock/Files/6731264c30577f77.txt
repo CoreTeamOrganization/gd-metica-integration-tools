@@ -1,0 +1,35 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Logger;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class ConsentInitializationStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.InitializeConsent;
+        public override bool IsFixed => true;
+        protected override async Task PerformStepAsync(CancellationToken cToken)
+        {
+            var completionSource = new TaskCompletionSource<bool>();
+            await ConsentManager.InitializeAsync(result =>
+            {
+                OnComplete(result);
+                completionSource.TrySetResult(true);
+            });
+            await completionSource.Task;
+        }
+        private static void OnComplete(UMPResult result)
+        {
+            Message.Log(Tag.UMP, $"{result.Status}: {result.Message}");
+
+            if (result.Status == UMPStatus.ShowSuccess)
+            {
+                ConsentManager.UpdateAllServices();
+            }
+        }
+    }
+}

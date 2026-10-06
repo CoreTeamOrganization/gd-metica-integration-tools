@@ -1,0 +1,25 @@
+using System.Collections.Generic;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+
+namespace Monetization.Runtime.Ads
+{
+    /// <summary>Raised when an ad network's SDK initialization completes, successfully or not.</summary>
+    public readonly struct AdNetworkInitStatusEvent : IEvent
+    {
+        public readonly string NetworkName;
+
+        /// <summary>
+        /// The SDK's full init response/status flattened into camelCase keys, plus "status",
+        /// "durationSeconds" and (when known) "errorCode".
+        /// </summary>
+        public readonly Dictionary<string, object> Data;
+
+        public AdNetworkInitStatusEvent(string networkName, Dictionary<string, object> data)
+        {
+            NetworkName = networkName;
+            Data = data;
+        }
+
+        public override string ToString() => $"{NetworkName}: {Data?.Count ?? 0} field(s)";
+    }
+}

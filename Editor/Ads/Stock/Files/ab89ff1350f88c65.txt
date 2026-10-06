@@ -1,0 +1,70 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "SimulationJobAnalytics", menuName = "GDMonetization/MeticaAnalytics/ScriptSO/SimulationJob")]
+    public class SimulationJobAnalytics : GDMeticaAnalytics, ISimulationJobAnalytics
+    {
+        public void DayCompleted(SimulationJobDayCompleted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["day"]                = data.Day;
+            payload["play_time"]          = data.PlayTime;
+            payload["cash_spent"]         = data.CashSpent;
+            payload["cash_earned"]        = data.CashEarned;
+            payload["cash_balance"]       = data.CashBalance;
+            payload["energy_spent"]       = data.EnergySpent;
+            payload["energy_earned"]      = data.EnergyEarned;
+            payload["energy_balance"]     = data.EnergyBalance;
+            payload["rewarded_count"]     = data.RewardedCount;
+            payload["interstitial_count"] = data.InterstitialCount;
+            payload["iap_count"]          = data.IapCount;
+
+            if (data.Level.HasValue)              payload["level"]               = data.Level.Value;
+            if (data.Hour.HasValue)               payload["hour"]                = data.Hour.Value;
+            if (data.CustomersProcessed.HasValue) payload["customers_processed"] = data.CustomersProcessed.Value;
+            if (data.ItemsCollected.HasValue)     payload["items_collected"]     = data.ItemsCollected.Value;
+            if (data.ItemsSold.HasValue)          payload["items_sold"]          = data.ItemsSold.Value;
+
+            LogCustomEvent("dayCompleted", payload);
+        }
+
+        public void LevelFinished(SimulationJobLevelFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["day"]                = data.Day;
+            payload["play_time"]          = data.PlayTime;
+            payload["cash_spent"]         = data.CashSpent;
+            payload["cash_earned"]        = data.CashEarned;
+            payload["cash_balance"]       = data.CashBalance;
+            payload["energy_spent"]       = data.EnergySpent;
+            payload["energy_earned"]      = data.EnergyEarned;
+            payload["energy_balance"]     = data.EnergyBalance;
+            payload["rewarded_count"]     = data.RewardedCount;
+            payload["interstitial_count"] = data.InterstitialCount;
+            payload["iap_count"]          = data.IapCount;
+
+            if (data.Level.HasValue)              payload["level"]               = data.Level.Value;
+            if (data.Hour.HasValue)               payload["hour"]                = data.Hour.Value;
+            if (data.CustomersProcessed.HasValue) payload["customers_processed"] = data.CustomersProcessed.Value;
+            if (data.ItemsCollected.HasValue)     payload["items_collected"]     = data.ItemsCollected.Value;
+            if (data.ItemsSold.HasValue)          payload["items_sold"]          = data.ItemsSold.Value;
+
+            LogCustomEvent("levelFinished", payload);
+        }
+
+        public void TutorialCompleted(SimulationJobTutorialCompleted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["day"]       = data.Day;
+            payload["play_time"] = data.PlayTime;
+            payload["step"]      = data.Step;
+            payload["step_name"] = data.StepName;
+
+            if (data.Level.HasValue) payload["level"] = data.Level.Value;
+            if (data.Hour.HasValue)  payload["hour"]  = data.Hour.Value;
+
+            LogCustomEvent("tutorialCompleted", payload);
+        }
+    }
+}

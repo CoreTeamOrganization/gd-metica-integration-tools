@@ -1,0 +1,218 @@
+using Firebase.Extensions;
+using System.Collections.Generic;
+using UnityEngine;
+using System.Threading.Tasks;
+using System;
+using Firebase.RemoteConfig;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using UnityEngine.UI;
+
+namespace Monetization.Runtime.RemoteConfig
+{
+    internal sealed class FirebaseRemoteConfigService : BaseRemoteConfigService
+    {
+        Dictionary<string, object> defaults = new Dictionary<string, object>(16);
+
+        public override void Initialize()
+        {
+            Debug.Log("Enabling firebase RemoteConfig");
+            FirebaseRemoteConfig.DefaultInstance.SetDefaultsAsync(defaults).ContinueWithOnMainThread(task =>
+            {
+                FetchDataAsync();
+            });
+        }
+
+        Task FetchDataAsync()
+        {
+            Debug.Log("RemoteConfig Fetching remote data...");
+            Task fetchTask = FirebaseRemoteConfig.DefaultInstance.FetchAsync(TimeSpan.Zero);
+            return fetchTask.ContinueWithOnMainThread(FetchComplete);
+        }
+
+        void FetchComplete(Task fetchTask)
+        {
+            if (!fetchTask.IsCompleted)
+            {
+                string errorMessage = "RemoteConfig Retrieval hasn't finished.";
+                Debug.LogError(errorMessage);
+                InvokeOnFetchCompleteWithhSuccess(false,errorMessage);
+                return;
+            }
+
+            var remoteConfig = FirebaseRemoteConfig.DefaultInstance;
+            var info = remoteConfig.Info;
+            if (info.LastFetchStatus != LastFetchStatus.Success)
+            {
+                string message = $"RemoteConfig FetchComplete was unsuccessful info.LastFetchStatus : {info.LastFetchStatus}";
+                Debug.LogError(message);
+                    InvokeOnFetchCompleteWithhSuccess(false,message);
+                return;
+            }
+
+            // Fetch successful. Parameter values must be activated to use.
+            remoteConfig.ActivateAsync().ContinueWithOnMainThread(
+                task =>
+                {
+                    string message = $"RemoteConfig data loaded and ready for use. Last fetch time {info.FetchTime}.";
+                    Debug.Log(message);
+                    InvokeOnFetchComplete();
+                    InvokeOnFetchCompleteWithhSuccess(true,message);
+                });
+        }
+
+        public override void AddOrUpdateValue(string key, object value)
+        {
+            if (!defaults.ContainsKey(key))
+            {
+                Message.Log(Logger.Tag.Firebase, $"RemoteKey Added : {key}");
+                defaults.Add(key, value);
+
+                Debug.Log("defaults length " + defaults.Count);
+
+                return;
+            }
+
+            Message.LogWarning(Logger.Tag.Firebase, $"RemoteKey Updated : {key}");
+            defaults[key] = value;
+
+            Debug.Log("defaults length " + defaults.Count);
+        }
+
+        #region Core
+
+        public override RemoteValue<T> GetRemoteValue<T>(string key)
+        {
+            var typeCode = Type.GetTypeCode(typeof(T));
+            var result = new RemoteValue<T>(default(T), ValueSource.StaticValue);
+            if (GetValueFromRemote(key, typeCode, ref result)) return result;
+            if (GetValueFromDefaults(key, ref result)) return result;
+
+            Message.Log(Logger.Tag.Firebase,
+                $"3rd RemoteValue of key '{key}' is '{result.Value}' with source '{result.Source}'");
+            return result;
+        }
+
+        // public RemoteValue<int> GetValueInteger(string key)
+        // {
+        //     var result = new RemoteValue<int>(0, ValueSource.StaticValue);
+        //     if (GetValueFromRemote(key, TypeCode.Int32, ref result)) return result;
+        //     if (GetValueFromDefaults(key, ref result)) return result;
+        //
+        //     DebugAds.Log(DebugTag.Firebase,
+        //         $"3rd RemoteValue of key '{key}' is '{result.Value}' with source '{result.Source}'");
+        //     return result;
+        // }
+        //
+        // public RemoteValue<bool> GetValueBoolean(string key)
+        // {
+        //     var result = new RemoteValue<bool>(false, ValueSource.StaticValue);
+        //     if (GetValueFromRemote(key, TypeCode.Boolean, ref result)) return result;
+        //     if (GetValueFromDefaults(key, ref result)) return result;
+        //
+        //     DebugAds.Log(DebugTag.Firebase,
+        //         $"3rd RemoteValue of key '{key}' is '{result.Value}' with source '{result.Source}'");
+        //     return result;
+        // }
+        //
+        // public RemoteValue<string> GetValueString(string key)
+        // {
+        //     var result = new RemoteValue<string>("", ValueSource.StaticValue);
+        //     if (GetValueFromRemote(key, TypeCode.String, ref result)) return result;
+        //     if (GetValueFromDefaults(key, ref result)) return result;
+        //
+        //     DebugAds.Log(DebugTag.Firebase,
+        //         $"3rd RemoteValue of key '{key}' is '{result.Value}' with source '{result.Source}'");
+        //     return result;
+        // }
+        //
+        // public RemoteValue<float> GetValueFloat(string key)
+        // {
+        //     var result = new RemoteValue<float>(0f, ValueSource.StaticValue);
+        //     if (GetValueFromRemote(key, TypeCode.Single, ref result)) return result;
+        //     if (GetValueFromDefaults(key, ref result)) return result;
+        //
+        //     DebugAds.Log(DebugTag.Firebase,
+        //         $"3rd RemoteValue of key '{key}' is '{result.Value}' with source '{result.Source}'");
+        //     return result;
+        // }
+
+        bool GetValueFromRemote<T>(string key, TypeCode type, ref RemoteValue<T> value)
+        {
+            var hasInitialized = FirebaseAnalyticsNetwork.DependenciesAvailable;
+            if (hasInitialized)
+            {
+                try
+                {
+                    var config = FirebaseRemoteConfig.DefaultInstance.GetValue(key);
+                    switch (type)
+                    {
+                        case TypeCode.Int64:
+                        case TypeCode.Int32:
+                            value = new RemoteValue<T>((T)Convert.ChangeType(config.LongValue, typeof(T)),
+                                config.Source);
+                            break; // int
+                        case TypeCode.Boolean:
+                            value = new RemoteValue<T>((T)Convert.ChangeType(config.BooleanValue, typeof(T)),
+                                config.Source); break; // bool
+                        case TypeCode.String:
+                            value = new RemoteValue<T>((T)Convert.ChangeType(config.StringValue, typeof(T)),
+                                config.Source);
+                            break; // string
+                        case TypeCode.Double:
+                        case TypeCode.Single:
+                            value = new RemoteValue<T>((T)Convert.ChangeType(config.DoubleValue, typeof(T)),
+                                config.Source);
+                            break; // float
+                    }
+
+                    Message.Log(Logger.Tag.Firebase,
+                        $"1st RemoteValue of key '{key}' is '{value.Value}' with source '{value.Source}'");
+                    return true;
+                }
+                catch (Exception e)
+                {
+                    Message.LogError(Logger.Tag.Firebase, $"1st RemoteValue of key '{key}' failed!");
+                    Message.LogException(Logger.Tag.Firebase, e);
+                }
+            }
+
+            return false;
+        }
+
+        bool GetValueFromDefaults<T>(string key, ref RemoteValue<T> value)
+        {
+            if (defaults.ContainsKey(key))
+            {
+                value = new RemoteValue<T>((T)defaults[key], ValueSource.DefaultValue);
+                Message.Log(Logger.Tag.Firebase,
+                    $"2nd RemoteValue of key '{key}' is '{value.Value}' with source '{value.Source}'");
+                return true;
+            }
+
+            return false;
+        }
+
+        #endregion
+    }
+
+    public struct RemoteValue<T>
+    {
+        public T Value { get; private set; }
+        public FetchSource Source { get; private set; }
+
+        public RemoteValue(T value, ValueSource source)
+        {
+            Value = value;
+            Source = (FetchSource)source;
+        }
+    }
+
+    public enum FetchSource
+    {
+        StaticValue = 0,
+        RemoteValue = 1,
+        DefaultValue = 2
+    }
+}

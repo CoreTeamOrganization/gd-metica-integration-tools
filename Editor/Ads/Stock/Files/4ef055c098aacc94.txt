@@ -1,0 +1,7 @@
+namespace GDMonetization.Runtime.Scripts.EventBusSystem
+{
+    internal interface IListener
+    {
+        // Empty
+    }
+}

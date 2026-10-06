@@ -1,0 +1,9 @@
+
+namespace Monetization.Runtime.Analytics
+{
+    public interface IAnalyticsInitialization
+    {
+        void Initialize();
+        bool IsInitialized { get; }
+    }
+}

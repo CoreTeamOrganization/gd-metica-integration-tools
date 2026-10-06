@@ -1,0 +1,36 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public static class ConsentManager
+    {
+        internal static readonly IUserMessagingPlatformService UMP = new AdmobConsentManagement();
+
+        private static readonly IConsentSettingsService[] ConsentServices = new IConsentSettingsService[]
+        {
+            new FirebaseConsentSettings(),
+            new ApplovinConsentSettings(),
+            new AdjustConsentSettings(),
+        };
+
+        public static void UpdateConsentOnMainThread()
+        {
+            ThreadDispatcher.Enqueue(delegate
+            {
+                bool eeaUser = MonetizationPreferences.ConsentEuropeanArea.Get();
+                bool personalizedAds = MonetizationPreferences.PersonalizedAds.Get();
+                ConsentInfo info = new ConsentInfo(eeaUser, personalizedAds);
+                for (int i = 0; i < ConsentServices.Length; i++)
+                {
+                    ConsentServices[i].ApplySettings(info);
+                }
+            });
+        }
+    }
+}

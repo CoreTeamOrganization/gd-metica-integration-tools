@@ -1,0 +1,12 @@
+namespace Monetization.Runtime.Ads
+{
+    public enum AdFormat
+    {
+        Interstitial,
+        Rewarded,
+        AppOpen,
+        Banner,
+        MRec,
+        CollapsibleBanner
+    }
+}

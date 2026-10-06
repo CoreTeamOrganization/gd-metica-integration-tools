@@ -1,0 +1,239 @@
+using System;
+using System.Collections.Generic;
+using Metica;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Newtonsoft.Json;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    public class AnalyticsManager
+    {
+
+        private static AnalyticsManager _instance;
+        public static AnalyticsManager Instance => _instance ??= new AnalyticsManager();
+
+        public static event Action<AdRevenueInfo> OnAdRevenuePaidEvent;
+        public static event Action<InAppRevenueInfo> OnPurchaseSuccessEvent;
+
+        private readonly List<IAnalyticsInitialization> _initializableNetworks = new(4);
+        private readonly List<IAnalyticsEventsService> _eventsNetworks = new(4);
+        private readonly List<IAnalyticsAdRevenueService> _revenueNetworks = new(4);
+        private readonly List<IMarketingServices> _marketingNetworks = new(4);
+
+        private GDMeticaAnalytics _currentGenre;
+
+        // ── Static API — unchanged for callers ──────────────────────────────
+
+        public static void Create()              => Instance.CreateInternal();
+        public static void Initialize()          => Instance.InitializeInternal();
+        public static void InitializeAllGenres() => Instance.InitializeAllGenresInternal();
+
+        public static T Game<T>() where T : class, IGDMeticaAnalytics
+            => Instance.GameInternal<T>();
+        /// <summary>Send event to firebase and appmetrica</summary>
+        /// <param name="eventName">Must consist of letters, digits or _ (underscores)</param>
+        public static void SendEvent(string eventName)
+            => Instance.SendEventInternal(eventName);
+
+        /// <summary>Send event to firebase, appmetrica and Metica</summary>
+        /// <param name="eventName">Must consist of letters, digits or _ (underscores)</param>
+        /// <param name="parameters">Dictionary keys must consist of letters, digits or _ (underscores)</param>
+        public static void SendEvent(string eventName, Dictionary<string, object> parameters)
+            => Instance.SendEventInternal(eventName, parameters);
+
+        public static void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+            => Instance.ReportAdRevenueInternal(adRevenueInfo);
+
+        public static void ReportInAppRevenue(InAppRevenueInfo inAppRevenueInfo)
+            => Instance.ReportInAppRevenueInternal(inAppRevenueInfo);
+
+        public static bool IsNetworkInitialized<T>() where T : IAnalyticsInitialization
+            => Instance.IsNetworkInitializedInternal<T>();
+
+        public static bool GetAnalyticsService<T>(out T result) where T : IAnalyticsEventsService
+            => Instance.GetAnalyticsServiceInternal(out result);
+
+        public static void Dispose()
+        {
+            Instance.DisposeInternal();
+            _instance = null;
+        }
+
+        [Obsolete("Use SendEvent instead", true)]
+        public static void SendAppMetricaEvent(string eventName, params string[] parameters)
+            => Instance.SendAppMetricaEventInternal(eventName, parameters);
+
+        [Obsolete("Use SendEvent instead", true)]
+        public static void SendAppMetricaEvent(string eventName, string json)
+            => Instance.SendAppMetricaEventInternal(eventName, json);
+
+        // ── Instance implementations ─────────────────────────────────────────
+
+        private void CreateInternal()
+        {
+            var sdkConfig = Resources.Load<SDKConfiguration>(MonetizationConfigurationsPath.SDK);
+#if !UNITY_EDITOR
+            if (sdkConfig.AnalyticsNetworks != null)
+            {
+                foreach (var network in sdkConfig.AnalyticsNetworks)
+                {
+                    if (network == null) continue;
+                    if (network.EnableInitialization && network is IAnalyticsInitialization init)    _initializableNetworks.Add(init);
+                    if (network.EnableEvents         && network is IAnalyticsEventsService events)   _eventsNetworks.Add(events);
+                    if (network.EnableRevenue        && network is IAnalyticsAdRevenueService rev)   _revenueNetworks.Add(rev);
+                    if (network.EnableMarketing      && network is IMarketingServices mkt)           _marketingNetworks.Add(mkt);
+                }
+            }
+#endif
+            if (!sdkConfig.UseMeticaForAnalytics)
+                return;
+
+            MeticaInitializer.InitializeAnalytics();
+            InitializeAllGenresInternal();
+        }
+
+        private void InitializeInternal()
+        {
+            Message.Log(Tag.SDK, "Initializing Analytics Manager...");
+            for (int i = 0; i < _initializableNetworks.Count; i++)
+                _initializableNetworks[i].Initialize();
+        }
+
+        #region Metica Analytics
+
+        /// <summary>
+        /// Registers the genre SO assigned in SDKConfiguration into the analytics registry.
+        /// </summary>
+        private void InitializeAllGenresInternal()
+        {
+            var sdkConfig = Resources.Load<SDKConfiguration>(MonetizationConfigurationsPath.SDK);
+            if (sdkConfig.GenreSO == null)
+            {
+                Message.Log(Tag.Metica, "Metica Analytics initialization failed: No GenreSO assigned in SDKConfiguration");
+                return;
+            }
+
+            _currentGenre = sdkConfig.GenreSO.GetAnalytics();
+        }
+
+        /// <summary>
+        /// Type-safe accessor for game analytics by genre interface (e.g. Game{IPuzzleAnalytics}()).
+        /// </summary>
+        private T GameInternal<T>() where T : class, IGDMeticaAnalytics
+        {
+            if (_currentGenre is T typed)
+                return typed;
+            throw new InvalidOperationException($"Analytics of type {typeof(T).Name} is not registered.");
+        }
+
+        private void SendEventInternal(string eventName)
+        {
+            for (int index = 0; index < _eventsNetworks.Count; index++)
+                _eventsNetworks[index].SendEvent(eventName);
+            Message.Log(Tag.CustomEvent, $"Event '{eventName}' sent.");
+        }
+
+        private void SendEventInternal(string eventName, Dictionary<string, object> parameters)
+        {
+            for (int index = 0; index < _eventsNetworks.Count; index++)
+            {
+                var network = _eventsNetworks[index];
+                if (parameters == null)
+                    network.SendEvent(eventName);
+                else
+                    network.SendEvent(eventName, parameters);
+            }
+            Message.Log(Tag.CustomEvent, $"Event '{eventName}' sent parameters: {JsonConvert.SerializeObject(parameters)}");
+        }
+
+        #endregion
+
+        [Obsolete("Use SendEventInternal instead", true)]
+        private void SendAppMetricaEventInternal(string eventName, params string[] parameters)
+        {
+            for (int index = 0; index < _eventsNetworks.Count; index++)
+            {
+                if (_eventsNetworks[index] is AppMetricaAnalyticsNetwork appMetrica)
+                {
+                    appMetrica.SendEvent(eventName, parameters);
+                    break;
+                }
+            }
+        }
+
+        [Obsolete("Use SendEventInternal instead", true)]
+        private void SendAppMetricaEventInternal(string eventName, string json)
+        {
+            for (int index = 0; index < _eventsNetworks.Count; index++)
+            {
+                if (_eventsNetworks[index] is AppMetricaAnalyticsNetwork appMetrica)
+                {
+                    appMetrica.SendEvent(eventName, json);
+                    break;
+                }
+            }
+        }
+
+        private void ReportAdRevenueInternal(AdRevenueInfo adRevenueInfo)
+        {
+            for (int index = 0; index < _revenueNetworks.Count; index++)
+                _revenueNetworks[index].ReportAdRevenue(adRevenueInfo);
+
+            _currentGenre?.LogImpressionEvent(adRevenueInfo.Revenue,adRevenueInfo.AdFormat.ToString(), adRevenueInfo.Platform, adRevenueInfo.AdSource, adRevenueInfo.AdPlacement,null);
+
+            OnAdRevenuePaidEvent?.Invoke(adRevenueInfo);
+            Message.Log(Tag.CustomEvent, $"Reported ad revenue: {JsonConvert.SerializeObject(adRevenueInfo)}");
+        }
+
+        private void ReportInAppRevenueInternal(InAppRevenueInfo inAppRevenueInfo)
+        {
+#if !UNITY_EDITOR
+            for (int index = 0; index < _marketingNetworks.Count; index++)
+                _marketingNetworks[index].SendInAppPurchaseEvent(inAppRevenueInfo);
+
+            _currentGenre?.LogPurchaseEvent(inAppRevenueInfo.ItemId, inAppRevenueInfo.Currency, inAppRevenueInfo.Price,"Success",null, inAppRevenueInfo.TransactionId,null);
+
+            OnPurchaseSuccessEvent?.Invoke(inAppRevenueInfo);
+#endif
+            Message.Log(Tag.CustomEvent, $"Reported in-app revenue: {JsonConvert.SerializeObject(inAppRevenueInfo)}");
+        }
+
+        private bool IsNetworkInitializedInternal<T>() where T : IAnalyticsInitialization
+        {
+            for (int index = 0; index < _initializableNetworks.Count; index++)
+            {
+                if (_initializableNetworks[index] is T output)
+                    return output.IsInitialized;
+            }
+            return false;
+        }
+
+        private bool GetAnalyticsServiceInternal<T>(out T result) where T : IAnalyticsEventsService
+        {
+            for (int index = 0; index < _eventsNetworks.Count; index++)
+            {
+                if (_eventsNetworks[index] is T network)
+                {
+                    result = network;
+                    return true;
+                }
+            }
+            result = default;
+            return false;
+        }
+
+        private void DisposeInternal()
+        {
+            _initializableNetworks.Clear();
+            _eventsNetworks.Clear();
+            _revenueNetworks.Clear();
+            _marketingNetworks.Clear();
+            _currentGenre = null;
+        }
+    }
+}

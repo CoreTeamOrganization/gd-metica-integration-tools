@@ -1,0 +1,23 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "InternetConfig", menuName = "GDMonetization/InternetConfig")]
+    public sealed class InternetPanelConfiguration: ScriptableObject
+    {
+        public PanelVisibility Visibility;
+        public bool PauseTimeScale = true;
+        public bool MuteAudioListener = true;
+
+        [Header("Resources")]
+        public string PanelPath;
+
+        public enum PanelVisibility
+        {
+            ViaCode,
+            UpdateLoop
+        }
+    }
+}

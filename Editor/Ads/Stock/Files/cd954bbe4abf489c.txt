@@ -1,0 +1,34 @@
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Configurations;
+using UnityEngine;
+
+namespace Monetization.Runtime.Sdk
+{
+    public static class MonetizationInitializeOnLoad
+    {
+        public const string BaseVersion = "5.5.0";
+        public const string Version = "6.2.5";
+        public const string Release_Date = "October 2, 2026";
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Run()
+        {
+            _ = AppLoader.Instance?.ExecuteAsync();
+        }
+
+        public static Task Initialize()
+        {
+            return AppLoader.Instance?.ExecuteStepManually(BootstrapStepName.AutomaticallyInitialize)
+                   ?? Task.CompletedTask;
+        }
+
+        public static void VisitPrivacyPolicy()
+        {
+            AdsManager.ExtendAppOpenTime();
+            var privacyConfiguration = Resources.Load<PrivacyConfiguration>(MonetizationConfigurationsPath.Privacy);
+            Application.OpenURL(privacyConfiguration.PrivacyPolicyLink);
+        }
+    }
+}

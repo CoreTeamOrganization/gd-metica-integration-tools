@@ -1,0 +1,17 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "AppMetricaSettings", menuName = "GDMonetization/AppMetricaConfig")]
+    public sealed class AppMetricaConfiguration : ScriptableObject
+    {
+        public string ApiKey;
+        public bool Logs;
+        public bool CrashReporting = true;
+        public bool NativeCrashReporting = true;
+        public bool SessionsAutoTracking = true;
+        public int SessionTimeout = 10;
+    }
+}

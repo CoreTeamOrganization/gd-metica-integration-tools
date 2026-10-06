@@ -1,0 +1,21 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "ConsentConfig", menuName = "GDMonetization/ConsentConfig")]
+    public sealed class ConsentConfiguration : ScriptableObject
+    {
+        public int UMPLoadingTimeout = 10;
+
+        [Header("Debugging")]
+        public DebugGeography Geography;
+        public string[] DeviceIds = new string[] { "SIMULATOR", "77BA4C3218DB8850E1C99D5620704ABC" , "1BE0E8B477E58624C8138AD19C73FD9D" };
+
+        public enum DebugGeography
+        {
+            Disabled,
+            GDPR,
+            Other
+        }
+    }
+}

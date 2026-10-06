@@ -1,0 +1,67 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "ShooterAnalytics", menuName = "GDMonetization/MeticaAnalytics/ScriptSO/Shooter")]
+    public class ShooterAnalytics : GDMeticaAnalytics, IShooterAnalytics
+    {
+        public void LevelStarted(ShooterLevelStarted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"] = data.Level;
+            LogCustomEvent("levelStarted", payload);
+        }
+
+        public void LevelFinished(ShooterLevelFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]              = data.Level;
+            payload["level_status"]       = data.LevelStatus;
+            payload["reason"]             = data.Reason;
+            payload["play_time"]          = data.PlayTime;
+            payload["kill_count"]         = data.KillCount;
+            payload["death_count"]        = data.DeathCount;
+            payload["attempt_count"]      = data.AttemptCount;
+            payload["used_booster_count"] = data.UsedBoosterCount;
+            foreach (var kvp in data.UsedBoosters)
+                payload["used_booster_" + kvp.Key] = kvp.Value;
+            foreach (var kvp in data.Balances)
+                payload["balance_" + kvp.Key] = kvp.Value;
+            foreach (var kvp in data.BalanceBoosters)
+                payload["balance_booster_" + kvp.Key] = kvp.Value;
+
+            if (data.Accuracy.HasValue)        payload["accuracy"]         = data.Accuracy.Value;
+            if (data.AccuracyEarning.HasValue) payload["accuracy_earning"] = data.AccuracyEarning.Value;
+            if (data.HeadShots.HasValue)       payload["headshot"]         = data.HeadShots.Value;
+            if (data.HeadShotEarning.HasValue) payload["headshot_earning"] = data.HeadShotEarning.Value;
+            if (data.Health.HasValue)          payload["health"]           = data.Health.Value;
+            if (data.HealthEarning.HasValue)   payload["health_earning"]   = data.HealthEarning.Value;
+
+            LogCustomEvent("levelFinished", payload);
+        }
+
+        public void EarnAsset(ShooterEarnAsset data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]   = data.Level;
+            payload["asset"]   = data.Asset;
+            payload["amount"]  = data.Amount;
+            payload["source"]  = data.Source;
+            payload["type"]    = data.Type;
+            payload["balance"] = data.Balance;
+            LogCustomEvent("earnAsset", payload);
+        }
+
+        public void SpendAsset(ShooterSpendAsset data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]   = data.Level;
+            payload["asset"]   = data.Asset;
+            payload["amount"]  = data.Amount;
+            payload["source"]  = data.Source;
+            payload["item"]    = data.Item;
+            payload["balance"] = data.Balance;
+            LogCustomEvent("spendAsset", payload);
+        }
+    }
+}

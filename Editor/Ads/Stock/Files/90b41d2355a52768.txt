@@ -1,0 +1,73 @@
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+using Monetization.Runtime.Logger;
+using System.Threading.Tasks;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdNetworkAdmob : IAsyncAdNetworkService
+    {
+        private Action callback;
+        private TaskCompletionSource<bool> _initTcs;
+        private float initStartTime;
+
+        public async Task InitializeAsync(string appID, Action onInitialized)
+        {
+            Message.Log(Logger.Tag.Admob, "Initializing...");
+            initStartTime = Time.realtimeSinceStartup;
+            EventBus.Raise(new AdNetworkInitStartedEvent(AdPlatforms.ADMOB, appID));
+            callback = onInitialized;
+            SetConfigurations();
+            MobileAds.SetiOSAppPauseOnBackground(true);
+            MobileAds.RaiseAdEventsOnUnityMainThread = true; // MUST be true
+
+            _initTcs = new TaskCompletionSource<bool>();
+
+            // Call MobileAds.Initialize on main thread
+            MobileAds.Initialize(HandleInitCompleteAction);
+
+            // Await completion
+            await _initTcs.Task;
+        }
+
+
+        void SetConfigurations()
+        {
+            MobileAds.SetRequestConfiguration(new RequestConfiguration
+            {
+                TagForUnderAgeOfConsent = TagForUnderAgeOfConsent.False,
+                TagForChildDirectedTreatment = TagForChildDirectedTreatment.False
+            });
+        }
+
+        private void HandleInitCompleteAction(InitializationStatus status)
+        {
+            Message.Log(Logger.Tag.Admob, "Successfully initialized");
+            callback?.Invoke();
+            _initTcs.TrySetResult(true);
+
+            var duration = Time.realtimeSinceStartup - initStartTime;
+            if (status == null)
+            {
+                EventBus.Raise(new AdNetworkInitStatusEvent(AdPlatforms.ADMOB, new Dictionary<string, object>
+                {
+                    { "status", "Failed" },
+                    { "durationSeconds", duration },
+                    { "errorCode", "InitializationStatus was null" }
+                }));
+                return;
+            }
+
+            var data = new Dictionary<string, object>
+            {
+                { "status", "Success" },
+                { "durationSeconds", duration }
+            };
+
+            EventBus.Raise(new AdNetworkInitStatusEvent(AdPlatforms.ADMOB, data));
+        }
+    }
+}

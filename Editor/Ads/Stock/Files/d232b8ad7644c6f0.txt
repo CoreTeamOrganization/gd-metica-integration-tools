@@ -1,0 +1,49 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class PrivacyPolicySetupStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.HandlePrivacyPolicy;
+        public override bool IsFixed => true;
+        protected override async Task PerformStepAsync(CancellationToken cToken)
+        {
+            var completionSource = new TaskCompletionSource<bool>();
+
+            if (!MonetizationPreferences.PrivacyPolicy.Get())
+            {
+                var privacyConfiguration =
+                    Resources.Load<PrivacyConfiguration>(MonetizationConfigurationsPath.Privacy);
+
+                UnityEngine.Object.Instantiate(Resources.Load<PrivacyPolicyPanel>(privacyConfiguration.PanelPath));
+
+                PrivacyPolicyPanel.OnPolicyAcceptedEvent += async () =>
+                {
+                    await HandleAcceptedAsync(completionSource);
+                };
+            }
+            else
+            {
+                await HandleAcceptedAsync(completionSource);
+            }
+
+            await completionSource.Task;
+        }
+
+        private async Task HandleAcceptedAsync(TaskCompletionSource<bool> completionSource)
+        {
+            Message.Log(Tag.SDK, "Privacy Policy accepted.");
+            await Task.Delay(1000);
+            completionSource.TrySetResult(true);
+        }
+    }
+}

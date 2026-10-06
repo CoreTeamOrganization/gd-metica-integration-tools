@@ -1,0 +1,61 @@
+using AdjustSdk;
+using Io.AppMetrica;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class AdjustAnalyticsNetwork : IAnalyticsInitialization, IAnalyticsAdRevenueService //,IMarketingServices
+    {
+        public bool IsInitialized { get; private set; }
+
+        public void Initialize()
+        {
+            Message.Log(Logger.Tag.Adjust, "Initiazling...");
+            var adjustSO = Resources.Load<AdjustConfiguration>(MonetizationConfigurationsPath.Adjust);
+            AdjustConfig adjustConfig = new AdjustConfig(adjustSO.AppToken, adjustSO.Environment)
+            {
+                LogLevel = adjustSO.LogLevel,
+            };
+
+            adjustConfig.AttributionChangedDelegate += (attribution =>
+            {
+                AppMetrica.ReportExternalAttribution(ExternalAttributions.Adjust(attribution));
+            });
+
+            Adjust.InitSdk(adjustConfig);
+            ConsentManager.AddAndUpdateConsentService(new AdjustConsentSettings());
+            IsInitialized = true;
+        }
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (IsInitialized)
+            {
+                string adSource = GetAdSource(adRevenueInfo.Platform);
+
+                AdjustAdRevenue adjustAdRevenue = new AdjustAdRevenue(adSource);
+                adjustAdRevenue.SetRevenue(adRevenueInfo.Revenue, adRevenueInfo.Currency);
+                adjustAdRevenue.AdRevenuePlacement = adRevenueInfo.AdPlacement;
+                adjustAdRevenue.AdRevenueNetwork = adRevenueInfo.AdSource;
+                adjustAdRevenue.AdRevenueUnit = adRevenueInfo.AdUnitName;
+                Adjust.TrackAdRevenue(adjustAdRevenue);
+            }
+        }
+
+        private string GetAdSource(string adPlatform)
+        {
+            return adPlatform switch
+            {
+                AdPlatforms.APPLOVIN => "applovin_max_sdk",
+                AdPlatforms.ADMOB => "admob_sdk",
+                AdPlatforms.METICA => "applovin_max_sdk",
+                _ => null
+            };
+        }
+    }
+}

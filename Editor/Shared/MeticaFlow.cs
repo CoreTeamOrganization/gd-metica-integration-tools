@@ -73,8 +73,9 @@ namespace GameDistrict.MeticaIntegrationTools
                 }
 
                 // A step that no longer verifies — someone reverted, or a later step broke
-                // it — cannot keep a sign-off that described a different state.
-                if (!_results[i].Ok) MeticaIntegrationProgress.ClearReviewed(Steps[i].Id);
+                // it — cannot keep a sign-off that described a different state. One only
+                // waiting for Unity to compile has not failed, so it keeps its sign-off.
+                if (!_results[i].Ok && !_results[i].Waiting) MeticaIntegrationProgress.ClearReviewed(Steps[i].Id);
             }
         }
 
@@ -87,7 +88,11 @@ namespace GameDistrict.MeticaIntegrationTools
         public bool IsSkipped(int index) =>
             Steps[index].Optional && MeticaIntegrationProgress.IsSkipped(Steps[index].Id);
 
-        public bool IsComplete(int index) => IsSkipped(index) || (IsVerified(index) && IsReviewed(index));
+        /// <summary>Signed off and still verifying — or waiting on a compile, which keeps the run where it is.</summary>
+        public bool IsComplete(int index) =>
+            IsSkipped(index) || (IsReviewed(index) && (IsVerified(index) || IsWaiting(index)));
+
+        public bool IsWaiting(int index) => _results[index] != null && _results[index].Waiting;
 
         /// <summary>The first unfinished step, or <see cref="Steps"/>.Length when all are.</summary>
         public int CurrentIndex

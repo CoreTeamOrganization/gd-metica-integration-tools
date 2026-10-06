@@ -1,0 +1,40 @@
+using System;
+using Monetization.Runtime.RemoteConfig;
+
+public static partial class MonetizationServices
+{
+    public static class Remote
+    {
+        public static event Action OnFetchComplete
+        {
+            add { RemoteConfigManager.OnFetchComplete += value; }
+            remove { RemoteConfigManager.OnFetchComplete -= value; }
+        }
+
+        public static void AddOrUpdateValue(string key, object value)
+        {
+            RemoteConfigManager.AddOrUpdateValue(key, value);
+        }
+
+        public static T GetRemoteValue<T>(string key)
+        {
+            return RemoteConfigManager.GetRemoteValue<T>(key).Value;
+        }
+    }
+}
+
+// public readonly struct RemoteValue<T>
+// {
+//     readonly string Key;
+//     public T Value => MonetizationServices.Remote.GetRemoteValue<T>(Key);
+//
+//     public RemoteValue(string key)
+//     {
+//         Key = key;
+//     }
+//
+//     public void SetDefault(T value)
+//     {
+//         MonetizationServices.Remote.AddOrUpdateValue(Key, value);
+//     }
+// }

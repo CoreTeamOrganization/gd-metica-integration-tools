@@ -1,0 +1,214 @@
+using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using GoogleMobileAds.Common;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdmobCollapsibleBanner : BannerAdUnit
+    {
+        private int bannerPriority;
+        private bool bannerStatus;
+        private bool isLoaded;
+        private bool IsTopPriority;
+
+        BannerView bannerView;
+        private bool isCollapsible = false;
+        private bool bannerFlag = false;
+        public override AdFormat AdType => AdFormat.CollapsibleBanner;
+
+        public override void Initialize(string adUnitId)
+        {
+            bool useCollapsible = MonetizationPreferences.SessionCount.Get() > 1 &&
+                                  RemoteConfigManager.Configuration.UseAdmobCollapsible;
+
+            if (useCollapsible)
+            {
+                bannerPriority = 0;
+                this.adUnitId = adUnitId;
+                Message.Log(Tag.Admob, "CollapsibleBanner is initialized");
+            }
+            else
+            {
+                bannerPriority = 3;
+            }
+        }
+
+        public override bool HasBanner()
+        {
+            if (IsAdUnitEmpty || bannerFlag)
+            {
+                return false;
+            }
+
+            bannerStatus = true;
+
+            bool hasBanner = bannerView != null && isLoaded;
+            if (!hasBanner)
+            {
+                LoadBanner();
+                return false;
+            }
+
+            return true;
+        }
+
+        public override void ShowBanner()
+        {
+            bannerStatus = true;
+            bannerView.Show();
+            Message.Log(Tag.Admob, "CollapsibleBanner is showing");
+        }
+
+        public override void LoadBanner()
+        {
+            if (IsAdUnitEmpty) return;
+
+            if (bannerView != null)
+                bannerView.Destroy();
+
+            bannerView = new BannerView(adUnitId, AdSize.Banner, GetBannerPosition());
+            bannerView.OnAdFullScreenContentClosed += BannerView_OnAdFullScreenContentClosed;
+            bannerView.OnBannerAdLoadFailed += BannerView_OnBannerAdLoadFailed;
+            bannerView.OnBannerAdLoaded += BannerView_OnBannerAdLoaded;
+            bannerView.OnAdClicked += BannerView_OnAdClicked;
+            bannerView.OnAdPaid += BannerView_OnAdPaid;
+
+            string pos = bannerInfo.BannerPosition.ToString().Contains("Top") ? "top" : "bottom";
+            var adRequest = MonetizationConstants.CreateAdRequest();
+            adRequest.Extras.Add("collapsible", pos);
+
+            bannerView.LoadAd(adRequest);
+            bannerFlag = true;
+        }
+
+        public override void HideBanner()
+        {
+            bannerStatus = false;
+            if (bannerView != null)
+            {
+                bannerView.Hide();
+                Message.Log(Tag.Admob, "CollapsibleBanner is hidden");
+            }
+        }
+
+        public override void DestroyBanner()
+        {
+            isLoaded = false;
+            bannerStatus = false;
+            if (bannerView != null)
+            {
+                Message.Log(Tag.Admob, "CollapsibleBanner is destroyed");
+                bannerView.Destroy();
+                bannerView = null;
+            }
+        }
+
+        public override bool IsBannerActive()
+        {
+            return bannerFlag;
+        }
+
+        AdPosition GetBannerPosition()
+        {
+            switch (bannerInfo.BannerPosition)
+            {
+                case BannerPosition.Top: return AdPosition.Top;
+                case BannerPosition.TopLeft: return AdPosition.TopLeft;
+                case BannerPosition.TopRight: return AdPosition.TopRight;
+                case BannerPosition.Bottom: return AdPosition.Bottom;
+                case BannerPosition.BottomLeft: return AdPosition.BottomLeft;
+                case BannerPosition.BottomRight: return AdPosition.BottomRight;
+                case BannerPosition.Center: return AdPosition.Center;
+                default: return AdPosition.Bottom;
+            }
+        }
+
+        void HideBannerWithDelay()
+        {
+            if (bannerStatus)
+            {
+                AdsManager.ShowBanner();
+            }
+
+            HideBanner();
+        }
+
+        #region Callbacks
+
+        private void BannerView_OnAdFullScreenContentClosed()
+        {
+            bannerPriority = 3;
+            if (isCollapsible)
+            {
+                DelayedActionManager.Add(HideBannerWithDelay, 3f, true);
+            }
+
+            isCollapsible = false;
+        }
+
+        private void BannerView_OnBannerAdLoadFailed(LoadAdError obj)
+        {
+            Message.LogError(Tag.Admob, "CollapsibleBanner failed to load : " + obj.ToString());
+            bannerPriority = 3;
+            if (bannerStatus)
+            {
+                AdsManager.ShowBanner();
+            }
+
+            DestroyBanner();
+        }
+
+        private void BannerView_OnBannerAdLoaded()
+        {
+            isLoaded = true;
+            bannerPriority = 3;
+            Message.Log(Tag.Admob, "CollapsibleBanner loaded");
+
+            if (!bannerStatus)
+            {
+                DestroyBanner();
+                return;
+            }
+
+            isCollapsible = bannerView.IsCollapsible();
+
+            if (IsTopPriority)
+            {
+                if (isCollapsible)
+                {
+                    //AdsManager.HideAllBannersExcept(this);
+                }
+                else
+                {
+                    DelayedActionManager.Add(HideBannerWithDelay, 3f, true);
+                }
+            }
+        }
+
+        private void BannerView_OnAdPaid(AdValue adValue)
+        {
+            if (adValue == null) return;
+
+            double revenue = (adValue.Value / 1000000f);
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdType, AdPlatforms.ADMOB, "Admob_Native",
+                adUnitId, "USD", revenue, isCollapsible ? "collapsible" : "non_collapsible");
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void BannerView_OnAdClicked()
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+    }
+}

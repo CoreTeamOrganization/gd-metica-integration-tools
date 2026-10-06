@@ -1,0 +1,52 @@
+using System;
+using System.Collections.Generic;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Logger;
+using Io.AppMetrica;
+
+namespace Monetization.Runtime.Utilities
+{
+    internal sealed class CustomDispatcher : IDispatcherService
+    {
+        readonly Queue<Action> adEventsQueue = new Queue<Action>();
+        volatile bool adEventsQueueEmpty = true;
+
+        public void Enqueue(Action action)
+        {
+            lock (adEventsQueue)
+            {
+                adEventsQueue.Enqueue(action);
+                adEventsQueueEmpty = false;
+            }
+        }
+
+        public void Tick()
+        {
+            if (adEventsQueueEmpty) return;
+
+            lock (adEventsQueue)
+            {
+                while (adEventsQueue.Count > 0)
+                {
+                    try
+                    {
+                        adEventsQueue.Dequeue()?.Invoke();
+                    }
+                    catch (Exception e)
+                    {
+                        if (MonetizationConstants.UseLogs)
+                        {
+                            Message.LogException(Tag.Dispatcher, e);
+                        }
+                        else
+                        {
+                            AppMetrica.ReportUnhandledException(e);
+                        }
+                    }
+
+                    adEventsQueueEmpty = true;
+                }
+            }
+        }
+    }
+}

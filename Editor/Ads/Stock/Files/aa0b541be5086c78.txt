@@ -1,0 +1,82 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Utilities
+{
+    /// <summary>
+    /// Utility class for converting analytics parameters from string arrays to dictionaries
+    /// </summary>
+    public static class AnalyticsParameterConverter
+    {
+        /// <summary>
+        /// Converts a string array of alternating key-value pairs to a Dictionary&lt;string, object&gt;
+        /// </summary>
+        /// <param name="parameters">Array of alternating key-value pairs (e.g., ["key1", "value1", "key2", "value2"])</param>
+        /// <returns>Dictionary with keys and values from the array. If array length is odd, the last element is ignored.</returns>
+        public static Dictionary<string, object> ConvertParamsToDictionary(params string[] parameters)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>();
+
+            if (parameters == null || parameters.Length == 0)
+            {
+                return result;
+            }
+
+            // Process pairs: even indices are keys, odd indices are values
+            for (int i = 0; i < parameters.Length - 1; i += 2)
+            {
+                string key = parameters[i];
+                string value = parameters[i + 1];
+
+                if (!string.IsNullOrEmpty(key))
+                {
+                    // Try to parse numeric values
+                    object parsedValue = ParseValue(value);
+                    result[key] = parsedValue;
+                }
+            }
+
+            return result;
+        }
+
+        private static object ParseValue(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            // Try to parse as integer
+            if (int.TryParse(value, out int intValue))
+            {
+                return intValue;
+            }
+
+            // Try to parse as long
+            if (long.TryParse(value, out long longValue))
+            {
+                return longValue;
+            }
+
+            // Try to parse as float
+            if (float.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float floatValue))
+            {
+                return floatValue;
+            }
+
+            // Try to parse as double
+            if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double doubleValue))
+            {
+                return doubleValue;
+            }
+
+            // Try to parse as boolean
+            if (bool.TryParse(value, out bool boolValue))
+            {
+                return boolValue;
+            }
+
+            // Return as string if no parsing succeeded
+            return value;
+        }
+    }
+}

@@ -50,9 +50,12 @@ Editor/
                              Why?, finished screen, footer, ⋮ menu (UI Toolkit)
     MeticaTheme.uss          the design's tokens and component classes
     MiIcon                   the design's line icons, drawn from their SVG path data
+    SdkCompareWindow         Compare with original GD SDK: changed files and their diffs
   Shared/
     MeticaFlow               one run's engine, no UI: verify, sign off, skip, current step
     MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress stores
+    StepCommit               commits one step's changed files to the game's git repo
+    LineDiff                 line diff (Myers) and hunks, for the compare window
     ToolRemover              removes the package (menu item + ⋮ menu)
     PackageRequests          waits on Package Manager requests without blocking the editor
     Gradle/                GradleVersionStep, KotlinTemplateStep, GradleTemplateEditor,

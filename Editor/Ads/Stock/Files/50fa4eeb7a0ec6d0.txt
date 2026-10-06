@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    [DisallowMultipleComponent]
+    public class InAppRestoreButton : MonoBehaviour
+    {
+        public void RestorePurchases()
+        {
+            GDInAppPurchaseManager.RestorePurchases();
+        }
+    }
+}

@@ -94,6 +94,12 @@ namespace GameDistrict.MeticaIntegrationTools
             // Present but not compiling is the failure that matters, and the only one that
             // can be seen from here.
             var uncompiled = MustCompile.Where(name => !TemplateWriter.TypeIsLoaded(name)).ToArray();
+            if (uncompiled.Length > 0 && ScriptCompile.Pending(MeticaPaths.StandaloneRoot))
+            {
+                result.Wait();
+                return result.Seal();
+            }
+
             if (uncompiled.Length > 0)
             {
                 result.Problem("Runtime hasn't compiled — check the Console.");

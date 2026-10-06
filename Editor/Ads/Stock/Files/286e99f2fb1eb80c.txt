@@ -1,0 +1,14 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.InAppPurchasing;
+using UnityEngine;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.Analytics
+{
+    public interface IMarketingServices
+    {
+        void SendInAppPurchaseEvent(InAppRevenueInfo info);
+    }
+}

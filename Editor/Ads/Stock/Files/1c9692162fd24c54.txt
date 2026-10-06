@@ -1,0 +1,32 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "AppMetricaSettings", menuName = "GDMonetization/AppMetricaConfig")]
+    public sealed class AppMetricaConfiguration : ScriptableObject
+    {
+        [Header("API Key")]
+        [SerializeField] private string Android = "37dbab5c-cc00-4e51-be9a-8dd58e42403d";
+        [SerializeField] private string iOS = "37dbab5c-cc00-4e51-be9a-8dd58e42403d";
+        public string ApiKey
+        {
+            get
+            {
+                #if UNITY_ANDROID
+                    return Android;
+                #elif UNITY_IOS
+                    return iOS;
+                #else
+                    return string.Empty;
+                #endif
+            }
+        }
+
+        [Header("Settings")]
+        public bool Logs;
+        public bool CrashReporting = true;
+        public bool NativeCrashReporting = true;
+        public bool SessionsAutoTracking = true;
+        public int SessionTimeout = 10;
+    }
+}

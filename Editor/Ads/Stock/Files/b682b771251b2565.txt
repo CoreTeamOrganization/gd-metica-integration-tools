@@ -1,0 +1,151 @@
+using GoogleMobileAds.Api;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdmobMRec : MRecAdUnit
+    {
+        //private int bannerPriority;
+        BannerView mrecView;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+        }
+
+        public override bool HasMRec()
+        {
+            if (!hasMrec)
+            {
+                LoadMRec();
+                return false;
+            }
+
+            return mrecView != null;
+        }
+
+        public override void ShowMRec()
+        {
+            mrecView?.Show();
+            Message.Log(Tag.Admob, "MRec is showing");
+        }
+
+        public override void LoadMRec()
+        {
+            if (isLoading)
+            {
+                Message.LogWarning(Tag.Admob, "MRec is already loading");
+                return;
+            }
+
+            if (mrecView != null)
+                mrecView.Destroy();
+
+            mrecView = new BannerView(adUnitId, AdSize.MediumRectangle, ConvertToAdmobMRecPos());
+            mrecView.OnBannerAdLoadFailed += MrecViewOnMrecAdLoadFailed;
+            mrecView.OnBannerAdLoaded += MrecViewOnMrecAdLoaded;
+            mrecView.OnAdClicked += MrecViewOnAdClicked;
+            mrecView.OnAdPaid += MrecViewOnAdPaid;
+
+            mrecView.LoadAd(MonetizationConstants.CreateAdRequest());
+            Message.Log(Tag.Admob, $"MRec is loading with size (300x250)");
+            isLoading = true;
+        }
+
+        public override void HideMRec()
+        {
+            mrecView?.Hide();
+            Message.Log(Tag.Admob, "MRec is hidden");
+        }
+
+        public override void DestroyMRec()
+        {
+            if (mrecView != null)
+            {
+                mrecView.Destroy();
+                mrecView = null;
+            }
+
+            hasMrec = false;
+            Message.Log(Tag.Admob, "MRec is destroyed");
+        }
+
+        public override void RepositionMRec(MRecPosition newPosition)
+        {
+            bannerInfo.MrecPosition = newPosition;
+            if (mrecView != null)
+                mrecView.SetPosition(ConvertToAdmobMRecPos());
+        }
+
+        AdPosition ConvertToAdmobMRecPos()
+        {
+            switch (bannerInfo.MrecPosition)
+            {
+                case MRecPosition.Top: return AdPosition.Top;
+                case MRecPosition.TopLeft: return AdPosition.TopLeft;
+                case MRecPosition.TopRight: return AdPosition.TopRight;
+                case MRecPosition.Bottom: return AdPosition.Bottom;
+                case MRecPosition.BottomLeft: return AdPosition.BottomLeft;
+                case MRecPosition.BottomRight: return AdPosition.BottomRight;
+                case MRecPosition.Center: return AdPosition.Center;
+                default: return AdPosition.Bottom;
+            }
+        }
+
+        #region Callbacks
+
+        private void MrecViewOnMrecAdLoadFailed(LoadAdError obj)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                hasMrec = false;
+                isLoading = false;
+                // ToString is safe to do in ThreadDispatcher
+                Message.LogError(Tag.Admob, "MRec failed to load");
+            });
+        }
+
+        private void MrecViewOnMrecAdLoaded()
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasMrec = true;
+                Message.Log(Tag.Admob, "MRec ad loaded");
+
+                if (AdsManager.MRecStatus)
+                {
+                    AdsManager.ShowMRec();
+                }
+                else
+                {
+                    HideMRec();
+                }
+            });
+        }
+
+        private void MrecViewOnAdPaid(AdValue adValue)
+        {
+            if (adValue == null) return;
+
+            double revenue = (adValue.Value / 1000000f);
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.MRec, AdPlatforms.ADMOB, "Admob_Native",
+                adUnitId, "USD", revenue, "none");
+
+            Message.Log(Tag.Admob,
+                $"MRec revenue paid - AdUnit: {adUnitId}, Revenue: {revenue}, Network: Admob_Native");
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void MrecViewOnAdClicked()
+        {
+            AdsManager.ExtendAppOpenTime();
+            Message.Log(Tag.Admob, "MRec clicked");
+        }
+
+        #endregion
+    }
+}

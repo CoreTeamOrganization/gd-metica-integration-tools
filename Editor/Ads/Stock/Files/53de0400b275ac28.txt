@@ -1,0 +1,45 @@
+using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+using GoogleMobileAds.Common;
+using UnityEngine.PlayerLoop;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdNetworkAdmob : IAdNetworkService
+    {
+        private Action callback;
+
+        public void Initialize(string appID, Action onInitialized)
+        {
+            callback = onInitialized;
+
+            SetConfigurations();
+            MobileAds.SetiOSAppPauseOnBackground(true);
+            MobileAds.RaiseAdEventsOnUnityMainThread = false;
+            MobileAds.Initialize(HandleInitCompleteAction);
+            Message.Log(Logger.Tag.Admob, "Initializing...");
+            ///if(MobileAdsEventExecutor.instance != null)
+            ///Destroy(MobileAdsEventExecutor.instance.gameObject);
+        }
+
+        void SetConfigurations()
+        {
+            MobileAds.SetRequestConfiguration(new RequestConfiguration
+            {
+                TagForUnderAgeOfConsent = TagForUnderAgeOfConsent.False,
+                TagForChildDirectedTreatment = TagForChildDirectedTreatment.False
+            });
+        }
+
+        private void HandleInitCompleteAction(InitializationStatus status)
+        {
+            Message.Log(Logger.Tag.Admob, "Successfully initialized");
+            callback?.Invoke();
+        }
+    }
+}

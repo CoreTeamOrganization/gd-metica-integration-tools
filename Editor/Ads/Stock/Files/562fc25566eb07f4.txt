@@ -1,0 +1,14 @@
+using Monetization.Runtime.Internet;
+
+public static partial class MonetizationServices
+{
+    public static class Internet
+    {
+        public static bool IsAvaialble => InternetPanelManager.InternetAvailable;
+
+        public static void ShowPanelIfRequired()
+        {
+            InternetPanelManager.ShowIfNoInternetAvailable();
+        }
+    }
+}

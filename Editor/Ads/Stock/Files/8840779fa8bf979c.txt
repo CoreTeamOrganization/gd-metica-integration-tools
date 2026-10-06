@@ -1,0 +1,81 @@
+using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Utilities;
+using GoogleMobileAds.Common;
+using Monetization.Runtime.Sdk;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdmobInterstitial : IntersitialAdUnit
+    {
+        InterstitialAd interstitialAd;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                LoadInterstitial();
+            }
+        }
+
+        public override bool HasInterstitial(bool doRequest)
+        {
+            if (IsAdUnitEmpty) return false;
+
+            return interstitialAd != null && interstitialAd.CanShowAd();
+        }
+
+        public override void ShowInterstitial(string placementName)
+        {
+            this.placementName = placementName;
+            interstitialAd.Show();
+        }
+
+        public override void LoadInterstitial()
+        {
+            if (IsAdUnitEmpty) return;
+
+            if (interstitialAd != null)
+                interstitialAd.Destroy();
+
+            InterstitialAd.Load(adUnitId, MonetizationConstants.CreateAdRequest(), InterstitialLoadCallback);
+        }
+
+        #region Callbacks
+
+        void InterstitialLoadCallback(InterstitialAd ad, LoadAdError loadError)
+        {
+            if (loadError == null && ad != null) // Success
+            {
+                interstitialAd = ad;
+                interstitialAd.OnAdPaid += InterstitialAd_OnAdPaid;
+                interstitialAd.OnAdFullScreenContentClosed += InterstitialAd_OnAdFullScreenContentClosed;
+            }
+            //else
+            //Failed
+        }
+
+        private void InterstitialAd_OnAdPaid(AdValue adValue)
+        {
+            if (adValue == null) return;
+
+            double revenue = (adValue.Value / 1000000f);
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Interstitial, AdPlatforms.ADMOB, "Admob_Native",
+                adUnitId, "USD", revenue, placementName);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void InterstitialAd_OnAdFullScreenContentClosed()
+        {
+            LoadInterstitial();
+        }
+
+        #endregion
+    }
+}

@@ -1,0 +1,22 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class PreferencesCheckStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.CheckPreferences;
+        public override bool IsFixed => true;
+        protected override Task PerformStepAsync(CancellationToken cToken)
+        {
+            MonetizationPreferences.SessionCount.Set(MonetizationPreferences.SessionCount.Get() + 1);
+            Message.Log(Tag.SDK, "Session Count : " + MonetizationPreferences.SessionCount.Get());
+            return Task.CompletedTask;
+        }
+    }
+}

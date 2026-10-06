@@ -1,0 +1,11 @@
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class AdUnit
+    {
+        public abstract void Initialize(string id);
+        public abstract AdFormat AdType { get; }
+
+        protected string adUnitId;
+        public bool IsAdUnitEmpty => string.IsNullOrEmpty(adUnitId);
+    }
+}

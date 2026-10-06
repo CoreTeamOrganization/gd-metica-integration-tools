@@ -1,0 +1,95 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Utilities;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinRewarded : RewardedAdUnit
+    {
+        private bool requestAdOnFail = true;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                ListenEvents();
+                LoadRewarded();
+            }
+        }
+
+        public void ListenEvents()
+        {
+            MaxSdkCallbacks.Rewarded.OnAdHiddenEvent += Rewarded_OnAdHiddenEvent;
+            MaxSdkCallbacks.Rewarded.OnAdLoadFailedEvent += Rewarded_OnAdLoadFailedEvent;
+            MaxSdkCallbacks.Rewarded.OnAdRevenuePaidEvent += Rewarded_OnAdRevenuePaidEvent;
+            MaxSdkCallbacks.Rewarded.OnAdReceivedRewardEvent += Rewarded_OnAdReceivedRewardEvent;
+        }
+
+        public override bool HasRewarded(bool doRequest)
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            bool isReady = MaxSdk.IsRewardedAdReady(adUnitId);
+            if (isReady)
+                requestAdOnFail = true;
+
+            if (!isReady && doRequest)
+                LoadRewarded();
+
+            return isReady;
+        }
+
+        public override void ShowRewarded(string placementName, Action onRewardedCallback)
+        {
+            this.placementName = placementName;
+            this.onRewardComplete = onRewardedCallback;
+            MaxSdk.ShowRewardedAd(adUnitId, placementName);
+        }
+
+        public override void LoadRewarded()
+        {
+            if (IsAdUnitEmpty)
+                return;
+
+            MaxSdk.LoadRewardedAd(adUnitId);
+        }
+
+        #region Callbacks
+
+        private void Rewarded_OnAdHiddenEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            ThreadDispatcher.Enqueue(() => { LoadRewarded(); });
+        }
+
+        private void Rewarded_OnAdLoadFailedEvent(string arg1, MaxSdkBase.ErrorInfo arg2)
+        {
+            if (requestAdOnFail)
+            {
+                requestAdOnFail = false;
+                DelayedActionManager.Add(LoadRewarded, 2f);
+            }
+        }
+
+        private void Rewarded_OnAdReceivedRewardEvent(string arg1, MaxSdkBase.Reward arg2, MaxSdkBase.AdInfo arg3)
+        {
+            ThreadDispatcher.Enqueue(delegate { onRewardComplete?.Invoke(); });
+        }
+
+        private void Rewarded_OnAdRevenuePaidEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Rewarded, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, placementName);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        #endregion
+    }
+}

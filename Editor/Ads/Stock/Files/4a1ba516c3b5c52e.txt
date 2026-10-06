@@ -1,0 +1,77 @@
+using Monetization.Runtime.Logger;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(Button))]
+    public class InAppButton : MonoBehaviour
+    {
+        [SerializeField] InAppProductSO productSO;
+        [SerializeField] Button _button;
+        [SerializeField] Text _text;
+        private bool hasInitialized;
+
+        #region Initialize
+
+        private void OnEnable()
+        {
+            if (!hasInitialized)
+            {
+                hasInitialized = true;
+                Initialize();
+            }
+
+            SetPriceLabel(productSO.IsPending);
+            productSO.OnStateDeferred += SetPriceLabel;
+        }
+
+        private void OnDisable()
+        {
+            productSO.OnStateDeferred -= SetPriceLabel;
+        }
+
+        void Initialize()
+        {
+            _button.onClick.RemoveAllListeners();
+            _button.onClick.AddListener(BuyProduct);
+        }
+
+        private void SetPriceLabel(bool isPending)
+        {
+            UpdateTextPriceTag(isPending ? "Pending" : productSO.Price);
+        }
+
+        protected virtual void UpdateTextPriceTag(string price)
+        {
+            if (_text != null)
+            {
+                _text.text = price;
+            }
+        }
+
+        #endregion
+
+        #region Process Purchasing
+
+        private void BuyProduct()
+        {
+            // if (productSO.IsPending)
+            // {
+            //     Message.LogWarning(Tag.InAppPurchasing, $"BuyProduct: Product in pending state");
+            //     return;
+            // }
+
+            if (string.IsNullOrEmpty(productSO.ProductId))
+            {
+                Message.LogWarning(Tag.InAppPurchasing, $"Product ID is missing from {productSO.name}");
+                return;
+            }
+
+            GDInAppPurchaseManager.Purchase(productSO.ProductId);
+        }
+
+        #endregion
+    }
+}

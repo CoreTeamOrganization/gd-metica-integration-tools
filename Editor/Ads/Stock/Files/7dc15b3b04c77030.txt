@@ -1,0 +1,77 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "SimulationMakeoverAnalytics", menuName = "GDMonetization/MeticaAnalytics/ScriptSO/SimulationMakeover")]
+    public class SimulationMakeoverAnalytics : GDMeticaAnalytics, ISimulationMakeoverAnalytics
+    {
+        public void LevelStarted(SimulationMakeoverLevelStarted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"] = data.Level.Value;
+
+            if (data.LevelType != null)     payload["level_type"]     = data.LevelType;
+            if (data.LevelName != null)     payload["level_name"]     = data.LevelName;
+            if (data.OperatingType != null) payload["operating_type"] = data.OperatingType;
+
+            LogCustomEvent("levelStarted", payload);
+        }
+
+        public void LevelFinished(SimulationMakeoverLevelFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]              = data.Level;
+            payload["level_status"]       = data.LevelStatus;
+            payload["play_time"]          = data.PlayTime;
+            payload["attempt_count"]      = data.AttemptCount;
+            payload["playon_count"]       = data.PlayonCount;
+            payload["used_booster_count"] = data.UsedBoosterCount;
+            foreach (var kvp in data.UsedBoosters)
+                payload["used_booster_" + kvp.Key] = kvp.Value;
+            foreach (var kvp in data.BalanceBoosters)
+                payload["balance_booster_" + kvp.Key] = kvp.Value;
+
+            if (data.LevelName != null)     payload["level_name"]     = data.LevelName;
+            if (data.LevelType != null)     payload["level_type"]     = data.LevelType;
+            if (data.OperatingType != null) payload["operating_type"] = data.OperatingType;
+            if (data.Balances != null)
+                foreach (var kvp in data.Balances)
+                    payload["balance_" + kvp.Key] = kvp.Value;
+
+            LogCustomEvent("levelFinished", payload);
+        }
+
+        public void EarnAsset(SimulationMakeoverEarnAsset data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]   = data.Level.Value;
+            payload["asset"]   = data.Asset;
+            payload["amount"]  = data.Amount;
+            payload["source"]  = data.Source;
+            payload["type"]    = data.Type;
+            payload["balance"] = data.Balance;
+
+            if (data.LevelType != null)     payload["level_type"]     = data.LevelType;
+            if (data.LevelName != null)     payload["level_name"]     = data.LevelName;
+            if (data.OperatingType != null) payload["operating_type"] = data.OperatingType;
+
+            LogCustomEvent("earnAsset", payload);
+        }
+
+        public void SpendAsset(SimulationMakeoverSpendAsset data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]   = data.Level.Value;
+            payload["asset"]   = data.Asset;
+            payload["amount"]  = data.Amount;
+            payload["source"]  = data.Source;
+            payload["balance"] = data.Balance;
+
+            if (data.LevelType != null)     payload["level_type"]     = data.LevelType;
+            if (data.LevelName != null)     payload["level_name"]     = data.LevelName;
+            if (data.OperatingType != null) payload["operating_type"] = data.OperatingType;
+
+            LogCustomEvent("spendAsset", payload);
+        }
+    }
+}

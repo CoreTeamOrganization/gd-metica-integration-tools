@@ -1,0 +1,253 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace GDMonetization.Editor
+{
+    [CustomEditor(typeof(AppLoader))]
+    public class AppLoaderEditor : UnityEditor.Editor
+    {
+        private AppLoader _appLoader;
+        private GDFoldoutList _list;
+
+        private void OnEnable()
+        {
+            _appLoader = (AppLoader)target;
+            _appLoader.steps ??= new List<LoadingStepBase>();
+        }
+
+        public override VisualElement CreateInspectorGUI()
+        {
+            var root = new VisualElement();
+
+            var iterator = serializedObject.GetIterator();
+            var enterChildren = true;
+            while (iterator.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (iterator.propertyPath is "steps" or "m_Script") continue;
+                root.Add(new PropertyField(iterator.Copy()));
+            }
+
+            _list = new GDFoldoutList { Title = "MODULES" };
+            _list.Setup(
+                _appLoader.steps.Cast<object>(),
+                OnAddClicked,
+                RemoveStep,
+                RenderStep,
+                ReorderStep
+            );
+            _list.GetItemName = item => item?.GetType().Name ?? "Unknown";
+            _list.IsItemFixed = item => (item as LoadingStepBase)?.IsFixed == true;
+            _list.Refresh();
+
+            root.Add(_list);
+            return root;
+        }
+
+        // ── Top-level add / remove / reorder ─────────────────────────────────
+
+        private void OnAddClicked()
+        {
+            ShowStepMenu(
+                type =>
+                {
+                    var instance = Activator.CreateInstance(type) as LoadingStepBase;
+                    if (instance == null) return;
+
+                    serializedObject.Update();
+                    var prop = serializedObject.FindProperty("steps");
+                    prop.arraySize++;
+                    prop.GetArrayElementAtIndex(prop.arraySize - 1).managedReferenceValue = instance;
+                    serializedObject.ApplyModifiedProperties();
+
+                    _list.Refresh();
+                },
+                _appLoader.steps.Cast<object>()
+            );
+        }
+
+        private void RemoveStep(int index)
+        {
+            serializedObject.Update();
+            var prop = serializedObject.FindProperty("steps");
+            if (index < 0 || index >= prop.arraySize) return;
+            prop.DeleteArrayElementAtIndex(index);
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private void ReorderStep(int from, int to)
+        {
+            if (from == to) return;
+            serializedObject.Update();
+            serializedObject.FindProperty("steps").MoveArrayElement(from, to);
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        // ── Render ───────────────────────────────────────────────────────────
+
+        private VisualElement RenderStep(object item, int index)
+        {
+            if (item == null) return null;
+            serializedObject.Update();
+            var elementProp = serializedObject.FindProperty("steps").GetArrayElementAtIndex(index);
+            return RenderStepFields(elementProp, item.GetType());
+        }
+
+        // Renders a step's fields; swaps any [SubStepList] field for a GDFoldoutList.
+        private static VisualElement RenderStepFields(SerializedProperty elementProp, Type stepType)
+        {
+            var container = new VisualElement();
+            var prop = elementProp.Copy();
+            var depth = prop.depth;
+            var enterChildren = true;
+
+            while (prop.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (prop.depth <= depth) break;
+
+                if (HasSubStepListAttribute(stepType, prop.name))
+                    container.Add(BuildSubStepList(prop.Copy()));
+                else
+                    container.Add(new PropertyField(prop.Copy()));
+            }
+
+            if (container.childCount == 0)
+                container.Add(new Label("No configurable fields.")
+                {
+                    style = { color = new Color(0.6f, 0.6f, 0.6f), marginLeft = 4, marginBottom = 4 }
+                });
+
+            container.Bind(elementProp.serializedObject);
+            return container;
+        }
+
+        // ── Sub-step list (DependentStep / ParallelStep) ──────────────────────
+
+        private static GDFoldoutList BuildSubStepList(SerializedProperty listProp)
+        {
+            var list = new GDFoldoutList { Title = listProp.displayName };
+
+            list.Setup(
+                GetSubStepItems(listProp),
+                () => OnSubAddClicked(listProp, list),
+                idx => RemoveSubStep(listProp, idx),
+                (item, idx) => RenderSubStep(listProp, item, idx),
+                (from, to) => ReorderSubStep(listProp, from, to)
+            );
+            list.GetItemName = item => item?.GetType().Name ?? "Unknown";
+            list.IsItemFixed = item => (item as LoadingStepBase)?.IsFixed == true;
+            list.Refresh();
+            return list;
+        }
+
+        private static IEnumerable<object> GetSubStepItems(SerializedProperty listProp)
+        {
+            listProp.serializedObject.Update();
+            for (int i = 0; i < listProp.arraySize; i++)
+                yield return listProp.GetArrayElementAtIndex(i).managedReferenceValue;
+        }
+
+        private static void OnSubAddClicked(SerializedProperty listProp, GDFoldoutList list)
+        {
+            listProp.serializedObject.Update();
+            var existing = new List<object>(listProp.arraySize);
+            for (int i = 0; i < listProp.arraySize; i++)
+                existing.Add(listProp.GetArrayElementAtIndex(i).managedReferenceValue);
+
+            ShowStepMenu(
+                type =>
+                {
+                    var instance = Activator.CreateInstance(type) as LoadingStepBase;
+                    if (instance == null) return;
+
+                    listProp.serializedObject.Update();
+                    listProp.arraySize++;
+                    listProp.GetArrayElementAtIndex(listProp.arraySize - 1).managedReferenceValue = instance;
+                    listProp.serializedObject.ApplyModifiedProperties();
+
+                    list.Refresh();
+                },
+                existing
+            );
+        }
+
+        private static void RemoveSubStep(SerializedProperty listProp, int idx)
+        {
+            listProp.serializedObject.Update();
+            if (idx < 0 || idx >= listProp.arraySize) return;
+            listProp.DeleteArrayElementAtIndex(idx);
+            listProp.serializedObject.ApplyModifiedProperties();
+        }
+
+        private static void ReorderSubStep(SerializedProperty listProp, int from, int to)
+        {
+            if (from == to) return;
+            listProp.serializedObject.Update();
+            listProp.MoveArrayElement(from, to);
+            listProp.serializedObject.ApplyModifiedProperties();
+        }
+
+        private static VisualElement RenderSubStep(SerializedProperty listProp, object item, int index)
+        {
+            if (item == null) return null;
+            listProp.serializedObject.Update();
+            var elementProp = listProp.GetArrayElementAtIndex(index);
+            return RenderStepFields(elementProp, item.GetType());
+        }
+
+        // ── Shared helpers ────────────────────────────────────────────────────
+
+        private static void ShowStepMenu(Action<Type> onSelected, IEnumerable<object> existingItems = null)
+        {
+            var all = TypeCache.GetTypesDerivedFrom<LoadingStepBase>()
+                .Where(t => !t.IsAbstract)
+                .OrderBy(t => t.Name)
+                .ToList();
+
+            if (all.Count == 0)
+            {
+                EditorUtility.DisplayDialog("No Steps Found",
+                    "No non-abstract LoadingStepBase implementations found.", "OK");
+                return;
+            }
+
+            var usedTypes = existingItems?
+                .Where(i => i != null)
+                .Select(i => i.GetType())
+                .ToHashSet() ?? new HashSet<Type>();
+
+            var menu = new GenericMenu();
+            foreach (var type in all)
+            {
+                var captured = type;
+                if (usedTypes.Contains(captured))
+                    menu.AddDisabledItem(new GUIContent($"{captured.Name} (already added)"));
+                else
+                    menu.AddItem(new GUIContent(captured.Name), false, () => onSelected(captured));
+            }
+            menu.ShowAsContext();
+        }
+
+        private static bool HasSubStepListAttribute(Type type, string fieldName)
+        {
+            var t = type;
+            while (t != null && t != typeof(object))
+            {
+                var field = t.GetField(fieldName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (field?.GetCustomAttribute<SubStepListAttribute>() != null)
+                    return true;
+                t = t.BaseType;
+            }
+            return false;
+        }
+    }
+}

@@ -1,0 +1,86 @@
+using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Utilities;
+using GoogleMobileAds.Common;
+using Monetization.Runtime.Sdk;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdmobRewarded : RewardedAdUnit
+    {
+        RewardedAd rewardedAd;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                LoadRewarded();
+            }
+        }
+
+        public override bool HasRewarded(bool doRequest)
+        {
+            if (IsAdUnitEmpty) return false;
+
+            return rewardedAd != null && rewardedAd.CanShowAd();
+        }
+
+        public override void ShowRewarded(string placementName, Action onRewardedCallback)
+        {
+            this.placementName = placementName;
+            this.onRewardComplete = onRewardedCallback;
+            rewardedAd.Show(RewardedAd_OnUserEarnedReward);
+        }
+
+        public override void LoadRewarded()
+        {
+            if (IsAdUnitEmpty) return;
+
+            if (rewardedAd != null)
+                rewardedAd.Destroy();
+
+            RewardedAd.Load(adUnitId, MonetizationConstants.CreateAdRequest(), RewardedLoadCallback);
+        }
+
+        void RewardedLoadCallback(RewardedAd ad, LoadAdError loadError)
+        {
+            if (loadError == null && ad != null) // Success
+            {
+                rewardedAd = ad;
+                rewardedAd.OnAdPaid += RewardedAd_OnAdPaid;
+                rewardedAd.OnAdFullScreenContentClosed += RewardedAd_OnAdFullScreenContentClosed;
+            }
+            //else Failed
+        }
+
+        #region Callbacks
+
+        private void RewardedAd_OnAdFullScreenContentClosed()
+        {
+            ThreadDispatcher.Enqueue(() => LoadRewarded());
+        }
+
+        private void RewardedAd_OnUserEarnedReward(Reward e)
+        {
+            ThreadDispatcher.Enqueue(delegate { onRewardComplete?.Invoke(); });
+        }
+
+        private void RewardedAd_OnAdPaid(AdValue adValue)
+        {
+            if (adValue == null) return;
+
+            double revenue = (adValue.Value / 1000000f);
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Rewarded, AdPlatforms.ADMOB, "Admob_Native",
+                adUnitId, "USD", revenue, placementName);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        #endregion
+    }
+}

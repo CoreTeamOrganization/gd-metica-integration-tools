@@ -1,0 +1,12 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Utilities
+{
+    public interface IDelayedActionService : ITickable
+    {
+        void AddAction(Action action, float delay, bool ignoreTimeScale);
+    }
+}

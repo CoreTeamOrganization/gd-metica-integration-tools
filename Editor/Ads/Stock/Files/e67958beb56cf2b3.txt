@@ -1,0 +1,28 @@
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.InAppPurchasing;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "FirebaseNetworkSO", menuName = "GDMonetization/Analytics/Networks/Firebase")]
+    public class FirebaseNetworkSO : AnalyticsNetworkSO,
+        IAnalyticsInitialization, IAnalyticsEventsService,
+        IAnalyticsAdRevenueService, IMarketingServices
+    {
+        private void Reset() { EnableInitialization = true; EnableEvents = true; EnableRevenue = true; EnableMarketing = true; }
+
+        private FirebaseAnalyticsNetwork _network;
+        private FirebaseAnalyticsNetwork Network => _network ??= new FirebaseAnalyticsNetwork();
+
+        public bool IsInitialized => Network.IsInitialized;
+        public void Initialize() => Network.Initialize();
+
+        public void SendEvent(string name) => Network.SendEvent(name);
+        public void SendEvent(string name, Dictionary<string, object> parameters) => Network.SendEvent(name, parameters);
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo) => Network.ReportAdRevenue(adRevenueInfo);
+
+        public void SendInAppPurchaseEvent(InAppRevenueInfo info) => Network.SendInAppPurchaseEvent(info);
+    }
+}

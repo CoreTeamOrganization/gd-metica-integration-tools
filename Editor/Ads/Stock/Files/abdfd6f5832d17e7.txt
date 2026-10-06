@@ -1,0 +1,48 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Sdk;
+using Newtonsoft.Json;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class RemoteConfigSetupStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.SetupRemoteConfig;
+        public override bool IsFixed => true;
+        protected override Task PerformStepAsync(CancellationToken cToken)
+        {
+            var defaultRemote = Resources.Load<RemoteConfiguration>(MonetizationConfigurationsPath.Remote);
+            RemoteConfigManager.AddOrUpdateValue(RemoteConfigManager.REMOTE_KEY, JsonUtility.ToJson(defaultRemote));
+            RemoteConfigManager.AddOrUpdateValue("Taichi_Enabled", false);
+            RemoteConfigManager.AddOrUpdateValue("Taichi_MaxValue", 0.15f);
+            RemoteConfigManager.AddOrUpdateValue("Taichi_AdImpressionCount", 20);
+
+            RemoteConfigManager.OnFetchCompleteWithSuccess += (success, result) =>
+            {
+                if (success)
+                {
+                    string json = RemoteConfigManager.GetRemoteValue<string>(RemoteConfigManager.REMOTE_KEY).Value;
+                    if (!string.IsNullOrEmpty(json))
+                    {
+                        var dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                        AnalyticsManager.SendEvent("Monetization", new()
+                        {
+                            { "RemoteSettings", dictionary }
+                        });
+                    }
+                }
+            };
+
+            FirebaseAnalyticsNetwork.CheckAndFixDependenciesAsync(RemoteConfigManager.Initialize);
+            return Task.CompletedTask;
+        }
+    }
+}

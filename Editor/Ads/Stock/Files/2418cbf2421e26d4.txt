@@ -1,0 +1,30 @@
+using AdjustSdk;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "AdjustConfig", menuName = "GDMonetization/AdjustConfig")]
+    public sealed class AdjustConfiguration : ScriptableObject
+    {
+        [Header("App Token")]
+        [SerializeField] private string Android = "8s9zdagyp5hc";
+        [SerializeField] private string iOS = "8s9zdagyp5hc";
+        public string AppToken
+        {
+            get
+            {
+                #if UNITY_ANDROID
+                    return Android;
+                #elif UNITY_IOS
+                    return iOS;
+                #else
+                    return string.Empty;
+                #endif
+            }
+        }
+
+        [Header("Settings")]
+        public AdjustEnvironment Environment = AdjustEnvironment.Sandbox;
+        public AdjustLogLevel LogLevel = AdjustLogLevel.Info;
+    }
+}

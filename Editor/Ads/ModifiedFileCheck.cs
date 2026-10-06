@@ -61,14 +61,15 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Meant to be edited by the game (its analytics and consent hooks), so never flagged.</summary>
         private const string EditableStandaloneFile = "MeticaAdsHooks";
 
-        private static readonly Regex VersionPattern = new Regex("Version\\s*=\\s*\"([^\"]+)\"");
+        // \b: v6.2.x declares BaseVersion = "5.5.0" first, which is not the version.
+        private static readonly Regex VersionPattern = new Regex("\\bVersion\\s*=\\s*\"([^\"]+)\"");
 
         private static string ChosenVersionKey =>
             $"GameDistrict.MeticaIntegrationTools.GdSdkVersion.{Application.dataPath.GetHashCode():X8}";
 
         /// <summary>
-        /// The release picked by hand when it cannot be detected (version file missing,
-        /// modified, or reporting an unknown version). Per project; null when never picked.
+        /// The release picked by hand when it cannot be detected (version file missing, or
+        /// declaring a version no release declares). Per project; null when never picked.
         /// </summary>
         public static string ChosenVersion
         {
@@ -120,7 +121,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (check.GdSdkVersion == null) return;
 
-            var paths = stock.Paths.Where(p => p != StockFiles.VersionFile).ToList();
+            var paths = stock.PatchedPaths.Where(p => p != StockFiles.VersionFile).ToList();
             var original = paths.ToDictionary(p => p, p => stock.Get(check.GdSdkVersion, p));
             var project = paths.ToDictionary(p => p, p => ReadProjectFile(MeticaPaths.Combine(MeticaPaths.GDRoot, p)));
 
@@ -129,18 +130,18 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>
-        /// The release whose stock MonetizationInitializeOnLoad matches this one exactly, or null
-        /// when the file is missing, modified, or reports a version with no stock set.
+        /// The release whose MonetizationInitializeOnLoad declares the same Version string, or
+        /// null when the file is missing or declares a version no release declares. The
+        /// declared Version alone decides — the rest of the file is often edited by games
+        /// (remote-config defaults, telemetry), and BaseVersion only names the non-Metica SDK a
+        /// v6 release is built on.
         /// </summary>
         internal static string DetectVersion(StockFiles stock, string versionFileText)
         {
             var reported = ReadReportedVersion(versionFileText);
             if (reported == null) return null;
 
-            var matches = stock.VersionsReporting(reported)
-                .Where(v => FileText.Same(stock.Get(v, StockFiles.VersionFile), versionFileText))
-                .ToList();
-
+            var matches = stock.VersionsReporting(reported).ToList();
             return matches.Count == 1 ? matches[0] : null;
         }
 
@@ -150,6 +151,16 @@ namespace GameDistrict.MeticaIntegrationTools
             var match = VersionPattern.Match(versionFileText);
             return match.Success ? match.Groups[1].Value : null;
         }
+
+        /// <summary>v6's BaseVersion: the non-Metica GD SDK it is built on. Null on v5.</summary>
+        internal static string ReadBaseVersion(string versionFileText)
+        {
+            if (versionFileText == null) return null;
+            var match = BaseVersionPattern.Match(versionFileText);
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
+        private static readonly Regex BaseVersionPattern = new Regex("\\bBaseVersion\\s*=\\s*\"([^\"]+)\"");
 
         /// <summary>
         /// Classifies each file (keyed by path relative to the GD SDK root; null = absent).
@@ -185,7 +196,7 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>Runs every patch on copies of <paramref name="files"/> in memory.</summary>
-        private static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files, bool callback)
+        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files, bool callback)
         {
             var memory = files
                 .Where(file => file.Value != null)

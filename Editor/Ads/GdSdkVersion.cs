@@ -15,7 +15,8 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public static readonly Version Minimum = new Version(5, 3, 0);
 
-        private static readonly Regex Declared = new Regex("Version\\s*=\\s*\"([^\"]+)\"");
+        // \b: v6.2.x declares BaseVersion = "5.5.0" first, which is not the version.
+        private static readonly Regex Declared = new Regex("\\bVersion\\s*=\\s*\"([^\"]+)\"");
         private static readonly Regex Numeric = new Regex("^[0-9]+(?:\\.[0-9]+)*");
 
         /// <summary>The Version string MonetizationInitializeOnLoad reports, or null.</summary>

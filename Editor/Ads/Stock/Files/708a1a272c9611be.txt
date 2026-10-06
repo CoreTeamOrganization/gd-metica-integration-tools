@@ -1,0 +1,75 @@
+#nullable enable
+
+using System.Collections.Generic;
+
+// TODO: Move to separate library
+namespace Metica.Analytics.Abstractions
+{
+    /// <summary>
+    /// Public interface for Metica Analytics functionality.
+    /// </summary>
+
+    public interface IMeticaAnalytics
+    {
+        /// <summary>
+        /// Logs purchase event.
+        /// </summary>
+        void LogPurchaseEvent(
+            string productId,
+            string currency,
+            double amount,
+            string status,
+            string? errorCode,
+            string? referenceId,
+            Dictionary<string, object>? customPayload
+        );
+
+        /// <summary>
+        /// Logs session start event.
+        /// </summary>
+        void LogSessionStartEvent(
+            Dictionary<string, object>? customPayload
+        );
+
+        /// <summary>
+        /// Logs install event.
+        /// </summary>
+        void LogInstallEvent(
+            Dictionary<string, object>? customPayload
+        );
+
+        /// <summary>
+        /// Logs impression event.
+        /// </summary>
+        void LogImpressionEvent(
+            double value,
+            string type,
+            string mediator,
+            string source,
+            string? placement,
+            Dictionary<string, object>? customPayload
+        );
+
+        /// <summary>
+        /// Logs full state update event.
+        /// </summary>
+        void LogFullStateUpdateEvent(
+            Dictionary<string, object> attributes
+        );
+
+        /// <summary>
+        /// Logs partial state update event.
+        /// </summary>
+        void LogPartialStateUpdateEvent(
+            Dictionary<string, object> attributes
+        );
+
+        /// <summary>
+        /// Logs custom event.
+        /// </summary>
+        void LogCustomEvent(
+            string eventName,
+            Dictionary<string, object>? properties
+        );
+    }
+}

@@ -26,9 +26,11 @@ namespace GameDistrict.MeticaIntegrationTools
                 : "Install the Metica SDK and resolve its Android libraries.";
 
         public override string Why =>
-            "Downloads the pinned Metica SDK release from GitHub and imports it. Any other installed " +
-            "version is removed first — importing over it would leave old files behind that still " +
-            "compile. Then External Dependency Manager's Force Resolve pulls every Android library the " +
+            "Downloads the pinned Metica SDK release from GitHub and imports it. Any other Metica is " +
+            "removed first, wherever it is — another version in Assets, Metica v1 or 2.x from the " +
+            "Package Manager (com.metica.unity / com.metica.sdk.unity), v1's MeticaSdkConfiguration " +
+            "asset — since two Metica SDKs side by side do not compile. Analytics abstractions and " +
+            "this tool are never touched. Then External Dependency Manager's Force Resolve pulls every Android library the " +
             "project's SDKs declare into mainTemplate.gradle (turning Custom Main Gradle Template on if " +
             "needed); the step passes only once all of them are there. It needs Android as the build " +
             "target. Enable iOS also ticks iOS on MeticaSDKFramework.xcframework, which Metica's iOS " +
@@ -41,7 +43,12 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaPaths.MeticaSdkRoot,
             MeticaPaths.MainTemplateGradle,
             MeticaPaths.MeticaXcFramework + ".meta",
-            "ProjectSettings/AndroidResolverDependencies.xml"
+            "ProjectSettings/AndroidResolverDependencies.xml",
+
+            // Where old Metica is removed from.
+            "Packages/manifest.json",
+            "Packages/packages-lock.json",
+            "Assets/Metica"
         };
 
         public override string ReviewHint => "Assets/MeticaSdk, plus the resolved libraries in mainTemplate.gradle.";
@@ -81,17 +88,21 @@ namespace GameDistrict.MeticaIntegrationTools
             if (!MeticaPaths.DirectoryExists("Assets/MaxSdk/Scripts"))
                 result.Problem("Install the AppLovin MAX plugin first.");
 
+            // Any other Metica — another version, v1 from the Package Manager, a copy elsewhere
+            // in Assets — goes before the target comes in.
+            var old = MeticaInstalls.Find(TargetVersion());
+            if (old.Count > 0)
+            {
+                result.Problem($"Old Metica found — remove it, then add {TargetVersion() ?? "the target version"}.");
+                foreach (var install in old) result.Problem("Remove: " + install.Label);
+                return result.Seal();
+            }
+
             var installed = InstalledVersion();
 
             if (installed == null)
             {
                 result.Problem("Metica SDK not installed.");
-                return result.Seal();
-            }
-
-            if (IsStale(installed, out var target))
-            {
-                result.Problem($"Metica {installed} installed — target is {target}.");
                 return result.Seal();
             }
 
@@ -107,7 +118,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!TemplateWriter.TypeIsLoaded("Metica.MeticaSdk"))
             {
-                result.Problem("Metica SDK hasn't compiled — check the Console.");
+                if (ScriptCompile.Pending(MeticaPaths.MeticaSdkRoot)) result.Wait();
+                else result.Problem("Metica SDK hasn't compiled — check the Console.");
                 return result.Seal();
             }
 
@@ -147,13 +159,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
-            var installed = InstalledVersion();
-
-            if (installed != null && IsStale(installed, out _))
+            var old = MeticaInstalls.Find(TargetVersion());
+            if (old.Count > 0)
             {
-                RemoveInstalledSdk(installed);
+                MeticaInstalls.Remove(old, Title, null);
                 return;
             }
+
+            var installed = InstalledVersion();
 
             if (installed != null && (AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot) || IosPending))
             {
@@ -183,8 +196,11 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             if (!Supported) return null;
 
+            var old = MeticaInstalls.Find(TargetVersion());
+            if (old.Count == 1) return old[0].Version == null ? "Remove old Metica" : $"Remove Metica {old[0].Version}";
+            if (old.Count > 1) return $"Remove old Metica ({old.Count})";
+
             var installed = InstalledVersion();
-            if (installed != null && IsStale(installed, out _)) return $"Remove Metica {installed}";
             if (installed != null && AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot))
                 return IosPending ? "Resolve Android, enable iOS" : "Resolve Android dependencies";
             if (installed != null && IosPending) return "Enable iOS framework";
@@ -271,24 +287,13 @@ namespace GameDistrict.MeticaIntegrationTools
             AssetDatabase.ImportPackage(package, true);
         }
 
-        private void RemoveInstalledSdk(string installed)
-        {
-            // The whole folder goes; its contents are listed so it is clear what that means.
-            var contents = DeleteConfirm.Contents(MeticaPaths.MeticaSdkRoot);
-            var paths = new List<string> { $"{MeticaPaths.MeticaSdkRoot}/  (the whole folder)" };
-            paths.AddRange(contents.Select(path => "    " + path));
-
-            if (!DeleteConfirm.Ask($"Remove Metica {installed}", paths)) return;
-
-            AssetDatabase.DeleteAsset(MeticaPaths.MeticaSdkRoot);
-            AssetDatabase.Refresh();
-
-            MeticaIntegrationLog.Record(Title, $"Removed Metica {installed} from {MeticaPaths.MeticaSdkRoot}");
-        }
-
         // ── Reading the project ────────────────────────────────────────────────
 
-        /// <summary>Version from the installed package.json, or null when Metica is absent.</summary>
+        /// <summary>
+        /// Version from Assets/MeticaSdk/package.json, or null when it is absent. Only the
+        /// target lives there by the time this matters — <see cref="MeticaInstalls.Find"/>
+        /// lists any other version for removal first.
+        /// </summary>
         private static string InstalledVersion()
         {
             if (!MeticaPaths.FileExists(MeticaPaths.MeticaPackageJson)) return null;
@@ -299,19 +304,11 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>
-        /// Stale means "does not match the pinned target version" — read from this project's own
-        /// override (MeticaPaths.TargetVersionAsset) if it created one, otherwise the version the
-        /// package ships with by default. Older, newer, or a GDSDK project that installed Metica
-        /// long before this tool existed all count as stale. Missing or unreadable counts as
-        /// fine: the tool should not demand a delete when it cannot tell what the target actually
-        /// is.
+        /// The pinned version — this project's override (MeticaPaths.TargetVersionAsset) if it
+        /// created one, otherwise the version the package ships with. Anything else installed
+        /// counts as old. Unreadable means no version is judged old: the tool does not demand a
+        /// delete when it cannot tell what the target is.
         /// </summary>
-        private static bool IsStale(string installed, out string target)
-        {
-            target = TargetVersion();
-            return target != null && installed != target;
-        }
-
         private static string TargetVersion() => TargetVersions.MeticaSdk;
 
         private static void Require(VerifyResult result, string path)

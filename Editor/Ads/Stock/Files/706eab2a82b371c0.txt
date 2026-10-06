@@ -1,0 +1,41 @@
+using System.IO;
+using UnityEngine;
+
+namespace GDMonetization.Editor
+{
+    internal static class IdentifierValidator
+    {
+        // Validates any C# identifier — used for genre names, event names, and field names.
+        // label is shown in the error message (e.g. "Event name", "Field name").
+        public static string GetIdentifierError(string name, string label = "Name")
+        {
+            if (string.IsNullOrEmpty(name))
+                return $"{label} is required.";
+            if (!char.IsLetter(name[0]))
+                return $"{label} must start with a letter.";
+            foreach (char c in name)
+                if (!char.IsLetterOrDigit(c))
+                    return $"{label} must contain only letters and digits. Invalid character: '{c}'";
+            return null;
+        }
+
+        // Validates a genre name specifically — same identifier rules plus a disk existence check.
+        public static string GetError(string name)
+        {
+            string idError = GetIdentifierError(name, "Genre name");
+            if (idError != null) return idError;
+
+            string dir = Path.Combine(ProjectRoot(), GenreAssetCreator.ScriptsBase.Replace('/', Path.DirectorySeparatorChar), name);
+            if (Directory.Exists(dir))
+                return $"Genre '{name}' already exists.";
+
+            return null;
+        }
+
+        private static string ProjectRoot()
+        {
+            string data = Application.dataPath;
+            return data.Substring(0, data.Length - "Assets".Length);
+        }
+    }
+}

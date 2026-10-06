@@ -1,0 +1,79 @@
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace UniTx.Runtime.Extensions
+{
+    public static class TaskExt
+    {
+        public static Task<T> AttachExternalCancellation<T>(this Task<T> source, CancellationToken cToken)
+        {
+            if (!cToken.CanBeCanceled)
+                return source;
+
+            if (cToken.IsCancellationRequested)
+                return Task.FromCanceled<T>(cToken);
+
+            if (source.IsCompleted)
+                return source;
+
+            var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            // Cancel side
+            var reg = cToken.Register(() =>
+            {
+                tcs.TrySetCanceled(cToken);
+            });
+
+            // Task completion side
+            source.ContinueWith(t =>
+            {
+                reg.Dispose();
+
+                if (t.IsCanceled)
+                    tcs.TrySetCanceled();
+                else if (t.IsFaulted)
+                    tcs.TrySetException(t.Exception.InnerException);
+                else
+                    tcs.TrySetResult(t.Result);
+
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+            return tcs.Task;
+        }
+
+        public static Task AttachExternalCancellation(this Task source, CancellationToken cToken)
+        {
+            if (!cToken.CanBeCanceled)
+                return source;
+
+            if (cToken.IsCancellationRequested)
+                return Task.FromCanceled(cToken);
+
+            if (source.IsCompleted)
+                return source;
+
+            var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var reg = cToken.Register(() =>
+            {
+                tcs.TrySetCanceled(cToken);
+            });
+
+            source.ContinueWith(t =>
+            {
+                reg.Dispose();
+
+                if (t.IsCanceled)
+                    tcs.TrySetCanceled();
+                else if (t.IsFaulted)
+                    tcs.TrySetException(t.Exception.InnerException);
+                else
+                    tcs.TrySetResult(null);
+
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+            return tcs.Task;
+        }
+
+    }
+}

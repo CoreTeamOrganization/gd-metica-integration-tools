@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "SimulationMakeoverAnalyticsSO", menuName = "GDMonetization/MeticaAnalytics/GenreSO/SimulationMakeover")]
+    public class SimulationMakeoverAnalyticsSO : AnalyticsGenreSO
+    {
+        [SerializeField] private SimulationMakeoverAnalytics _simulationMakeoverAnalytics;
+
+        public override GameGenre Genre => GameGenre.SimulationMakeover;
+        public override GDMeticaAnalytics GetAnalytics() => _simulationMakeoverAnalytics ??= new SimulationMakeoverAnalytics();
+    }
+}

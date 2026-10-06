@@ -1,0 +1,41 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Analytics
+{
+    public abstract class AnalyticsEventData
+    {
+        public Dictionary<string, object> CustomFields { get; set; }
+    }
+
+    /// <summary>
+    /// Base class for level-scoped events.
+    /// All fields are optional here — each subclass constructor enforces its own required subset.
+    /// </summary>
+    public class LevelData : AnalyticsEventData
+    {
+        public int?   Level           { get; set; }
+        public string LevelType       { get; set; }
+        public string LevelDifficulty { get; set; }
+        public int?   LevelId         { get; set; }
+    }
+
+    /// <summary>
+    /// Base class for asset transaction events (earn / spend).
+    /// Level, Asset, Amount and Source are always required for every subclass.
+    /// </summary>
+    public class AssetData : LevelData
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public string Asset  { get; }
+        public float  Amount { get; }
+        public string Source { get; }
+
+        public AssetData(int level, string asset, float amount, string source)
+        {
+            Level  = level;   // sets the nullable base field — always non-null for AssetData
+            Asset  = asset;
+            Amount = amount;
+            Source = source;
+        }
+    }
+}

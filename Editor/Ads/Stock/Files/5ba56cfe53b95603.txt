@@ -1,0 +1,125 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Internet;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public static class ConsentManager
+    {
+        internal static readonly IAdvanceUMPService UMP = new NewAdmobConsent();
+
+        private static List<IConsentSettingsService> ConsentServices = new(4);
+
+        public static async Task InitializeAsync(Action<UMPResult> onComplete)
+        {
+#if UNITY_IOS
+            bool isAuthorized = await iOSAppTrackingTransparency.RequestTrackingPermissionAsync();
+            MonetizationPreferences.PersonalizedAds.Set(isAuthorized);
+
+            await InternetPanelManager.WaitForInternetAsync();
+
+             if (isAuthorized)
+             {
+                 FetchUmpInfo(onComplete);
+             }
+             else
+             {
+                 onComplete?.Invoke(new(UMPStatus.HasConsent, "UMP skipped because ATT is not authorized."));
+             }
+#else
+            await InternetPanelManager.WaitForInternetAsync();
+            FetchUmpInfo(onComplete);
+#endif
+        }
+
+        static void FetchUmpInfo(Action<UMPResult> onComplete)
+        {
+            var consentSettings = Resources.Load<ConsentConfiguration>(MonetizationConfigurationsPath.Consent);
+            UMP.Initialize(consentSettings, onComplete);
+        }
+
+        public static async Task InitializeAsync(Action<string> onComplete)
+        {
+#if UNITY_IOS
+            bool isAuthorized = await iOSAppTrackingTransparency.RequestTrackingPermissionAsync();
+            MonetizationPreferences.PersonalizedAds.Set(isAuthorized);
+
+            await InternetPanelManager.WaitForInternetAsync();
+
+             if (isAuthorized)
+             {
+                 FetchUmpInfo(onComplete);
+             }
+             else
+             {
+                 onComplete?.Invoke("User messaging platform skipped because ATT is not authorized.");
+             }
+#else
+            await InternetPanelManager.WaitForInternetAsync();
+            FetchUmpInfo(onComplete);
+#endif
+        }
+
+        static void FetchUmpInfo(Action<string> onComplete)
+        {
+            var consentSettings = Resources.Load<ConsentConfiguration>(MonetizationConfigurationsPath.Consent);
+            UMP.Initialize(consentSettings, onComplete);
+        }
+
+        public static void AddAndUpdateConsentService(IConsentSettingsService service)
+        {
+            service.ApplySettings(CreateConsentInfo());
+            ConsentServices.Add(service);
+        }
+
+        public static void UpdateAllServices()
+        {
+            Message.Log(Tag.InAppPurchasing, "Updating all consent services");
+            ConsentInfo info = CreateConsentInfo();
+            for (int i = 0; i < ConsentServices.Count; i++)
+            {
+                ConsentServices[i].ApplySettings(info);
+            }
+        }
+
+        static ConsentInfo CreateConsentInfo()
+        {
+            bool eeaUser = MonetizationPreferences.ConsentEuropeanArea.Get();
+            bool personalizedAds = MonetizationPreferences.PersonalizedAds.Get();
+            return new ConsentInfo(eeaUser, personalizedAds);
+        }
+
+        public static void Dispose()
+        {
+            ConsentServices.Clear();
+        }
+    }
+
+    public readonly struct UMPResult
+    {
+        public readonly UMPStatus Status;
+        public readonly string Message;
+
+        public UMPResult(UMPStatus status, string message)
+        {
+            Status = status;
+            Message = message;
+        }
+    }
+}
+
+public enum UMPStatus
+{
+    HasConsent,
+    Timeout,
+    UpdateError,
+    CanRequestAds,
+    LoadError,
+    ShowError,
+    ShowSuccess,
+}

@@ -1,0 +1,75 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Utilities
+{
+    internal sealed class PerformantParallelActions : IDelayedActionService
+    {
+        private List<ActionData> _delayedActions = new List<ActionData>(8);
+
+        public void AddAction(Action action, float delay, string actionName)
+        {
+            if (action == null)
+            {
+                return;
+            }
+
+            _delayedActions.Add(new ActionData(action, delay, actionName));
+        }
+
+        public void Tick()
+        {
+            for (int i = _delayedActions.Count - 1; i >= 0; i--)
+            {
+                if (_delayedActions[i].Elapsed())
+                {
+                    _delayedActions[i].Invoke();
+                    _delayedActions.RemoveAt(i);
+                }
+            }
+        }
+
+        private class ActionData
+        {
+            readonly Action action;
+            readonly float delay;
+            readonly string actionName;
+            Stopwatch stopwatch;
+
+            public ActionData(Action action, float delay, string name)
+            {
+                this.action = action;
+                this.delay = delay;
+                this.actionName = name;
+                stopwatch = new Stopwatch();
+                stopwatch.Start();
+
+                LogAction($"Added action '{actionName}' to be invoked after {delay}s delay");
+            }
+
+            public bool Elapsed()
+            {
+                return stopwatch.Elapsed.TotalSeconds >= delay;
+            }
+
+            public void Invoke()
+            {
+                LogAction($"Invoking action '{actionName}', Elapsed {stopwatch.ElapsedMilliseconds} milliseconds");
+                stopwatch.Reset();
+                action.Invoke();
+            }
+
+            void LogAction(string message)
+            {
+                if (!string.IsNullOrEmpty(actionName))
+                {
+                    Message.Log(Tag.SDK, message);
+                }
+            }
+        }
+    }
+}

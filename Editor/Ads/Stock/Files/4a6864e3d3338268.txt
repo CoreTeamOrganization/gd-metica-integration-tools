@@ -1,0 +1,51 @@
+using System;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+using UnityEngine.Purchasing;
+using UnityEngine.Serialization;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public abstract class InAppProductSO : ScriptableObject
+    {
+        public ProductType ProductType;
+        public string ProductName = "Remove Ads";
+        public string ProductId = "remove_ads";
+        [SerializeField] string DefaultPrice = "$4.99";
+
+        public string LocalizedPrice { get; set; }
+
+        public string Price
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(LocalizedPrice))
+                    return LocalizedPrice;
+                return DefaultPrice;
+            }
+        }
+
+        public bool IsPending
+        {
+            get
+            {
+                return PlayerPrefs.GetInt($"PendingIAP_{ProductId}",0).Equals(1);
+            }
+            private set
+            {
+                Message.LogWarning(Tag.InAppPurchasing,$"ProductId: {ProductId}, IsPending: {value}");
+                PlayerPrefs.SetInt($"PendingIAP_{ProductId}", value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+        }
+        public event Action<bool> OnStateDeferred;
+
+        public void SetDeferredState(bool value)
+        {
+            IsPending = value;
+            OnStateDeferred?.Invoke(value);
+        }
+
+        public abstract void OnPurchaseSuccess();
+    }
+}

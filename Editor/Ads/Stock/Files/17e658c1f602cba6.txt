@@ -1,0 +1,174 @@
+using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using GoogleMobileAds.Common;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdmobBanner : BannerAdUnit
+    {
+        //private int bannerPriority;
+        BannerView bannerView;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+        }
+
+        public override bool HasBanner()
+        {
+            if (!hasBanner)
+            {
+                LoadBanner();
+                return false;
+            }
+
+            return bannerView != null;
+        }
+
+        public override void ShowBanner()
+        {
+            bannerView?.Show();
+            _isBannerActive = true;
+            Message.Log(Tag.Admob, "Banner is showing");
+        }
+
+        public override void LoadBanner()
+        {
+            if (isLoading)
+            {
+                Message.LogWarning(Tag.Admob, "Banner is already loading");
+                return;
+            }
+
+            AdSize adSize = bannerInfo.bannerSize == BannerSize.Adaptive
+                ? AdSize.GetCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(AdSize.FullWidth)
+                : AdSize.Banner;
+
+            if (bannerView != null)
+                bannerView.Destroy();
+
+            bannerView = new BannerView(adUnitId, adSize, ConvertToAdmobBannerPos());
+            bannerView.OnBannerAdLoadFailed += BannerView_OnBannerAdLoadFailed;
+            bannerView.OnBannerAdLoaded += BannerView_OnBannerAdLoaded;
+            bannerView.OnAdClicked += BannerView_OnAdClicked;
+            bannerView.OnAdPaid += BannerView_OnAdPaid;
+
+            bannerView.LoadAd(MonetizationConstants.CreateAdRequest());
+            Message.Log(Tag.Admob, $"Banner is loading with size {bannerInfo.bannerSize}");
+            isLoading = true;
+        }
+
+        public override void HideBanner()
+        {
+            _isBannerActive = false;
+            bannerView?.Hide();
+            Message.Log(Tag.Admob, "Banner is hidden");
+        }
+
+        public override void DestroyBanner()
+        {
+            if (bannerView != null)
+            {
+                bannerView.Destroy();
+                bannerView = null;
+            }
+
+            _isBannerActive = false;
+            hasBanner = false;
+            Message.Log(Tag.Admob, "Banner is destroyed");
+        }
+
+        public override bool IsBannerActive()
+        {
+            return _isBannerActive;
+        }
+
+        public override void RepositionBanner(BannerPosition newPosition)
+        {
+            bannerInfo.BannerPosition = newPosition;
+            if (bannerView != null)
+                bannerView.SetPosition(ConvertToAdmobBannerPos());
+        }
+
+        AdPosition ConvertToAdmobBannerPos()
+        {
+            switch (bannerInfo.BannerPosition)
+            {
+                case BannerPosition.Top: return AdPosition.Top;
+                case BannerPosition.TopLeft: return AdPosition.TopLeft;
+                case BannerPosition.TopRight: return AdPosition.TopRight;
+                case BannerPosition.Bottom: return AdPosition.Bottom;
+                case BannerPosition.BottomLeft: return AdPosition.BottomLeft;
+                case BannerPosition.BottomRight: return AdPosition.BottomRight;
+                case BannerPosition.Center: return AdPosition.Center;
+                default: return AdPosition.Bottom;
+            }
+        }
+
+        #region Callbacks
+
+        private void BannerView_OnBannerAdLoadFailed(LoadAdError obj)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                hasBanner = false;
+                isLoading = false;
+                _isBannerActive = false;
+                Message.LogError(Tag.Admob, "Banner failed to load.");
+                // if (AdsManager.BannerStatus)
+                // {
+                //     AdsManager.ShowBanner();
+                // }
+                // else
+                // {
+                //     HideBanner();
+                // }
+            });
+        }
+
+        private void BannerView_OnBannerAdLoaded()
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasBanner = true;
+                _isBannerActive = true;
+                Message.Log(Tag.Admob, "Banner ad loaded");
+
+                if (AdsManager.BannerStatus)
+                {
+                    AdsManager.ShowBanner();
+                }
+                else
+                {
+                    HideBanner();
+                }
+            });
+        }
+
+        private void BannerView_OnAdPaid(AdValue adValue)
+        {
+            if (adValue == null) return;
+
+            double revenue = (adValue.Value / 1000000f);
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Banner, AdPlatforms.ADMOB, "Admob_Native",
+                adUnitId, "USD", revenue, "none");
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void BannerView_OnAdClicked()
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+    }
+}

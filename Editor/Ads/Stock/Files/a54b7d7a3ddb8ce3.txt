@@ -1,0 +1,36 @@
+using System;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Logger
+{
+    public static class Message
+    {
+        private static readonly ILoggerService m_logger =
+#if !UNITY_EDITOR && UNITY_ANDROID
+            new MonetizationLoggerAndroid();
+#else
+            new MonetizationLoggerEditor();
+#endif
+
+        public static void Log(Tag tag, string message)
+        {
+            m_logger.Log(tag, message);
+        }
+
+        public static void LogWarning(Tag tag, string message)
+        {
+            m_logger.LogWarning(tag, message);
+        }
+
+        public static void LogError(Tag tag, string message)
+        {
+            m_logger.LogError(tag, message);
+        }
+
+        public static void LogException(Tag tag, Exception e)
+        {
+            m_logger.LogException(tag, e);
+        }
+    }
+}

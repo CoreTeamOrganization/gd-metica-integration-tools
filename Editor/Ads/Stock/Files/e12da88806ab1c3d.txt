@@ -1,0 +1,35 @@
+using System.Collections;
+using System.Collections.Generic;
+using Firebase.Analytics;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public class FirebaseConsentSettings : IConsentSettingsService
+    {
+        public void ApplySettings(ConsentInfo consentInfo)
+        {
+            //var hasInitialized = AnalyticsManager.IsNetworkInitialized<FirebaseAnalyticsNetwork>();
+            //if (hasInitialized)
+            if (true)
+            {
+                var status = consentInfo.IsPersonalized ? ConsentStatus.Granted : ConsentStatus.Denied;
+                Message.Log(Tag.Firebase, $"Consent Status: {status}");
+                var consent = new Dictionary<ConsentType, ConsentStatus>() {
+                    {ConsentType.AnalyticsStorage, ConsentStatus.Granted},
+                    {ConsentType.AdStorage, ConsentStatus.Granted},
+                    {ConsentType.AdUserData, status}, // Required to update only for eu_consent_policy
+                    {ConsentType.AdPersonalization, status} // Required to update only for eu_consent_policy
+                };
+
+                FirebaseAnalytics.SetConsent(consent);
+                return;
+            }
+
+            Message.LogWarning(Tag.Firebase, "Failed to apply consent settings because analytics not initialized.");
+        }
+    }
+}

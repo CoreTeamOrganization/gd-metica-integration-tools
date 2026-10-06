@@ -1,0 +1,7 @@
+namespace GDMonetization.Runtime.Scripts.EventBusSystem
+{
+    public interface IEvent
+    {
+        // Empty
+    }
+}

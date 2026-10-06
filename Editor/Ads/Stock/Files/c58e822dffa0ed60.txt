@@ -1,0 +1,9 @@
+using Monetization.Runtime.Ads;
+
+namespace Monetization.Runtime.Analytics
+{
+    public interface IAnalyticsAdRevenueService
+    {
+        void ReportAdRevenue(AdRevenueInfo adRevenueInfo);
+    }
+}

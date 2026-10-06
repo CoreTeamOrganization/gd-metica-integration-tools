@@ -1,0 +1,15 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "PrivacyConfig", menuName = "GDMonetization/PrivacyConfig")]
+    public sealed class PrivacyConfiguration : ScriptableObject
+    {
+        public string PrivacyPolicyLink;
+
+        [Header("Resources")]
+        public string PanelPath;
+    }
+}

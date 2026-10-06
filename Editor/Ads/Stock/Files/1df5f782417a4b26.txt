@@ -1,0 +1,82 @@
+using UnityEngine;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AdjustSdk;
+using Io.AppMetrica;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using Newtonsoft.Json;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdNetworkAppLovin : IAdNetworkService
+    {
+        private Action callback;
+        private bool CountryFound;
+        public void Initialize(string appID, Action onInitialized)
+        {
+            if (RemoteConfigManager.Configuration.DisableMaxOn2GBDevices)
+            {
+                if (SystemInfo.systemMemorySize <= 2048)
+                {
+                    Message.LogWarning(Tag.Applovin,
+                        "Failed to initialize MAX because 2GB devices are disabled via remote config!");
+                    return;
+                }
+            }
+
+            callback = onInitialized;
+            Message.Log(Tag.Applovin, "Initializing...");
+
+            if (AdsManager.TestAds)
+            {
+                string id = MonetizationConstants.GetAdvertisingID();
+                if (id != null)
+                    MaxSdk.SetTestDeviceAdvertisingIdentifiers(new string[1] { id });
+            }
+
+            MaxSdkCallbacks.OnSdkInitializedEvent += MaxSdkCallbacks_OnSdkInitializedEvent;
+
+            MaxSdkBase.InvokeEventsOnUnityMainThread = false;
+            MaxSdk.SetVerboseLogging(MonetizationConstants.UseLogs);
+
+            ConsentManager.AddAndUpdateConsentService(new ApplovinConsentSettings());
+
+            MaxSdk.InitializeSdk();
+        }
+
+        private void MaxSdkCallbacks_OnSdkInitializedEvent(MaxSdkBase.SdkConfiguration obj)
+        {
+            callback?.Invoke();
+            Message.Log(Tag.Applovin, "Successfully Initialized");
+
+            if (!string.IsNullOrEmpty(obj.CountryCode))
+            {
+                CountryFound = true;
+            }
+            else
+            {
+                CountryFound = false;
+            }
+
+            Dictionary<string, object> parameters2 = new Dictionary<string, object>()
+            {
+                { "Initialized", obj.IsSuccessfullyInitialized },
+                { "CountryFound", CountryFound }
+            };
+
+            Dictionary<string, object> parameters = new Dictionary<string, object>()
+            {
+                { "Applovin", parameters2 }
+            };
+            AnalyticsManager.SendEvent("Monetization", parameters);
+        }
+    }
+}

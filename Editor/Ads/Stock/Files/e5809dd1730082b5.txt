@@ -1,0 +1,105 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Threading;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinInterstitial : IntersitialAdUnit
+    {
+        private bool requestAdOnFail = true;
+        int retryAttempt = 0;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                ListenEvents();
+                LoadInterstitial();
+            }
+        }
+
+        void ListenEvents()
+        {
+            MaxSdkCallbacks.Interstitial.OnAdLoadedEvent += Interstitial_OnOnAdLoadedEvent;
+            MaxSdkCallbacks.Interstitial.OnAdLoadFailedEvent += Interstitial_OnAdLoadFailedEvent;
+            MaxSdkCallbacks.Interstitial.OnAdHiddenEvent += Interstitial_OnAdHiddenEvent;
+            MaxSdkCallbacks.Interstitial.OnAdRevenuePaidEvent += Interstitial_OnAdRevenuePaidEvent;
+        }
+
+        public override bool HasInterstitial(bool doRequest)
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            bool isReady = MaxSdk.IsInterstitialReady(adUnitId);
+
+            // if (isReady)
+            //     requestAdOnFail = true;
+
+            if (!isReady && doRequest)
+                LoadInterstitial();
+
+            return isReady;
+        }
+
+        public override void ShowInterstitial(string placementName, Action onClosed)
+        {
+            this.onAdClosed = onClosed;
+            this.placementName = placementName;
+            MaxSdk.ShowInterstitial(adUnitId, placementName);
+        }
+
+        public override void LoadInterstitial()
+        {
+            if (IsAdUnitEmpty)
+                return;
+
+            MaxSdk.LoadInterstitial(adUnitId);
+        }
+
+        #region Callbacks
+
+        private void Interstitial_OnOnAdLoadedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            retryAttempt = 0;
+        }
+
+        private void Interstitial_OnAdLoadFailedEvent(string arg1, MaxSdkBase.ErrorInfo arg2)
+        {
+            retryAttempt++;
+            double retryDelay = Math.Pow(2, Math.Min(6, retryAttempt));
+            DelayedActionManager.Add(LoadInterstitial, (float)retryDelay);
+
+            // if (requestAdOnFail)
+            // {
+            //     requestAdOnFail = false;
+            //     DelayedActionManager.Add(LoadInterstitial, 2f, true);
+            // }
+        }
+
+        private void Interstitial_OnAdHiddenEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                LoadInterstitial();
+                onAdClosed?.Invoke();
+            });
+        }
+
+        private void Interstitial_OnAdRevenuePaidEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Interstitial, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, placementName);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        #endregion
+    }
+}

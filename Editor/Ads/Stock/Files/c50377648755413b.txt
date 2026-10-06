@@ -1,0 +1,517 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+using Unity.Services.Core;
+using UnityEngine;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public class UnityIAPNetwork : IIAPNetwork
+    {
+        public event Action<PurchaseInfo> OnProductPurchasedEvent;
+        private Action _onInitializedCallback;
+
+        private StoreController _storeController;
+        private bool _isConnected;
+
+        private readonly IIAPVerifier localIAPVerifier = new CrossPlatformIAPVerifier();
+        private readonly IIAPVerifier serverIAPVerifier;
+
+        private InAppProductSO[] _products;
+        private InAppsConfiguration _configuration;
+        private List<InAppProductSO> _restoredProducts;
+        public bool IsRestoring => _restoredProducts != null;
+
+        public UnityIAPNetwork(IIAPVerifier serverValidator)
+        {
+            serverIAPVerifier = serverValidator;
+        }
+
+        public bool IsInitialized => _isConnected;
+
+        public void Initialize(Action onInitialized, InAppsConfiguration configuration)
+        {
+            if (IsInitialized) return;
+
+            _onInitializedCallback = onInitialized;
+            _configuration = configuration;
+            _products = configuration.AllProducts;
+            InitializeServices();
+            InitializeUnityIAP();
+        }
+
+        void InitializeServices()
+        {
+            try
+            {
+                Message.Log(Tag.InAppPurchasing, "Initializing UnityServices");
+                UnityServices.InitializeAsync();
+            }
+            catch (Exception e)
+            {
+                Message.LogException(Tag.InAppPurchasing, e);
+            }
+        }
+
+        private async void InitializeUnityIAP()
+        {
+            Message.Log(Tag.InAppPurchasing, "Initializing IAP");
+            _storeController = UnityIAPServices.StoreController();
+
+            // Subscribe to ALL events BEFORE Connect — pending purchases may fire immediately on reconnect
+            _storeController.OnStoreConnected += OnStoreConnected;
+            _storeController.OnStoreDisconnected += OnStoreDisconnected;
+            _storeController.OnProductsFetched += OnProductsFetched;
+            _storeController.OnProductsFetchFailed += OnProductsFetchFailed;
+            _storeController.OnPurchasePending += OnPurchasePending;
+            _storeController.OnPurchaseConfirmed += OnPurchaseConfirmed;
+            _storeController.OnPurchaseFailed += OnPurchaseFailed;
+            _storeController.OnPurchaseDeferred += OnDeferredPurchase;
+            _storeController.OnPurchasesFetched += OnPurchasesFetched;
+            _storeController.OnPurchasesFetchFailed += OnPurchasesFetchFailed;
+            _storeController.OnCheckEntitlement += OnCheckEntitlement;
+
+            await _storeController.Connect();
+        }
+
+        void OnStoreConnected()
+        {
+            _isConnected = true;
+
+            var productDefinitions = new List<ProductDefinition>();
+            for (int i = 0; i < _products.Length; i++)
+            {
+                var product = _products[i];
+                product.SetDefaults();
+                productDefinitions.Add(new ProductDefinition(product.ProductId, product.ProductType));
+            }
+
+            _storeController.FetchProducts(productDefinitions);
+
+            // Re-delivers any unconfirmed purchases via OnPurchasePending
+            _storeController.FetchPurchases();
+        }
+
+        void OnStoreDisconnected(StoreConnectionFailureDescription failure)
+        {
+            Message.LogError(Tag.InAppPurchasing, $"IAP Initialization Failed: {failure.Message}");
+        }
+
+        private void OnProductsFetched(List<Product> products)
+        {
+            for (int i = 0; i < _products.Length; i++)
+            {
+                var detail = _storeController.GetProductById(_products[i].ProductId);
+                if (detail != null)
+                    _products[i].SetLocalizedPrice(detail.metadata.localizedPriceString);
+            }
+
+            ReconcileEntitlements();
+
+            _onInitializedCallback?.Invoke();
+            Message.Log(Tag.InAppPurchasing, "Initialized Successfully!");
+
+            if (!MonetizationPreferences.RestorePurchaseOnce.Get())
+            {
+                MonetizationPreferences.RestorePurchaseOnce.Set(true);
+#if !UNITY_EDITOR && UNITY_IOS
+                // Google Play has no "restore" concept — FetchPurchases() (called on every connect,
+                // see OnStoreConnected) already redelivers owned NonConsumables/Subscriptions via
+                // OnPurchasesFetched, granted below in OnPurchasesFetched/GrantConfirmedOrderIfNeeded.
+                // RestoreTransactions() on Android is a hardcoded no-op in the Purchasing SDK, so it
+                // must not be called there. iOS needs this explicit call to trigger StoreKit's restore.
+                RestorePurchases();
+#endif
+            }
+        }
+
+        private void OnProductsFetchFailed(ProductFetchFailed failure)
+        {
+            Message.LogError(Tag.InAppPurchasing, $"Product fetch failed: {failure.FailureReason}");
+        }
+
+        private void OnPurchasesFetched(Orders orders)
+        {
+            Message.Log(Tag.InAppPurchasing,
+                $"Purchases fetched: {orders.PendingOrders.Count} pending, {orders.ConfirmedOrders.Count} confirmed");
+
+            // Google Play redelivers already-acknowledged NonConsumables/Subscriptions as
+            // ConfirmedOrders (not PendingOrders) on every FetchPurchases call — e.g. after a
+            // reinstall, where the store never re-flags them as pending. These never reach
+            // OnPurchasePending, so the old restore pipeline (_restoredProducts/GrantRestoreRewards)
+            // never sees them. Grant them here instead; InAppProductSO.IsOwned makes this idempotent
+            // so a product already owned locally isn't re-granted on every subsequent launch.
+            for (int i = 0; i < orders.ConfirmedOrders.Count; i++)
+            {
+                GrantConfirmedOrderIfNeeded(orders.ConfirmedOrders[i]);
+            }
+        }
+
+        // Re-checks entitlement for every NonConsumable/Subscription so the owned-button UI stays
+        // correct. Called once, from OnProductsFetched, right after products become available.
+        // Every grant path (fresh purchase, restore, reinstall-redelivery) already pushes
+        // ownership directly via InAppProductSO.SetOwned() the moment it grants something, so this
+        // isn't needed to learn about our own grants — its only job is catching a refund/
+        // revocation that happened out-of-band. Calling it again from OnPurchasesFetched/
+        // OnPurchaseConfirmed was tried and reverted: those fire close enough together with this
+        // call (e.g. both at boot) that the Purchasing SDK rejected the overlapping CheckEntitlement
+        // for the same product as a duplicate (confirmed on a real device), and the extra call
+        // sites weren't fixing any confirmed gap in this codebase to justify that complexity.
+        void ReconcileEntitlements()
+        {
+            for (int i = 0; i < _products.Length; i++)
+            {
+                if (_products[i].ProductType is not (ProductType.NonConsumable or ProductType.Subscription))
+                    continue;
+
+                var detail = _storeController.GetProductById(_products[i].ProductId);
+                if (detail != null)
+                    _storeController.CheckEntitlement(detail);
+            }
+        }
+
+        void GrantConfirmedOrderIfNeeded(ConfirmedOrder order)
+        {
+            var product = order.CartOrdered.Items().FirstOrDefault()?.Product;
+            if (product == null) return;
+
+            InAppProductSO productObject = GetProductObjectFromId(product.definition.id);
+            if (productObject == null) return;
+
+            // Consumables are never redelivered this way — only re-deliverable ownership types apply.
+            if (productObject.ProductType is not (ProductType.NonConsumable or ProductType.Subscription))
+                return;
+
+            if (productObject.IsOwned)
+                return;
+
+            Message.Log(Tag.InAppPurchasing,
+                $"Granting already-confirmed order for '{productObject.ProductId}' (restore-after-reinstall)");
+            productObject.SetOwned(true);
+            productObject.SetDeferredState(false);
+            productObject.SetLastPurchaseQuantity(1); // NonConsumable/Subscription only — always 1
+            productObject.OnPurchaseSuccess(true);
+        }
+
+        void OnCheckEntitlement(Entitlement entitlement)
+        {
+            // entitlement.Product is null when the check "failed early" (per its own doc comment).
+            // Falling through to GetProductObjectFromId(null) only produces a useless
+            // "Failed to get IAPProductSO of id : " warning with nothing to identify which product
+            // it was for, so log the actual status/reason here instead and skip the lookup entirely.
+            if (entitlement.Product == null)
+            {
+                Message.LogWarning(Tag.InAppPurchasing,
+                    $"CheckEntitlement failed early: status {entitlement.Status}, error: {entitlement.ErrorMessage}");
+                return;
+            }
+
+            InAppProductSO productObject = GetProductObjectFromId(entitlement.Product.definition.id);
+            if (productObject == null) return;
+
+            bool owned = entitlement.Status == EntitlementStatus.FullyEntitled;
+            if (owned != productObject.IsOwned)
+            {
+                Message.Log(Tag.InAppPurchasing,
+                    $"CheckEntitlement reconciled '{productObject.ProductId}': owned {productObject.IsOwned} -> {owned} (status: {entitlement.Status})");
+            }
+
+            productObject.SetOwned(owned);
+        }
+
+        private void OnPurchasesFetchFailed(PurchasesFetchFailureDescription failure)
+        {
+            Message.LogError(Tag.InAppPurchasing, $"Purchase fetch failed: {failure.Message}");
+        }
+
+        private void OnDeferredPurchase(DeferredOrder deferredOrder)
+        {
+            var product = deferredOrder.CartOrdered.Items().FirstOrDefault()?.Product;
+            if (product == null) return;
+
+            Message.Log(Tag.InAppPurchasing, $"Deferred Purchase : {product.definition.id}");
+            GetProductObjectFromId(product.definition.id)?.SetDeferredState(true);
+        }
+
+        public void Purchase(string productId)
+        {
+            if (!IsInitialized)
+            {
+                Message.LogError(Tag.InAppPurchasing, $"IAP not Initialized to buy productId {productId}");
+                return;
+            }
+
+            Product product = _storeController.GetProductById(productId);
+            if (product != null && product.availableToPurchase)
+            {
+                Message.Log(Tag.InAppPurchasing, $"Initiating Purchase : productId {productId}");
+                _storeController.PurchaseProduct(product);
+            }
+            else
+            {
+                Message.LogWarning(Tag.InAppPurchasing,
+                    $"BuyProduct productId: {productId}: FAILED. Not purchasing product, either is not found or is not available for purchase");
+            }
+        }
+
+        public Product GetProductDetail(string productId)
+        {
+            if (string.IsNullOrEmpty(productId)) return null;
+            return _storeController?.GetProductById(productId);
+        }
+
+        public void RestorePurchases()
+        {
+            if (!IsInitialized)
+            {
+                Message.LogWarning(Tag.InAppPurchasing, "IAP not Initialized to restore purchases!");
+                return;
+            }
+
+            if (IsRestoring)
+            {
+                Message.LogWarning(Tag.InAppPurchasing, "Restoring is in progress!");
+                return;
+            }
+
+            if (Application.platform == RuntimePlatform.Android
+                || Application.platform == RuntimePlatform.IPhonePlayer
+                || Application.platform == RuntimePlatform.OSXPlayer)
+            {
+                _restoredProducts = new List<InAppProductSO>();
+                _storeController.RestoreTransactions(OnRestore);
+            }
+            else
+            {
+                Message.LogWarning(Tag.InAppPurchasing, $"RestorePurchases is invalid for platform: {Application.platform}");
+            }
+        }
+
+        void OnRestore(bool success, string error)
+        {
+            if (success)
+            {
+                GrantRestoreRewards();
+                Message.Log(Tag.InAppPurchasing, "Restore Successful");
+            }
+            else
+            {
+                Message.Log(Tag.InAppPurchasing, $"Restore Failed with error: {error}");
+            }
+
+            _restoredProducts = null;
+        }
+
+        void OnPurchasePending(PendingOrder order)
+        {
+            Message.Log(Tag.InAppPurchasing, "OnPurchasePending");
+
+            var cartItem = order.CartOrdered.Items().FirstOrDefault();
+            var product = cartItem?.Product;
+            if (product == null) return;
+
+            InAppProductSO productObject = GetProductObjectFromId(product.definition.id);
+
+            if (IsRestoring && productObject?.ProductType is ProductType.NonConsumable or ProductType.Subscription)
+            {
+                Message.Log(Tag.InAppPurchasing, $"ProcessPurchase (restore): Added '{productObject.ProductId}'");
+                _restoredProducts.Add(productObject);
+                _storeController.ConfirmPurchase(order);
+                return;
+            }
+
+#if UNITY_EDITOR
+            productObject?.SetDeferredState(true);
+            GrantIAPReward(new InAppRevenueInfo(ProductType.Consumable, 0, "", "",
+                product.definition.id, "", "", 1));
+#else
+            // CartItem.Quantity cannot be trusted on Google Play: every CartItem the Android
+            // C# layer of this Purchasing package version constructs (confirmed from package
+            // source) uses the single-Product constructor, so it's hardcoded to 1 regardless of
+            // what the buyer actually picked for a multi-quantity Consumable purchase. The real
+            // value is still on the native purchase JSON embedded in the receipt.
+            int quantity = 1;
+#if UNITY_ANDROID
+            quantity = GetGooglePlayPurchaseQuantity(order);
+#else
+            quantity = cartItem.Quantity < 1 ? 1 : cartItem.Quantity;
+#endif
+
+            var purchasedInfo = new InAppRevenueInfo(
+                product.definition.type,
+                (double)product.metadata.localizedPrice,
+                product.metadata.isoCurrencyCode,
+                productObject?.ProductName ?? product.definition.id,
+                product.definition.id,
+                order.Info.Receipt,
+                _configuration.AdjustInAppToken,
+                quantity);
+
+            localIAPVerifier.Verify(purchasedInfo, localValidation =>
+            {
+#pragma warning disable 618
+                purchasedInfo.SetTransactionId(MonetizationConstants.AndroidPlatform
+                    ? GetPurchaseToken(order.Info.Receipt)
+                    : product.transactionID);
+#pragma warning restore 618
+
+                if (localValidation.IsSuccess)
+                {
+                    productObject?.SetDeferredState(true);
+
+                    if (_configuration.PurchaseVerification)
+                    {
+                        serverIAPVerifier.Verify(purchasedInfo, serverValidation =>
+                        {
+                            if (serverValidation.IsSuccess)
+                                GrantIAPRewardOnMainThread(order, purchasedInfo);
+                            else
+                                productObject?.SetDeferredState(false);
+                        });
+                    }
+                    else
+                    {
+                        GrantIAPRewardOnMainThread(order, purchasedInfo);
+                    }
+                }
+            });
+#endif
+        }
+
+        void OnPurchaseConfirmed(Order order)
+        {
+            switch (order)
+            {
+                case ConfirmedOrder:
+                    Message.Log(Tag.InAppPurchasing, "Purchase confirmed");
+                    break;
+                case FailedOrder failed:
+                    Message.LogError(Tag.InAppPurchasing, $"Purchase confirmation failed: {failed.FailureReason}");
+                    break;
+            }
+        }
+
+        void OnPurchaseFailed(FailedOrder failedOrder)
+        {
+            var product = failedOrder.CartOrdered.Items().FirstOrDefault()?.Product;
+            Message.LogError(Tag.InAppPurchasing,
+                $"Purchase failed: {product?.definition.storeSpecificId}, Reason: {failedOrder.FailureReason}");
+
+            GetProductObjectFromId(product?.definition.id)?.SetDeferredState(false);
+            OnProductPurchasedEvent?.Invoke(new PurchaseInfo(false, null));
+        }
+
+        string GetPurchaseToken(string receipt)
+        {
+            return (string)GetGooglePlayPurchaseJson(receipt)["purchaseToken"];
+        }
+
+        // Unity IAP wraps the native Android purchase JSON three levels deep inside the receipt:
+        // receipt -> "Payload" (string) -> "json" (string) -> the actual Play Billing purchase
+        // object, which carries fields like purchaseToken and quantity that never reach the
+        // C# CartItem/Product model.
+        Dictionary<string, object> GetGooglePlayPurchaseJson(string receipt)
+        {
+            Dictionary<string, object> wrapper = (Dictionary<string, object>)MiniJson.JsonDecode(receipt);
+            string payload = (string)wrapper["Payload"];
+            Dictionary<string, object> googlePlayDetails = (Dictionary<string, object>)MiniJson.JsonDecode(payload);
+            string googlePlayReceiptJson = (string)googlePlayDetails["json"];
+            return (Dictionary<string, object>)MiniJson.JsonDecode(googlePlayReceiptJson);
+        }
+
+        int GetGooglePlayPurchaseQuantity(PendingOrder order)
+        {
+            if (order?.Info?.Receipt == null) return 1;
+
+            try
+            {
+                var purchaseJson = GetGooglePlayPurchaseJson(order.Info.Receipt);
+                if (purchaseJson.TryGetValue("quantity", out object quantityValue))
+                {
+                    int quantity = Convert.ToInt32(quantityValue);
+                    return quantity < 1 ? 1 : quantity;
+                }
+
+                return 1;
+            }
+            catch (Exception e)
+            {
+                Message.LogError(Tag.InAppPurchasing, $"Failed to read Google Play purchase quantity: {e.Message}");
+                return 1;
+            }
+        }
+
+        void GrantIAPRewardOnMainThread(PendingOrder order, InAppRevenueInfo info)
+        {
+            ThreadDispatcher.Enqueue(delegate
+            {
+                _storeController.ConfirmPurchase(order);
+                GrantIAPReward(info);
+            });
+        }
+
+        void GrantIAPReward(InAppRevenueInfo info)
+        {
+            Message.Log(Tag.InAppPurchasing, $"Granting IAP Reward of product {info.ItemId} x{info.Quantity}");
+            InAppProductSO productObject = GetProductObjectFromId(info.ItemId);
+            productObject?.SetOwned(true);
+            productObject?.SetDeferredState(false);
+            productObject?.SetLastPurchaseQuantity(info.Quantity);
+            productObject?.OnPurchaseSuccess(false);
+
+            if (info.IsDuplicate)
+            {
+                Message.LogWarning(Tag.InAppPurchasing,
+                    $"Skipped revenue event because product '{info.ItemId}' already exists/duplicate");
+            }
+            else
+            {
+                Message.Log(Tag.InAppPurchasing, $"Revenue event triggered of product '{info.ItemId}'");
+                AnalyticsManager.ReportInAppRevenue(info);
+            }
+
+            OnProductPurchasedEvent?.Invoke(new PurchaseInfo(true, info));
+        }
+
+        void GrantRestoreRewards()
+        {
+            for (int i = 0; i < _restoredProducts.Count; i++)
+            {
+                var productSo = _restoredProducts[i];
+                if (productSo.IsOwned)
+                {
+                    Message.Log(Tag.InAppPurchasing,
+                        $"Skipped restore grant for '{productSo.ProductId}' — already granted");
+                    continue;
+                }
+
+                Message.Log(Tag.InAppPurchasing, $"Restored IAP Reward of product '{productSo.ProductId}'");
+                productSo.SetOwned(true);
+                productSo.SetDeferredState(false);
+                productSo.SetLastPurchaseQuantity(1); // NonConsumable/Subscription only — always 1
+                productSo.OnPurchaseSuccess(true);
+            }
+        }
+
+        InAppProductSO GetProductObjectFromId(string productID)
+        {
+            if (productID != null && _products != null)
+            {
+                for (int i = 0; i < _products.Length; i++)
+                {
+                    if (_products[i].ProductId.Equals(productID, StringComparison.OrdinalIgnoreCase))
+                        return _products[i];
+                }
+            }
+
+            Message.LogWarning(Tag.InAppPurchasing, $"Failed to get IAPProductSO of id : {productID}");
+            return null;
+        }
+    }
+}

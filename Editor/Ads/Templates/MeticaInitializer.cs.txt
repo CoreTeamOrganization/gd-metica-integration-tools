@@ -12,12 +12,14 @@ namespace Monetization.Runtime.Ads
     /// <summary>
     /// Single gate for bringing the Metica SDK up for ads. Metica must be initialized
     /// exactly once per session — a second call causes undefined behaviour and missed
-    /// callbacks — so both entry points below share one guard.
+    /// callbacks — so every caller goes through one guard.
     ///
-    /// <para><see cref="InitializeAdsWithCallback"/> is the one the ads stack uses: it maps
-    /// onto <c>IAdNetworkService.Initialize(string, Action)</c>, so Metica needs no async
-    /// ad-network interface. <see cref="InitializeAds"/> is kept for callers that want a
-    /// Task; both resolve to the same underlying initialization.</para>
+    /// <para><see cref="InitializeAdsWithCallback"/> is the entry point the ads stack uses: it
+    /// maps onto <c>IAdNetworkService.Initialize(string, Action)</c>, so Metica needs no async
+    /// ad-network interface.</para>
+    ///
+    /// <para>For GD SDK v5 only. v6.x has its own initializer (Analytics.MeticaInitializer from
+    /// v6.2.0, inline init before that); the wrapper step never writes this file there.</para>
     /// </summary>
     internal static class MeticaInitializer
     {
@@ -100,22 +102,6 @@ namespace Monetization.Runtime.Ads
 
             MeticaSdk.InitializeAnalytics(config);
             Message.Log(Tag.Metica, "MeticaInitializer: Initializing Metica Analytics");
-        }
-
-        /// <summary>
-        /// Task-based initialization, for callers that prefer to await. Shares the guard with
-        /// <see cref="InitializeAdsWithCallback"/>, so whichever runs first wins and the other
-        /// awaits the same result.
-        /// </summary>
-        public static Task<MeticaInitResponse> InitializeAds(MeticaMediationInfo mediationInfo)
-        {
-            if (_initTask != null) return _initTask;
-
-            var completion = new TaskCompletionSource<MeticaInitResponse>();
-            _initTask = completion.Task;
-
-            InitializeAdsWithCallback(mediationInfo, response => completion.TrySetResult(response));
-            return _initTask;
         }
 
         public static void Reset()

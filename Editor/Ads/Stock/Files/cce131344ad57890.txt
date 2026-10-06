@@ -1,0 +1,191 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinBanner : BannerAdUnit
+    {
+        protected bool isCreated;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            ListenEvents();
+            CreateBanner();
+        }
+
+        public void ListenEvents()
+        {
+            MaxSdkCallbacks.Banner.OnAdLoadedEvent += Banner_OnAdLoadedEvent;
+            MaxSdkCallbacks.Banner.OnAdLoadFailedEvent += Banner_OnAdLoadFailedEvent;
+            MaxSdkCallbacks.Banner.OnAdRevenuePaidEvent += OnBannerAdRevenuePaidEvent;
+            MaxSdkCallbacks.Banner.OnAdClickedEvent += Banner_OnAdClickedEvent;
+        }
+
+        public void CreateBanner()
+        {
+            MaxSdk.CreateBanner(adUnitId, GetBannerPosition());
+            if (bannerInfo.bannerSize == BannerSize.Adaptive)
+            {
+                MaxSdk.SetBannerExtraParameter(adUnitId, "adaptive_banner", "true");
+            }
+            else if (bannerInfo.bannerSize == BannerSize.Simple_320x50)
+            {
+                MaxSdk.SetBannerWidth(adUnitId, 320f);
+            }
+
+            SetBannerAutoRefreshStatus(AutoRefresh.Enabled);
+            Message.Log(Tag.Applovin, $"BANNER IS CREATED & LOADING, SIZE : {bannerInfo.bannerSize}, Position : {bannerInfo.BannerPosition}");
+            isLoading = true;
+        }
+
+
+        public override bool HasBanner()
+        {
+            if (!hasBanner)
+            {
+                LoadBanner();
+                return false;
+            }
+
+            return true;
+        }
+
+        public override void LoadBanner()
+        {
+            if (isLoading)
+            {
+                Message.LogWarning(Tag.Applovin, $"BANNER IS ALREADY LOADING");
+                return;
+            }
+
+            isLoading = true;
+            Message.LogWarning(Tag.Applovin, $"BANNER IS LOADING");
+            MaxSdk.LoadBanner(adUnitId);
+        }
+
+        public override bool IsBannerActive()
+        {
+            return _isBannerActive;
+        }
+
+        public override void ShowBanner()
+        {
+            Message.Log(Tag.Applovin, "BANNER IS SHOWING");
+            _isBannerActive = true;
+            MaxSdk.ShowBanner(adUnitId);
+        }
+
+        public override void HideBanner()
+        {
+            Message.Log(Tag.Applovin, "BANNER IS HIDDEN");
+            _isBannerActive = false;
+            MaxSdk.HideBanner(adUnitId);
+        }
+
+        public override void DestroyBanner()
+        {
+            Message.Log(Tag.Applovin, "BANNER IS DESTROYED");
+            HideBanner();
+        }
+
+        MaxSdk.BannerPosition GetBannerPosition()
+        {
+            switch (bannerInfo.BannerPosition)
+            {
+                case BannerPosition.Top: return MaxSdk.BannerPosition.TopCenter;
+                case BannerPosition.TopLeft: return MaxSdk.BannerPosition.TopLeft;
+                case BannerPosition.TopRight: return MaxSdk.BannerPosition.TopRight;
+                case BannerPosition.Bottom: return MaxSdk.BannerPosition.BottomCenter;
+                case BannerPosition.BottomLeft: return MaxSdk.BannerPosition.BottomLeft;
+                case BannerPosition.BottomRight: return MaxSdk.BannerPosition.BottomRight;
+                case BannerPosition.Center: return MaxSdk.BannerPosition.Centered;
+                default: return MaxSdk.BannerPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void Banner_OnAdLoadedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            isLoading = false;
+            hasBanner = true;
+            Message.Log(Tag.Applovin, "BANNER IS LOADED");
+            SetBannerAutoRefreshStatus(AutoRefresh.Enabled);
+            if (AdsManager.BannerStatus)
+            {
+                AdsManager.ShowBanner();
+                return;
+            }
+
+            HideBanner();
+        }
+
+        private void Banner_OnAdLoadFailedEvent(string arg1, MaxSdkBase.ErrorInfo arg2)
+        {
+            isLoading = false;
+            hasBanner = false;
+            _isBannerActive = false;
+            SetBannerAutoRefreshStatus(AutoRefresh.Disabled);
+            HideBanner();
+            Message.LogError(Tag.Applovin, "BANNER FAILED TO LOAD : " + arg2.Message);
+            if (AdsManager.BannerStatus)
+            {
+                AdsManager.ShowBanner();
+            }
+        }
+
+        private void OnBannerAdRevenuePaidEvent(string adUnitId, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Banner, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, "adaptive");
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void Banner_OnAdClickedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+
+        #region AutoRefreshStatus
+
+        private AutoRefresh refreshStatus = AutoRefresh.NotSet;
+
+        void SetBannerAutoRefreshStatus(AutoRefresh value)
+        {
+            if (refreshStatus == AutoRefresh.NotSet || refreshStatus != value)
+            {
+                refreshStatus = value;
+                if (refreshStatus == AutoRefresh.Enabled)
+                {
+                    Message.LogWarning(Tag.Applovin, "BANNER REFRESH : " + value.ToString());
+                    MaxSdk.StartBannerAutoRefresh(adUnitId);
+                }
+                else
+                {
+                    Message.LogWarning(Tag.Applovin, "BANNER REFRESH : " + value.ToString());
+                    MaxSdk.StopBannerAutoRefresh(adUnitId);
+                }
+            }
+        }
+
+        public enum AutoRefresh
+        {
+            NotSet,
+            Enabled,
+            Disabled
+        }
+
+        #endregion
+    }
+}

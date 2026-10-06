@@ -1,0 +1,16 @@
+using System;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Events
+{
+    public readonly struct LoadingStepExecutedEvent : IEvent
+    {
+        public readonly LoadingStepResult StepResult;
+
+        public LoadingStepExecutedEvent(LoadingStepResult stepResult)
+        {
+            StepResult = stepResult;
+        }
+    }
+}

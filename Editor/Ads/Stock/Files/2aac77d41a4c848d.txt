@@ -1,0 +1,7 @@
+namespace Monetization.Runtime.Consent
+{
+    public interface IConsentSettingsService
+    {
+        void ApplySettings(ConsentInfo consentInfo);
+    }
+}

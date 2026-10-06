@@ -59,7 +59,9 @@ namespace GameDistrict.MeticaIntegrationTools
             var metica = serialized.FindProperty("Metica");
             if (metica == null)
             {
-                result.Problem("No Metica section yet — run the patch step first.");
+                // The field arrives with the patch step's compile.
+                if (ScriptCompile.Pending(MeticaPaths.AdUnitsConfiguration)) result.Wait();
+                else result.Problem("No Metica section yet — run the patch step first.");
                 return result.Seal();
             }
 

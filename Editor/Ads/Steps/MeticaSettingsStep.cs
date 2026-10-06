@@ -66,7 +66,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!TemplateWriter.TypeIsLoaded(TypeName))
             {
-                result.Problem("MeticaConfiguration hasn't compiled yet — finish the earlier steps.");
+                if (ScriptCompile.Pending(MeticaPaths.RuntimeScripts)) result.Wait();
+                else result.Problem("MeticaConfiguration hasn't compiled yet — finish the earlier steps.");
                 return result.Seal();
             }
 

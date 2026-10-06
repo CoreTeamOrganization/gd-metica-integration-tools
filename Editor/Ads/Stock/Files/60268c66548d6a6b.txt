@@ -1,0 +1,116 @@
+using System;
+using System.Threading.Tasks;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+using UnityEngine.UI;
+using Object = UnityEngine.Object;
+
+namespace Monetization.Runtime.Internet
+{
+    public sealed class InternetPanelManager : ITickable
+    {
+        private static InternetPanelObject panelObject;
+        private static InternetPanelConfiguration configuration;
+
+        private float timer = 2;
+        private bool status = true;
+
+        public void Tick()
+        {
+            timer += Time.unscaledDeltaTime;
+            if (timer > 1)
+            {
+                timer = 0;
+                if (!status.Equals(InternetAvailable))
+                {
+                    status = InternetAvailable;
+                    TogglePanel(status);
+                }
+            }
+        }
+
+        public static void ShowIfNoInternetAvailable()
+        {
+            if (!InternetAvailable)
+            {
+                TogglePanel(false);
+            }
+        }
+
+        static void TogglePanel(bool internetAvailable)
+        {
+            if (!internetAvailable)
+            {
+                if (!RemoteConfigManager.Configuration.ShowInternetPopup)
+                {
+                    Message.LogWarning(Tag.SDK,
+                        "Failed to show internet panel because panel is disabled via remote config!");
+                    return;
+                }
+
+                if (MonetizationPreferences.AdsRemoved.Get())
+                {
+                    Message.LogWarning(Tag.SDK,
+                        "Failed to show internet panel because ads are removed via IAP!");
+                    return;
+                }
+
+                if (panelObject)
+                {
+                    return;
+                }
+
+                if (configuration == null)
+                {
+                    configuration = Resources.Load<InternetPanelConfiguration>(MonetizationConfigurationsPath.Internet);
+                }
+
+                panelObject = Object.Instantiate(Resources.Load<InternetPanelObject>(configuration.PanelPath));
+                panelObject.OnRetryButtonClickedEvent += OnRetryButtonClicked;
+                Object.DontDestroyOnLoad(panelObject);
+            }
+            else
+            {
+                if (panelObject)
+                {
+                    Object.Destroy(panelObject.gameObject);
+                    panelObject = null;
+                }
+            }
+        }
+
+        static void OnRetryButtonClicked()
+        {
+            if (InternetAvailable)
+            {
+                TogglePanel(true);
+            }
+        }
+
+        public static bool InternetAvailable
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return UnityEditor.EditorPrefs.GetBool("InternetAvailable", true);
+#else
+                return Application.internetReachability != NetworkReachability.NotReachable;
+#endif
+            }
+        }
+
+        public static async Task WaitForInternetAsync()
+        {
+            while (!InternetAvailable)
+            {
+                await Task.Delay(2000);
+            }
+        }
+    }
+}

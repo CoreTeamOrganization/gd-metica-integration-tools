@@ -1,0 +1,12 @@
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public struct IAPVerifyResult
+    {
+        public readonly bool IsSuccess;
+
+        public IAPVerifyResult(bool isSuccess)
+        {
+            IsSuccess = isSuccess;
+        }
+    }
+}

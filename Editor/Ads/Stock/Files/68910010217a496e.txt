@@ -1,0 +1,99 @@
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Sdk
+{
+    public static class MonetizationConstants
+    {
+
+        public static bool UseLogs => Application.isEditor || PlayerPrefs.GetInt("UseLogs", 0).Equals(1);
+        //public static bool UseLogs => true;
+
+        public static void EnableLogs()
+        {
+            MobileToast.Show("Logs Enabled", false);
+            PlayerPrefs.SetInt("UseLogs", 1);
+            PlayerPrefs.Save();
+        }
+
+        public static GoogleMobileAds.Api.AdRequest CreateAdRequest()
+        {
+            var req = new GoogleMobileAds.Api.AdRequest();
+            req.Extras.Add("npa", MonetizationPreferences.PersonalizedAds.Get() ? "0" : "1");
+            return req;
+        }
+
+        public static AdUnitsConfiguration.AdNetworkInfo GetAdmobTestAds()
+        {
+            return new AdUnitsConfiguration.AdNetworkInfo("dummy~appkey", new AdUnitsConfiguration.AdUnitIdInfo[]
+            {
+                new AdUnitsConfiguration.AdUnitIdInfo(AdFormat.CollapsibleBanner, "ca-app-pub-3940256099942544/2014213617"),
+                new AdUnitsConfiguration.AdUnitIdInfo(AdFormat.Banner, "ca-app-pub-3940256099942544/6300978111"),
+                new AdUnitsConfiguration.AdUnitIdInfo(AdFormat.MRec, "ca-app-pub-3940256099942544/6300978111"),
+                new AdUnitsConfiguration.AdUnitIdInfo(AdFormat.Interstitial, "ca-app-pub-3940256099942544/1033173712"),
+                new AdUnitsConfiguration.AdUnitIdInfo(AdFormat.Rewarded, "ca-app-pub-3940256099942544/5224354917"),
+            });
+        }
+
+        public static string GetAdvertisingID()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var advertisingIdClass = new AndroidJavaClass("com.gamedistrict.utils.DeviceInfo"))
+                {
+                    return advertisingIdClass.CallStatic<string>("getAdvertisingId", GetAndroidContext());
+
+                    AndroidJavaObject GetAndroidContext()
+                    {
+                        using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                        {
+                            return unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                        }
+                    }
+                }
+            }
+            catch (System.Exception)
+            {
+            }
+#endif
+            return null;
+        }
+
+
+        internal static bool UnityEditor
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return true;
+#endif
+                return false;
+            }
+        }
+
+        internal static bool IOSPlatform
+        {
+            get
+            {
+#if UNITY_IOS || UNITY_IPHONE
+            return true;
+#endif
+                return false;
+            }
+        }
+
+        internal static bool AndroidPlatform
+        {
+            get
+            {
+#if UNITY_ANDROID
+                return true;
+#endif
+                return false;
+            }
+        }
+    }
+}

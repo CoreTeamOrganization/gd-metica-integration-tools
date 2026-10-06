@@ -1,0 +1,8 @@
+namespace Monetization.Runtime.Ads
+{
+    public enum BannerSize
+    {
+        Adaptive,
+        Simple_320x50
+    }
+}

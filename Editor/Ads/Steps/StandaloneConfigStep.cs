@@ -53,7 +53,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (!TemplateWriter.TypeIsLoaded(TypeName))
             {
-                result.Problem("MeticaAdsConfig hasn't compiled yet — finish the runtime step.");
+                if (ScriptCompile.Pending(MeticaPaths.StandaloneRoot)) result.Wait();
+                else result.Problem("MeticaAdsConfig hasn't compiled yet — finish the runtime step.");
                 return result.Seal();
             }
 

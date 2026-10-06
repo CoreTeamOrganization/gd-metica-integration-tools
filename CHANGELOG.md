@@ -205,3 +205,56 @@
   otherwise the step says what to add by hand. The step's check fails while METICA has no
   source; any non-null mapping a game added itself counts as done, a null one does not.
   `AdjustAnalyticsNetwork.cs` added to the stock copies (3 variants across v5.0.0–v5.5.0).
+- Commit each step from the window (`StepCommit`). Under **Reviewed — next step** the review
+  panel lists the step's changed files (its paths plus `.meta`), with a prefilled summary and
+  description and a Commit button. Commits only those files (`git commit --only`, other
+  staged work is left staged), never pushes, never skips hooks. Works when the Unity project
+  sits in a subfolder of the repository. A done step revisited still offers it; once a step
+  is committed it isn't offered again. Warns when `gradleTemplate.properties` holds this
+  machine's `org.gradle.java.home`.
+- Fixed: finishing the patch step (then leaving and re-focusing Unity) sent the run back to
+  "Add the wrapper files". The window re-checked before Unity had compiled the patch, the
+  wrapper step's "MeticaConfiguration compiled" check failed, and a failed check drops the
+  sign-off. Checks for a compiled type now tell "not compiled yet" (`ScriptCompile.Pending`:
+  Unity importing/compiling, or a script under the step's folder newer than the last compile)
+  from "does not compile", and wait instead (`VerifyResult.Wait`): the step shows "Waiting for
+  Unity to compile…", keeps its sign-off, and the window re-checks when any compile finishes,
+  failed ones included. Applies to the wrapper, Metica SDK, Metica settings, ad units and
+  standalone runtime/config checks.
+- Fixed: on GD SDK v6.2.x Metica hung at init (seen in Lawn Care, v6.2.3). The wrapper step
+  wrote its own `Ads/Metica/MeticaInitializer.cs`; the SDK's async `AdNetworkMetica`
+  (namespace `Monetization.Runtime.Ads`) then resolved `MeticaInitializer` to it instead of
+  `Analytics.MeticaInitializer`, and its Task shim `InitializeAds()` set the in-flight guard
+  before calling `InitializeAdsWithCallback()`, which saw the guard and never called
+  `MeticaSdk.Initialize`.
+  - The tool's `MeticaInitializer` is now v5 only: skipped when the project already declares a
+    `MeticaInitializer` (any namespace) or has an `AdNetworkMetica` of its own; the step says
+    why. On v6.2.x the wrapper step now verifies with nothing to do.
+  - `InitializeAds()` removed from both `MeticaInitializer` templates (GD SDK and standalone);
+    `InitializeAdsWithCallback` is unchanged.
+  - The wrapper step fails if a tool-written `MeticaInitializer` sits next to an async
+    `AdNetworkMetica`, explaining the shadowing — delete the tool's file to fix a project hit
+    by this.
+- Compare with original GD SDK (step 1 of handling games that changed the SDK themselves).
+  - The stock copies now cover every code and text file of every v5 and v6 release (23
+    releases, 510 unique files, 1.7 MB), not just the 16 files the tool patches. Manifest
+    format 2: path -> stored copy -> releases. `Tools~/ExportStockFiles.ps1` reads each git
+    blob once.
+  - New window (GameDistrict > Metica > Compare with original GD SDK..., the ⋮ menu, and a line
+    on Home): changed / added / missing files with their diffs, filtered by Metica (changed
+    lines mention Metica), Tool (exactly this tool's output) or All. Read-only.
+  - The release compared with is the one whose declared `Version` matches; nothing else
+    decides. Picked by hand only when the declared string matches no release.
+  - Fixed: v6.2.x was read as GD SDK 5.5.0 - `BaseVersion = "5.5.0"` comes first and the
+    version regex had no word boundary.
+- Metica v1 (custom SDK and GD SDK projects):
+  - The Metica SDK step now finds every other Metica before adding the target: another
+    version anywhere under Assets, Metica v1 (`com.metica.unity`) or 2.x (`com.metica.sdk.unity`)
+    in the Package Manager or embedded under Packages, and v1's `MeticaSdkConfiguration.asset`.
+    One dialog lists everything, it is all removed, then the target is added.
+    `com.metica.analytics.abstractions` and this tool are never touched (`MeticaInstalls`).
+  - New step "Metica v1 code", before the Metica SDK step, only in a project that has or had
+    v1: every line of game code still using the v1 API, file by file with a jump-to-line button
+    and what replaces it; passes when none are left. It never edits code. Detection uses names
+    that exist in v1 and nowhere in Metica 2.45.2 (checked against its source: 0 false hits
+    in 68 files), ignoring comments and strings (`MeticaV1Code`).

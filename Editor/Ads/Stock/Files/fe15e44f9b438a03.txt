@@ -1,0 +1,61 @@
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using GDMonetization.Runtime.Scripts.Bootstrap.Events;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+public class DummySplashLoading : MonoBehaviour
+{
+    [SerializeField] private Text loadingText;
+    [SerializeField] private Image fillImage;
+    [SerializeField] private float smoothSpeed = 1f;
+
+    private bool _isSceneLoadingStarted;
+    private float _targetAmount = 0;
+    private float _currentAmount = 0;
+    private int _currentStepNumber = 0;
+    private LoadingStepResult _loadingStepResult;
+    private InitializationStepsCompletionEvent _initializationResult;
+
+    private void OnEnable()
+    {
+        EventBus.Subscribe<LoadingStepExecutedEvent>(HandleLoading);
+        EventBus.Subscribe<InitializationStepsCompletionEvent>(LoadSplash);
+    }
+
+    private void OnDisable()
+    {
+        EventBus.Unsubscribe<LoadingStepExecutedEvent>(HandleLoading);
+        EventBus.Unsubscribe<InitializationStepsCompletionEvent>(LoadSplash);
+    }
+
+    private void HandleLoading(LoadingStepExecutedEvent @event)
+    {
+        var progress = (_currentStepNumber + 1) / AppLoader.Instance.TotalStepsCount;
+        _targetAmount += progress;
+        _currentStepNumber++;
+        _loadingStepResult = @event.StepResult;
+    }
+
+    private void Update()
+    {
+        if(_isSceneLoadingStarted)
+            return;
+
+        _currentAmount = Mathf.Lerp(_currentAmount, _targetAmount, smoothSpeed * Time.deltaTime);
+        fillImage.fillAmount = _currentAmount;
+        loadingText.text = $"Loading...\n {_loadingStepResult.StepName} {Mathf.RoundToInt(_currentAmount * 100)}%";
+
+        if (!_initializationResult.IsSuccess || fillImage.fillAmount < 0.98f)
+            return;
+
+        _isSceneLoadingStarted = true;
+        SceneManager.LoadScene(1);
+    }
+
+    private void LoadSplash(InitializationStepsCompletionEvent @event)
+    {
+        _initializationResult = @event;
+    }
+}

@@ -1,0 +1,25 @@
+using System;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Sdk;
+
+public static partial class MonetizationServices
+{
+    public static class SDK
+    {
+        public static event Action OnPolicyAccepted
+        {
+            add { PrivacyPolicyPanel.OnPolicyAcceptedEvent += value; }
+            remove { PrivacyPolicyPanel.OnPolicyAcceptedEvent -= value; }
+        }
+
+        public static void Initialize()
+        {
+            MonetizationInitializeOnLoad.Initialize();
+        }
+
+        public static void VisitPrivacyPolicy()
+        {
+            MonetizationInitializeOnLoad.VisitPrivacyPolicy();
+        }
+    }
+}

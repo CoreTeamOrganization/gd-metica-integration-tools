@@ -1,0 +1,84 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using GoogleMobileAds.Api;
+using GoogleMobileAds.Common;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Internet;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Sdk
+{
+    internal sealed class MonetizationMonoBehaviour : MonoBehaviour
+    {
+        private List<ITickable> tickables = new List<ITickable>();
+        int tickablesCount = 0;
+
+        public static event Action<bool> OnAppFocus;
+
+        void Start()
+        {
+            AddTickables();
+            DontDestroyOnLoad(gameObject);
+            AppStateEventNotifier.AppStateChanged += OnAppStateChanged;
+        }
+
+        void AddTickables()
+        {
+            tickables.Add(ThreadDispatcher.GetTickable());
+            tickables.Add(DelayedActionManager.GetTickable());
+            CheckInternetPanel();
+            tickablesCount = tickables.Count;
+        }
+
+        void Update()
+        {
+            for (int i = 0; i < tickablesCount; i++)
+            {
+                tickables[i].Tick();
+            }
+        }
+
+        void CheckInternetPanel()
+        {
+            var internetConfig = Resources.Load<InternetPanelConfiguration>(MonetizationConfigurationsPath.Internet);
+            if (internetConfig.Visibility == InternetPanelConfiguration.PanelVisibility.UpdateLoop)
+            {
+                if (RemoteConfigManager.Configuration.ShowInternetPopup)
+                {
+                    tickables.Add(new InternetPanelManager());
+                }
+            }
+        }
+
+        private void OnApplicationPause(bool pause)
+        {
+            Message.Log(Tag.AppCycle, $"OnApplicationPause : {pause}");
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            Message.Log(Tag.AppCycle, $"OnApplicationFocus : {hasFocus}");
+            OnAppFocus?.Invoke(hasFocus);
+        }
+
+        private void OnAppStateChanged(AppState state)
+        {
+            Message.Log(Tag.Admob, $"AppStateChanged: {state}");
+            if (state == AppState.Foreground)
+            {
+                AdsManager.ShowAppOpen();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            RemoteConfigManager.Dispose();
+            AppStateEventNotifier.AppStateChanged -= OnAppStateChanged;
+        }
+    }
+}

@@ -1,0 +1,55 @@
+using System;
+using UnityEngine;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public abstract class InAppProductSO : ScriptableObject
+    {
+        public ProductType ProductType;
+        public string ProductName = "Remove Ads";
+        public string ProductId = "remove_ads";
+        [SerializeField] string DefaultPrice = "$4.99";
+
+        private string LocalizedPrice;
+
+        public string Price
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(LocalizedPrice))
+                    return LocalizedPrice;
+                return DefaultPrice;
+            }
+        }
+
+        public bool IsPending { get; private set; }
+        public event Action<bool> OnStateDeferred;
+
+        public void SetDeferredState(bool value)
+        {
+            IsPending = value;
+            OnStateDeferred?.Invoke(value);
+        }
+
+        public void SetDefaults()
+        {
+            IsPending = false;
+            LocalizedPrice = null;
+        }
+
+        public void SetLocalizedPrice(string localizedPrice)
+        {
+            LocalizedPrice = localizedPrice;
+        }
+
+        /// <summary>
+        /// Called when a purchase succeeds.
+        /// </summary>
+        /// <param name="isRestoring">
+        /// True if the purchase is being restored (for non-consumable or subscription types),
+        /// false if it’s a consumable purchase.
+        /// </param>
+        public abstract void OnPurchaseSuccess(bool isRestoring);
+    }
+}

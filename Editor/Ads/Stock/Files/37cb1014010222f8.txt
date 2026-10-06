@@ -1,0 +1,21 @@
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Metica analytics interface for the Mini Games genre.
+    /// Retrieve via <c>AnalyticsManager.Game</c> using this interface as the type parameter.
+    /// </summary>
+    public interface IMiniGamesAnalytics : IGDMeticaAnalytics
+    {
+        /// <summary>Logs a levelStarted event when the player enters a mini-game level.</summary>
+        void LevelStarted(MiniGamesLevelStarted data);
+
+        /// <summary>Logs a levelFinished event when a mini-game level ends (win or fail).</summary>
+        void LevelFinished(MiniGamesLevelFinished data);
+
+        /// <summary>Logs a gameStarted event when a mini-game session begins.</summary>
+        void GameStarted(MiniGamesGameStarted data);
+
+        /// <summary>Logs a gameFinished event when a mini-game session ends.</summary>
+        void GameFinished(MiniGamesGameFinished data);
+    }
+}

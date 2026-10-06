@@ -22,6 +22,7 @@ namespace GameDistrict.MeticaIntegrationTools
         private static readonly MeticaStep[] GDSdkSteps =
         {
             new AppLovinMaxStep(),
+            new MeticaV1CodeStep(),
             new ImportMeticaSdkStep(),
             new WrapperFilesStep(),
             new PatchCoreFilesStep(),
@@ -36,6 +37,7 @@ namespace GameDistrict.MeticaIntegrationTools
         private static readonly MeticaStep[] StandaloneSteps =
         {
             new AppLovinMaxStep(),
+            new MeticaV1CodeStep(),
             new ImportMeticaSdkStep(),
             new StandaloneRuntimeStep(),
             new StandaloneConfigStep(),

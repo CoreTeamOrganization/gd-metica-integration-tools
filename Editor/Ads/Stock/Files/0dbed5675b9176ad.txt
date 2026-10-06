@@ -1,0 +1,101 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Analytics
+{
+    public class ShooterLevelStarted
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int Level { get; }
+
+        public ShooterLevelStarted(int level)
+        {
+            Level = level;
+        }
+    }
+
+    public class ShooterLevelFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level            { get; }
+        public string LevelStatus      { get; }
+        public string Reason           { get; }
+        public float  PlayTime         { get; }
+        public int    KillCount        { get; }
+        public int    DeathCount       { get; }
+        public int    AttemptCount     { get; }
+        public int                       UsedBoosterCount { get; }
+        public Dictionary<string, int>   UsedBoosters     { get; }
+        public Dictionary<string, float> Balances         { get; }
+        public Dictionary<string, float> BalanceBoosters  { get; }
+
+        // ── Optional — null means not set, will not appear in payload ─────────
+        public float? Accuracy        { get; set; }
+        public float? AccuracyEarning { get; set; }
+        public int?   HeadShots       { get; set; }
+        public float? HeadShotEarning { get; set; }
+        public int?   Health          { get; set; }
+        public float? HealthEarning   { get; set; }
+
+        public ShooterLevelFinished(int level, string levelStatus, string reason, float playTime,
+            int killCount, int deathCount, int attemptCount,
+            int usedBoosterCount, Dictionary<string, int> usedBoosters,
+            Dictionary<string, float> balances, Dictionary<string, float> balanceBoosters)
+        {
+            Level            = level;
+            LevelStatus      = levelStatus;
+            Reason           = reason;
+            PlayTime         = playTime;
+            KillCount        = killCount;
+            DeathCount       = deathCount;
+            AttemptCount     = attemptCount;
+            UsedBoosterCount = usedBoosterCount;
+            UsedBoosters     = usedBoosters;
+            Balances         = balances;
+            BalanceBoosters  = balanceBoosters;
+        }
+    }
+
+    public class ShooterEarnAsset
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level   { get; }
+        public string Asset   { get; }
+        public float  Amount  { get; }
+        public string Source  { get; }
+        public string Type    { get; }
+        public float  Balance { get; }
+
+        public ShooterEarnAsset(int level, string asset, float amount,
+            string source, string type, float balance)
+        {
+            Level   = level;
+            Asset   = asset;
+            Amount  = amount;
+            Source  = source;
+            Type    = type;
+            Balance = balance;
+        }
+    }
+
+    public class ShooterSpendAsset
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level   { get; }
+        public string Asset   { get; }
+        public float  Amount  { get; }
+        public string Source  { get; }
+        public string Item    { get; }
+        public float  Balance { get; }
+
+        public ShooterSpendAsset(int level, string asset, float amount,
+            string source, string item, float balance)
+        {
+            Level   = level;
+            Asset   = asset;
+            Amount  = amount;
+            Source  = source;
+            Item    = item;
+            Balance = balance;
+        }
+    }
+}

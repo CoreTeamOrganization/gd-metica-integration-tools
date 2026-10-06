@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "ArcadeAnalyticsSO", menuName = "GDMonetization/MeticaAnalytics/GenreSO/Arcade")]
+    public class ArcadeAnalyticsSO : AnalyticsGenreSO
+    {
+        [SerializeField] private ArcadeAnalytics _arcadeAnalytics;
+
+        public override GameGenre Genre => GameGenre.Arcade;
+        public override GDMeticaAnalytics GetAnalytics() => _arcadeAnalytics ??= new ArcadeAnalytics();
+    }
+}

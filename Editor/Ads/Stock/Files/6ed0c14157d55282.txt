@@ -1,0 +1,90 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Analytics
+{
+    // LevelData fields: Level=R, LevelType=O
+    public class SimulationMakeoverLevelStarted : LevelData
+    {
+        // ── Optional — null means not set, will not appear in payload ─────────
+        public string LevelName     { get; set; }
+        public string OperatingType { get; set; }
+
+        public SimulationMakeoverLevelStarted(int level)
+        {
+            Level = level;
+        }
+    }
+
+    public class SimulationMakeoverLevelFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level            { get; }
+        public string LevelStatus      { get; }
+        public float  PlayTime         { get; }
+        public int    AttemptCount     { get; }
+        public int    PlayonCount      { get; }
+        public int                     UsedBoosterCount { get; }
+        public Dictionary<string, int>   UsedBoosters     { get; }
+        public Dictionary<string, float> BalanceBoosters  { get; }
+
+        // ── Optional — null means not set, will not appear in payload ─────────
+        public string                    LevelName     { get; set; }
+        public string                    LevelType     { get; set; }
+        public string                    OperatingType { get; set; }
+        public Dictionary<string, float>? Balances      { get; set; }
+
+        public SimulationMakeoverLevelFinished(int level, string levelStatus, float playTime,
+            int attemptCount, int playonCount, int usedBoosterCount,
+            Dictionary<string, int> usedBoosters, Dictionary<string, float> balanceBoosters)
+        {
+            Level            = level;
+            LevelStatus      = levelStatus;
+            PlayTime         = playTime;
+            AttemptCount     = attemptCount;
+            PlayonCount      = playonCount;
+            UsedBoosterCount = usedBoosterCount;
+            UsedBoosters     = usedBoosters;
+            BalanceBoosters  = balanceBoosters;
+        }
+    }
+
+    // AssetData fields: Level=R, Asset=R, Amount=R, Source=R
+    // LevelName=O, LevelType=O, OperatingType=O
+    public class SimulationMakeoverEarnAsset : AssetData
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public string Type    { get; }
+        public float  Balance { get; }
+
+        // ── Optional ─────────────────────────────────────────────────────────
+        public string LevelName     { get; set; }
+        public string OperatingType { get; set; }
+
+        public SimulationMakeoverEarnAsset(int level, string asset, float amount, string source,
+            string type, float balance)
+            : base(level, asset, amount, source)
+        {
+            Type    = type;
+            Balance = balance;
+        }
+    }
+
+    // AssetData fields: Level=R, Asset=R, Amount=R, Source=R
+    // LevelName=O, LevelType=O, OperatingType=O
+    public class SimulationMakeoverSpendAsset : AssetData
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public float Balance { get; }
+
+        // ── Optional ─────────────────────────────────────────────────────────
+        public string LevelName     { get; set; }
+        public string OperatingType { get; set; }
+
+        public SimulationMakeoverSpendAsset(int level, string asset, float amount, string source,
+            float balance)
+            : base(level, asset, amount, source)
+        {
+            Balance = balance;
+        }
+    }
+}

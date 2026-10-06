@@ -1,0 +1,233 @@
+using UnityEngine;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using UnityEngine.UI;
+using Message = Monetization.Runtime.Logger.Message;
+
+public class TestAnalytics : MonoBehaviour
+{
+    public GameObject genreContainer;
+    public GameObject methodContainer;
+    public Button buttonTemplate;
+    public Text selectedGenreText;
+    private readonly Dictionary<string, AnalyticsGenreSO> _genreMap = new();
+
+    public Color color;
+
+    private void Start()
+    {
+        ShowAllGenres();
+    }
+
+    private Color GetLighterColor()
+    {
+        return new Color(
+            Mathf.Min(1f, color.r + 0.3f),
+            Mathf.Min(1f, color.g + 0.3f),
+            Mathf.Min(1f, color.b + 0.3f),
+            1f
+        );
+    }
+
+    private Button CreateButton(string textValue, Transform parent, bool isEvent = false)
+    {
+        if (buttonTemplate)
+        {
+            var buttonGo = Instantiate(buttonTemplate.gameObject, parent);
+            buttonGo.SetActive(true);
+
+            var button = buttonGo.GetComponent<Button>();
+            var text = buttonGo.GetComponentInChildren<Text>();
+            var image = buttonGo.GetComponent<Image>();
+            var spriteRenderer = buttonGo.GetComponentInChildren<SpriteRenderer>();
+
+            if (text)
+            {
+                text.text = textValue;
+                text.fontStyle = FontStyle.Bold;
+            }
+
+            if (image)
+            {
+                image.color = isEvent ? GetLighterColor() : color;
+            }
+
+            if (spriteRenderer)
+            {
+                spriteRenderer.color = Color.white;
+            }
+
+            var rectTransform = buttonGo.GetComponent<RectTransform>();
+            rectTransform.anchoredPosition = new Vector2(0, -parent.childCount * 60);
+
+            return button;
+        }
+        else
+        {
+            // Fallback to runtime creation
+            var newButton = new GameObject("Button");
+            newButton.transform.SetParent(parent, false);
+
+            var rectTransform = newButton.AddComponent<RectTransform>();
+            rectTransform.sizeDelta = new Vector2(200, 50);
+            rectTransform.anchorMin = new Vector2(0, 1);
+            rectTransform.anchorMax = new Vector2(0, 1);
+            rectTransform.pivot = new Vector2(0, 1);
+            rectTransform.anchoredPosition = new Vector2(0, -parent.childCount * 60);
+
+            var image = newButton.AddComponent<Image>();
+            image.color = color;
+
+            // Add default UISprite
+            var sprite = new GameObject("Sprite");
+            sprite.transform.SetParent(newButton.transform, false);
+            var spriteRenderer = sprite.AddComponent<SpriteRenderer>();
+            //spriteRenderer.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.png");
+            spriteRenderer.color = Color.white;
+            spriteRenderer.transform.localPosition = new Vector3(-80, 0, 0);
+            spriteRenderer.transform.localScale = new Vector3(0.3f, 0.3f, 1f);
+
+            var button = newButton.AddComponent<Button>();
+            button.targetGraphic = image;
+
+            var text = new GameObject("Text");
+            text.transform.SetParent(newButton.transform, false);
+
+            var textRect = text.AddComponent<RectTransform>();
+            textRect.sizeDelta = new Vector2(140, 30);
+            textRect.anchorMin = new Vector2(0.5f, 0);
+            textRect.anchorMax = new Vector2(1, 1);
+            textRect.offsetMin = new Vector2(50, 0);
+            textRect.offsetMax = new Vector2(-10, 0);
+
+            var text1 = text.AddComponent<Text>();
+            text1.text = textValue;
+            text1.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text1.fontSize = 25;
+            text1.color = Color.white;
+            text1.alignment = TextAnchor.MiddleCenter;
+            text1.fontStyle = FontStyle.Bold;
+
+            return button;
+        }
+    }
+
+    private void ShowAllGenres()
+    {
+        var analyticsSo = Resources.LoadAll<AnalyticsGenreSO>(MonetizationConfigurationsPath.AnalyticsGenres);
+        _genreMap.Clear();
+
+        foreach (var genreSo in analyticsSo)
+        {
+            _genreMap[genreSo.name] = genreSo;
+        }
+
+        DestroyChildren(genreContainer.transform);
+
+        var generalButton = CreateButton("General Analytics", genreContainer.transform);
+        generalButton.onClick.AddListener(ShowGeneralAnalyticsMethods);
+
+        foreach (var genreName in _genreMap.Keys)
+        {
+            var button = CreateButton(genreName, genreContainer.transform);
+            button.onClick.AddListener(() => ShowMethodsForGenre(genreName));
+        }
+    }
+
+    private void ShowGeneralAnalyticsMethods()
+    {
+        selectedGenreText.text = "Genre: General Analytics";
+        DestroyChildren(methodContainer.transform);
+
+        var generalMethods = new (string methodName, System.Action action)[]
+        {
+            ("Send Custom Event", () =>
+            {
+                var parameters = new Dictionary<string, object>
+                {
+                    { "action", "button_click" },
+                    { "screen", "main_menu" },
+                    { "user_level", 5 }
+                };
+                AnalyticsManager.SendEvent("user_interaction", parameters);
+            }),
+            ("Send Simple Event", () =>
+            {
+                AnalyticsManager.SendEvent("app_opened");
+            }),
+            ("Report Ad Revenue", () =>
+            {
+                var adRevenue = new AdRevenueInfo(
+                    AdFormat.Interstitial,
+                    "Admob",
+                    "admob_adapter",
+                    "interstitial_level_complete",
+                    "USD",
+                    0.05,
+                    "level_complete"
+                );
+                AnalyticsManager.ReportAdRevenue(adRevenue);
+            }),
+            ("Report In-App Revenue", () =>
+            {
+                var inAppRevenue = new InAppRevenueInfo(
+                    UnityEngine.Purchasing.ProductType.Consumable,
+                    4.99,
+                    "USD",
+                    "Coin Pack 100",
+                    "coin_pack_100",
+                    "receipt_12345",
+                    "adjust_token_12345"
+                );
+                inAppRevenue.SetTransactionId("txn_12345");
+                AnalyticsManager.ReportInAppRevenue(inAppRevenue);
+            })
+        };
+
+        foreach (var (methodName, action) in generalMethods)
+        {
+            var button = CreateButton(methodName, methodContainer.transform, true);
+            button.onClick.AddListener(() =>
+            {
+                try
+                {
+                    action();
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"Error invoking {methodName}: {ex.Message}");
+                }
+            });
+        }
+    }
+
+    private void ShowMethodsForGenre(string genre)
+    {
+        if (!_genreMap.TryGetValue(genre, out var genreObject))
+        {
+            Message.Log(Tag.CustomEvent, "Genre object not found: " + genre);
+            return;
+        }
+
+        var analytics = genreObject.GetAnalytics();
+        if (!analytics)
+        {
+            Message.Log(Tag.CustomEvent, "Analytics not available for genre: " + genre);
+            return;
+        }
+
+        DestroyChildren(methodContainer.transform);
+    }
+
+    private static void DestroyChildren(Transform parent)
+    {
+        for (var i = parent.childCount - 1; i >= 0; i--)
+        {
+            Destroy(parent.GetChild(i).gameObject);
+        }
+    }
+}

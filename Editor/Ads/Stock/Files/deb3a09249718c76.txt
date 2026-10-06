@@ -1,0 +1,16 @@
+using Monetization.Runtime.Ads;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "TaichiCampaignNetworkSO", menuName = "GDMonetization/Analytics/Networks/TaichiCampaign")]
+    public class TaichiCampaignNetworkSO : AnalyticsNetworkSO, IAnalyticsAdRevenueService
+    {
+        private void Reset() { EnableRevenue = true; }
+
+        private FirebaseTaichiCampaign _network;
+        private FirebaseTaichiCampaign Network => _network ??= new FirebaseTaichiCampaign();
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo) => Network.ReportAdRevenue(adRevenueInfo);
+    }
+}

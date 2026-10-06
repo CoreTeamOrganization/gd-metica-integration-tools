@@ -23,6 +23,14 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
   closing the window. They are a review record, not a substitute for verification: if a step
   later stops verifying, its sign-off is discarded and you review it again. **Reset
   sign-offs** in the header replays the whole run without touching the project.
+- **Each step can be its own commit.** Under **Reviewed — next step** the review panel has a
+  commit section: the files git reports as changed under the step's paths (and their
+  `.meta` files), a prefilled summary (`<flow>: <step title>`) and description, and a
+  **Commit** button. Only those files go into the commit (`git commit --only`) — anything
+  else you have staged stays staged. The tool never pushes and never skips hooks. A done step
+  you revisit still offers its commit; once a step is committed through the tool the section
+  is not shown for it again (the commit hash is kept in `EditorPrefs`, cleared by **Reset
+  sign-offs**). Nothing to commit, no git, or no repository: the panel says so in one line.
 - **Everything is idempotent.** Each source edit is guarded by a marker, so running a step
   twice changes nothing.
 - **Nothing is guessed.** When a patch anchor is not found the step reports exactly what to
@@ -47,6 +55,7 @@ ads runtime to `Assets/MeticaAds/`:
 | # | Step | What it does |
 |---|---|---|
 | – | AppLovin MAX version | as below — only while MAX is below 8.1.0 |
+| – | Metica v1 code | as below — only in a project that has or had Metica v1 |
 | 1 | Metica SDK | as below, including resolving its Android libraries |
 | 2 | Metica ads runtime | Writes fourteen files to `Assets/MeticaAds/` and waits for them to compile |
 | 3 | Metica ads config | Creates `Resources/MeticaAdsConfig.asset` with the App ID and API Key typed into the step; the MAX SDK key is copied from AppLovinSettings |
@@ -101,7 +110,8 @@ integration by hand.
 | # | Step | What it does |
 |---|---|---|
 | – | AppLovin MAX version | **Only while MAX is missing or below 8.1.0**, which Metica needs; mandatory. Installs the MAX version set in `MeticaTargetVersion.asset` (**8.1.0** by default): AppLovin's own Unity plugin package from their GitHub releases. The old MAX is removed first, like the Metica SDK, keeping `Mediation/` (your adapters) and `AppLovinSettings.asset` (SDK key). Integration Manager as a fallback |
-| 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
+| – | Metica v1 code | **Only in a project that has or had Metica v1.** Lists every line of game code that still uses the v1 API — by names that exist in v1 and nowhere in Metica 2.x (`Metica.ADS`, `using Metica.SDK`, `IsMeticaAdsEnabled`, `InitializeWithResultAsync`, `NotifyAd*`, `ToMeticaAd` / `ToAdInfo`, `MeticaSdk.CurrentUserId`; `MeticaAds` / `MeticaAdsCallbacks` / `MeticaSdk` only in a file that uses a v1 namespace), ignoring comments and strings — with what replaces each. Passes when none are left. Never edits code: the developer takes the calls out while v1 is still installed, so the project compiles at every point. Also warns about v1's `MeticaSdk` scene object. GD SDK projects get a link to Compare with original GD SDK |
+| 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. Any other Metica is removed first, wherever it is: another version in Assets, Metica v1 or 2.x from the Package Manager (`com.metica.unity` / `com.metica.sdk.unity`, also embedded), v1's `Assets/Metica/Data/MeticaSdkConfiguration.asset` — one dialog lists it all. `com.metica.analytics.abstractions` and this tool are never touched. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
 | 2 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
 | 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` preference and remote flag, the `AdsManager` network switch; plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
 | 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.UseMetica` instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
@@ -192,6 +202,11 @@ the tool ever writes. `IAsyncAdNetworkService` only existed because Metica shipp
 | v6.0.0 – v6.2.0 | yes | yes | build-time | the remote switch (step 5) |
 | v6.2.1 – v6.2.4 | yes | yes | remote | nothing — every step verifies as already done |
 
+The tool's `MeticaInitializer` is for v5 only: the wrapper step skips it when the project
+already declares a `MeticaInitializer` (v6.2.x ships `Analytics.MeticaInitializer`) or has an
+`AdNetworkMetica` of its own (v6.0.x initializes inline), and fails if a tool-written one sits
+next to an async `AdNetworkMetica`, which it would shadow.
+
 Nothing routes on a version number. Each step reads the project and decides for itself, so a
 fork sitting between two releases still lands in the right place.
 
@@ -232,6 +247,30 @@ the package can be added long before the SDK is in the state it expects. It find
 by locating `Runtime/Scripts/Ads/Core/AdsManager.cs`, and finds its own `Templates/` through
 `PackageInfo.FindForAssembly`, so neither folder is hardcoded.
 
+## Comparing with the original GD SDK
+
+**GameDistrict › Metica › Compare with original GD SDK…** (also in the window's ⋮ menu, and
+the line under the Ads card on Home) shows how the project's GD SDK code differs from the
+original release. Read-only: nothing in the project changes from there.
+
+- **Which release:** the one whose `Version` string the project's
+  `MonetizationInitializeOnLoad.cs` declares — nothing else decides it. v6.2.x also declares
+  `BaseVersion` (the non-Metica SDK it is built on); it is shown, never used to choose. When
+  the declared string matches no release, pick one from the dropdown (saved per project).
+- **What:** the code and text files (`.cs`, `.asmdef`, `.java`, `.xml`, `.json`, `.md`, …)
+  under the GD SDK root and `Monetization/Scripts/Services` next to it, if the project has
+  it. Assets, prefabs and scenes hold each game's own ids and settings, so they are left out.
+  Line endings and trailing spaces never count as a change.
+- **Filters:** *Metica* — files whose changed lines mention Metica (this tool's, or an earlier
+  integration's); *Tool* — files that are exactly what this tool's patches or templates
+  produce (an older tool version's using order counts too); *All*.
+- Each file opens to its diff; **Open original** writes the stock copy to the project's
+  `Temp/MeticaStock/` (outside Assets, so it never compiles) and opens it.
+
+The originals of every v5 and v6 release ship in `Stock/` — 23 releases, 510 unique files,
+1.7 MB of text — so nothing is downloaded and it works offline. Adding a release: tag it in
+`Monetization-SDK-Unity`, then re-run `Tools~/ExportStockFiles.ps1`.
+
 ## Removing the tool
 
 **GameDistrict → Metica → Remove Integration Tools…**, or the same item in the window's ⋮
@@ -247,8 +286,9 @@ package's `Runtime/` classes, so removing the package would break it.
 ```
 AdsFlow.cs                   the two step lists (GD SDK / standalone)
 MeticaPatchSet.cs            every GD SDK edit, in step order (runs on disk or in memory)
-ModifiedFileCheck.cs         stock / patched / modified / missing, per file
-StockFiles.cs                reads Stock/ (the untouched GD SDK copies)
+ModifiedFileCheck.cs         stock / patched / modified / missing, per patched file
+SdkCompare.cs                the whole GD SDK against its original release (Compare window)
+StockFiles.cs                reads Stock/ (the untouched GD SDK copies, every v5 and v6 release)
 Stock/                       exported by Tools~/ExportStockFiles.ps1, .txt so they never compile
 Steps/                       one file per step
 Templates/                   wrapper sources, .cs.txt so they never compile from here
@@ -265,8 +305,9 @@ uses `MeticaSdk.InitializeAsync`, which is what forced `IAsyncAdNetworkService` 
 implements the plain `IAdNetworkService` that Admob and AppLovin already use and the
 initialization plumbing stays as it was.
 
-`MeticaInitializer` keeps both a callback and a Task entry point behind one guard, so
-whichever a caller uses, Metica is initialized exactly once per session.
+`MeticaInitializer` has one ads entry point, `InitializeAdsWithCallback`, behind a guard, so
+Metica is initialized exactly once per session. It has no Task-based `InitializeAds`: nothing
+in v5 awaits one, and in v6 the SDK's own `MeticaInitializer` is the one to use.
 
 ## Running it on a project that already has Metica
 

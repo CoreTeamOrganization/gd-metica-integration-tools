@@ -1,0 +1,525 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using UnityEditor;
+using UnityEditor.Callbacks;
+using UnityEngine;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Configurations;
+
+namespace GDMonetization.Editor
+{
+    public class GenreCreatorWindow : EditorWindow
+    {
+        private const string PendingGenreKey   = "GDMonetization_PendingGenre";
+        private const string ScriptsBase       = "Assets/GDMonetization/Runtime/Scripts/Analytics/Genres";
+        private const string ResourcesPath     = "Assets/GDMonetization/Runtime/Resources/Configurations/Game Genres";
+        private const string GenreSoBasePath   = "Assets/GDMonetization/Runtime/Scripts/Analytics/Genres/Base/AnalyticsGenreSO.cs";
+
+        // ── UI State ──────────────────────────────────────────────────────────
+        private string      _genreName     = "";
+        private List<Event> _events        = new();
+        private Vector2     _scrollPos;
+        private string      _statusMsg     = "";
+        private MessageType _statusType    = MessageType.None;
+
+        // ── Menu ──────────────────────────────────────────────────────────────
+        [MenuItem("GameDistrict/Monetization/Metica Analytics/Create New Genre...", false, 20)]
+        public static void ShowWindow()
+        {
+            var w = GetWindow<GenreCreatorWindow>("Genre Creator");
+            w.minSize = new Vector2(460, 560);
+            w.Show();
+        }
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────
+        private void OnEnable()
+        {
+            if (_events.Count == 0)
+                ResetDefaultEvents();
+        }
+
+        private void ResetDefaultEvents()
+        {
+            _events = new List<Event>
+            {
+                new("LevelStarted", new List<Field>
+                {
+                    new("Level",     FieldType.Int),
+                    new("LevelType", FieldType.String),
+                }),
+                new("LevelFinished", new List<Field>
+                {
+                    new("Level",       FieldType.Int),
+                    new("LevelType",   FieldType.String),
+                    new("LevelStatus", FieldType.String),
+                    new("PlayTime",    FieldType.Float),
+                }),
+            };
+        }
+
+        // ── GUI ───────────────────────────────────────────────────────────────
+        private void OnGUI()
+        {
+            EditorGUILayout.Space(8);
+            DrawHeader();
+            EditorGUILayout.Space(6);
+            DrawGenreNameField();
+            EditorGUILayout.Space(8);
+            DrawEventsSection();
+            EditorGUILayout.Space(8);
+            DrawStatus();
+            DrawCreateButton();
+            EditorGUILayout.Space(6);
+            DrawApplySection();
+        }
+
+        private void DrawHeader()
+        {
+            GUILayout.Label("New Analytics Genre", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "Fill in the genre name and define its events, then click Create Genre Files.\n" +
+                "After Unity recompiles, the assets are created automatically.\n" +
+                "Use the Apply button to assign the new genre to SDKConfiguration.",
+                MessageType.None);
+        }
+
+        private void DrawGenreNameField()
+        {
+            EditorGUILayout.LabelField("Genre Name", EditorStyles.boldLabel);
+            _genreName = EditorGUILayout.TextField("Name", _genreName).Trim();
+        }
+
+        private void DrawEventsSection()
+        {
+            EditorGUILayout.LabelField("Events", EditorStyles.boldLabel);
+
+            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
+
+            int removeAt = -1;
+            for (int i = 0; i < _events.Count; i++)
+            {
+                if (!DrawEvent(i))
+                    removeAt = i;
+            }
+            if (removeAt >= 0)
+                _events.RemoveAt(removeAt);
+
+            EditorGUILayout.EndScrollView();
+
+            if (GUILayout.Button("+ Add Event"))
+                _events.Add(new Event($"NewEvent{_events.Count + 1}", new List<Field>()));
+        }
+
+        // Returns false if the event should be removed.
+        private bool DrawEvent(int i)
+        {
+            var evt    = _events[i];
+            bool keep  = true;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // ── Header row ────────────────────────────────────────────────────
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("Event", GUILayout.Width(42));
+            evt.Name = EditorGUILayout.TextField(evt.Name);
+            if (GUILayout.Button("✕", GUILayout.Width(22)))
+                keep = false;
+            EditorGUILayout.EndHorizontal();
+
+            if (!keep)
+            {
+                EditorGUILayout.EndVertical();
+                return false;
+            }
+
+            // ── Fields ────────────────────────────────────────────────────────
+            EditorGUI.indentLevel++;
+
+            int removeField = -1;
+            for (int j = 0; j < evt.Fields.Count; j++)
+            {
+                EditorGUILayout.BeginHorizontal();
+                evt.Fields[j].Name = EditorGUILayout.TextField(evt.Fields[j].Name, GUILayout.MinWidth(120));
+                evt.Fields[j].Type = (FieldType)EditorGUILayout.EnumPopup(evt.Fields[j].Type, GUILayout.Width(70));
+                if (GUILayout.Button("−", GUILayout.Width(20)))
+                    removeField = j;
+                EditorGUILayout.EndHorizontal();
+            }
+            if (removeField >= 0)
+                evt.Fields.RemoveAt(removeField);
+
+            EditorGUI.indentLevel--;
+
+            if (GUILayout.Button("+ Add Field", GUILayout.Height(18)))
+                evt.Fields.Add(new Field($"Field{evt.Fields.Count + 1}", FieldType.String));
+
+            EditorGUILayout.EndVertical();
+            EditorGUILayout.Space(2);
+            return true;
+        }
+
+        private void DrawStatus()
+        {
+            if (!string.IsNullOrEmpty(_statusMsg))
+            {
+                EditorGUILayout.HelpBox(_statusMsg, _statusType);
+                EditorGUILayout.Space(4);
+            }
+        }
+
+        private void DrawCreateButton()
+        {
+            GUI.enabled = !string.IsNullOrEmpty(_genreName);
+            if (GUILayout.Button("Create Genre Files", GUILayout.Height(34)))
+                CreateGenreFiles();
+            GUI.enabled = true;
+        }
+
+        private void DrawApplySection()
+        {
+            EditorGUILayout.LabelField("SDK Configuration", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "After Unity finishes recompiling, click below to assign the new genre to SDKConfiguration.",
+                MessageType.None);
+
+            if (GUILayout.Button("Apply Genre SO to SDKConfiguration", GUILayout.Height(30)))
+                ApplyToSDKConfiguration();
+        }
+
+        // ── File Generation ───────────────────────────────────────────────────
+        private void CreateGenreFiles()
+        {
+            if (string.IsNullOrEmpty(_genreName))
+            {
+                SetStatus("Genre name cannot be empty.", MessageType.Error);
+                return;
+            }
+
+            string genre   = _genreName;
+            string root    = ProjectRoot();
+            string dir     = $"{root}{ScriptsBase}/{genre}";
+
+            if (Directory.Exists(dir))
+            {
+                SetStatus($"Genre '{genre}' already exists at {ScriptsBase}/{genre}", MessageType.Error);
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+
+                WriteFile(dir, $"I{genre}Analytics.cs",  GenerateInterface(genre));
+                WriteFile(dir, $"{genre}Data.cs",         GenerateData(genre));
+                WriteFile(dir, $"{genre}Analytics.cs",    GenerateImplementation(genre));
+                WriteFile(dir, $"{genre}AnalyticsSO.cs",  GenerateSO(genre));
+
+                AddEnumEntry(genre, root);
+
+                EditorPrefs.SetString(PendingGenreKey, genre);
+                AssetDatabase.Refresh();
+
+                SetStatus(
+                    $"Files created for '{genre}'.\nUnity is recompiling — assets will be created automatically.",
+                    MessageType.Info);
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Error: {ex.Message}", MessageType.Error);
+                Debug.LogException(ex);
+            }
+        }
+
+        private static void WriteFile(string dir, string filename, string content)
+            => File.WriteAllText(Path.Combine(dir, filename), content, Encoding.UTF8);
+
+        private static string ProjectRoot()
+        {
+            // Application.dataPath ends with "/Assets"
+            string data = Application.dataPath;
+            return data.Substring(0, data.Length - "Assets".Length);
+        }
+
+        // ── Post-compile: auto-create assets ─────────────────────────────────
+        [DidReloadScripts]
+        private static void OnScriptsReloaded()
+        {
+            string genre = EditorPrefs.GetString(PendingGenreKey, "");
+            if (string.IsNullOrEmpty(genre)) return;
+            EditorPrefs.DeleteKey(PendingGenreKey);
+
+            // Ensure resources folder exists
+            EnsureFolder(ResourcesPath);
+
+            // Instantiate by type name (classes are now compiled)
+            var analyticsType = FindType($"{genre}Analytics");
+            var soType        = FindType($"{genre}AnalyticsSO");
+
+            if (analyticsType == null || soType == null)
+            {
+                Debug.LogError($"[GenreCreator] Could not find type '{genre}Analytics' or '{genre}AnalyticsSO'. " +
+                               "Make sure there are no compile errors.");
+                return;
+            }
+
+            string analyticsPath = $"{ResourcesPath}/{genre}Analytics.asset";
+            string soPath        = $"{ResourcesPath}/{genre}AnalyticsSO.asset";
+
+            var analyticsAsset = ScriptableObject.CreateInstance(analyticsType);
+            AssetDatabase.CreateAsset(analyticsAsset, analyticsPath);
+
+            var soAsset = ScriptableObject.CreateInstance(soType);
+            AssetDatabase.CreateAsset(soAsset, soPath);
+
+            // Wire the Analytics reference into the SO
+            string fieldName = $"_{char.ToLower(genre[0])}{genre.Substring(1)}Analytics";
+            var serializedSO = new SerializedObject(soAsset);
+            var prop         = serializedSO.FindProperty(fieldName);
+            if (prop != null)
+            {
+                prop.objectReferenceValue = analyticsAsset;
+                serializedSO.ApplyModifiedProperties();
+            }
+            else
+            {
+                Debug.LogWarning($"[GenreCreator] Could not find serialized field '{fieldName}' on {genre}AnalyticsSO.");
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log($"[GenreCreator] '{genre}' assets created at {ResourcesPath}");
+
+            EditorUtility.DisplayDialog(
+                "Genre Created!",
+                $"'{genre}' scripts and assets have been created.\n\n" +
+                $"Open GameDistrict → Monetization → Create New Genre and click\n" +
+                $"'Apply Genre SO to SDKConfiguration' to activate it.",
+                "OK");
+        }
+
+        // ── Apply to SDKConfiguration ─────────────────────────────────────────
+        private void ApplyToSDKConfiguration()
+        {
+            if (string.IsNullOrEmpty(_genreName))
+            {
+                SetStatus("Enter the genre name first.", MessageType.Error);
+                return;
+            }
+
+            string soAssetPath = $"{ResourcesPath}/{_genreName}AnalyticsSO.asset";
+            var genreSO = AssetDatabase.LoadAssetAtPath<AnalyticsGenreSO>(soAssetPath);
+            if (genreSO == null)
+            {
+                SetStatus(
+                    $"Could not find '{_genreName}AnalyticsSO.asset'.\n" +
+                    "Create the genre files first and wait for Unity to recompile.",
+                    MessageType.Error);
+                return;
+            }
+
+            // Find SDKConfiguration
+            SDKConfiguration sdkConfig = null;
+            var guids = AssetDatabase.FindAssets("t:SDKConfiguration");
+            if (guids.Length > 0)
+                sdkConfig = AssetDatabase.LoadAssetAtPath<SDKConfiguration>(AssetDatabase.GUIDToAssetPath(guids[0]));
+
+            if (sdkConfig == null)
+            {
+                SetStatus("Could not find SDKConfiguration asset in the project.", MessageType.Error);
+                return;
+            }
+
+            string configPath    = AssetDatabase.GetAssetPath(sdkConfig);
+            string currentGenre  = sdkConfig.GenreSO != null ? sdkConfig.GenreSO.name : "none";
+
+            bool confirm = EditorUtility.DisplayDialog(
+                "Apply Genre to SDKConfiguration",
+                $"Current genre SO: {currentGenre}\n" +
+                $"New genre SO:     {_genreName}AnalyticsSO\n\n" +
+                $"Replace it?",
+                "Apply", "Cancel");
+
+            if (!confirm) return;
+
+            var so   = new SerializedObject(sdkConfig);
+            var prop = so.FindProperty("GenreSO");
+            prop.objectReferenceValue = genreSO;
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(sdkConfig);
+            AssetDatabase.SaveAssets();
+
+            SetStatus($"SDKConfiguration now uses '{_genreName}AnalyticsSO'.", MessageType.Info);
+            Selection.activeObject = sdkConfig;
+            EditorGUIUtility.PingObject(sdkConfig);
+        }
+
+        // ── Enum Modification ─────────────────────────────────────────────────
+        private static void AddEnumEntry(string genre, string root)
+        {
+            string path    = $"{root}{GenreSoBasePath}";
+            string content = File.ReadAllText(path);
+
+            // Insert before the "Custom" entry so Custom stays last
+            const string target = "        Custom";
+            int idx = content.IndexOf(target, StringComparison.Ordinal);
+            if (idx >= 0)
+            {
+                content = content.Insert(idx, $"        {genre},\n");
+            }
+            else
+            {
+                // Fallback: append before the enum closing brace
+                int close = content.LastIndexOf('}');
+                content = content.Insert(close, $"    {genre},\n");
+            }
+
+            File.WriteAllText(path, content, Encoding.UTF8);
+        }
+
+        // ── Code Generators ───────────────────────────────────────────────────
+        private string GenerateInterface(string genre)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("namespace Monetization.Runtime.Analytics");
+            sb.AppendLine("{");
+            sb.AppendLine($"    public interface I{genre}Analytics : IGDMeticaAnalytics");
+            sb.AppendLine("    {");
+            foreach (var evt in _events)
+                sb.AppendLine($"        void {evt.Name}({genre}{evt.Name} data);");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        private string GenerateData(string genre)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("namespace Monetization.Runtime.Analytics");
+            sb.AppendLine("{");
+            foreach (var evt in _events)
+            {
+                sb.AppendLine($"    public class {genre}{evt.Name}");
+                sb.AppendLine("    {");
+                foreach (var f in evt.Fields)
+                    sb.AppendLine($"        public {TypeName(f.Type)} {f.Name};");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+            }
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        private string GenerateImplementation(string genre)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("using UnityEngine;");
+            sb.AppendLine();
+            sb.AppendLine("namespace Monetization.Runtime.Analytics");
+            sb.AppendLine("{");
+            sb.AppendLine($"    [CreateAssetMenu(fileName = \"{genre}Analytics\", menuName = \"GDMonetization/MeticaAnalytics/ScriptSO/{genre}\")]");
+            sb.AppendLine($"    public class {genre}Analytics : GDMeticaAnalytics, I{genre}Analytics");
+            sb.AppendLine("    {");
+            foreach (var evt in _events)
+            {
+                sb.AppendLine($"        public void {evt.Name}({genre}{evt.Name} data)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var payload = CreateBaseEvent();");
+                foreach (var f in evt.Fields)
+                    sb.AppendLine($"            payload[\"{ToSnakeCase(f.Name)}\"] = data.{f.Name};");
+                sb.AppendLine($"            LogCustomEvent(\"{ToCamelCase(evt.Name)}\", payload);");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+            }
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        private string GenerateSO(string genre)
+        {
+            string field = $"_{char.ToLower(genre[0])}{genre.Substring(1)}Analytics";
+            var sb = new StringBuilder();
+            sb.AppendLine("using UnityEngine;");
+            sb.AppendLine();
+            sb.AppendLine("namespace Monetization.Runtime.Analytics");
+            sb.AppendLine("{");
+            sb.AppendLine($"    [CreateAssetMenu(fileName = \"{genre}AnalyticsSO\", menuName = \"GDMonetization/MeticaAnalytics/GenreSO/{genre}\")]");
+            sb.AppendLine($"    public class {genre}AnalyticsSO : AnalyticsGenreSO");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        [SerializeField] private {genre}Analytics {field};");
+            sb.AppendLine();
+            sb.AppendLine($"        public override GameGenre Genre => GameGenre.{genre};");
+            sb.AppendLine($"        public override GDMeticaAnalytics GetAnalytics() => {field} ??= new {genre}Analytics();");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+        private static Type FindType(string name) =>
+            AppDomain.CurrentDomain.GetAssemblies()
+                     .SelectMany(a => { try { return a.GetTypes(); } catch { return Array.Empty<Type>(); } })
+                     .FirstOrDefault(t => t.Name == name);
+
+        private static void EnsureFolder(string assetPath)
+        {
+            if (AssetDatabase.IsValidFolder(assetPath)) return;
+            string parent = Path.GetDirectoryName(assetPath)?.Replace('\\', '/') ?? "";
+            string name   = Path.GetFileName(assetPath);
+            EnsureFolder(parent);
+            AssetDatabase.CreateFolder(parent, name);
+        }
+
+        private static string TypeName(FieldType t) => t switch
+        {
+            FieldType.Int    => "int",
+            FieldType.Float  => "float",
+            FieldType.Bool   => "bool",
+            _                => "string",
+        };
+
+        private static string ToSnakeCase(string s)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (char.IsUpper(s[i]) && i > 0) sb.Append('_');
+                sb.Append(char.ToLower(s[i]));
+            }
+            return sb.ToString();
+        }
+
+        private static string ToCamelCase(string s) =>
+            string.IsNullOrEmpty(s) ? s : char.ToLower(s[0]) + s.Substring(1);
+
+        private void SetStatus(string msg, MessageType type)
+        {
+            _statusMsg  = msg;
+            _statusType = type;
+            Repaint();
+        }
+
+        // ── Data Model ────────────────────────────────────────────────────────
+        [Serializable]
+        private class Event
+        {
+            public string      Name;
+            public List<Field> Fields;
+            public Event(string name, List<Field> fields) { Name = name; Fields = fields; }
+        }
+
+        [Serializable]
+        private class Field
+        {
+            public string    Name;
+            public FieldType Type;
+            public Field(string name, FieldType type) { Name = name; Type = type; }
+        }
+
+        private enum FieldType { String, Int, Float, Bool }
+    }
+}

@@ -1,0 +1,27 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    public enum GameGenre
+    {
+        Arcade,
+        MiniGames,
+        PuzzleSuccess,
+        PuzzleSuccessFail,
+        Shooter,
+        SimulationJob,
+        SimulationMakeover,
+        SimulationVehicle,
+        Racing,
+        Custom
+    }
+
+    /// <summary>
+    /// Base ScriptableObject for genre analytics. Place assets in Resources/Configurations/Game Genres/ for auto-discovery.
+    /// </summary>
+    public abstract class AnalyticsGenreSO : ScriptableObject
+    {
+        public abstract GameGenre Genre { get; }
+        public abstract GDMeticaAnalytics GetAnalytics();
+    }
+}

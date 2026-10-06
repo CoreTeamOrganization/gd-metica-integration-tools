@@ -1,0 +1,21 @@
+using System;
+using Monetization.Runtime.Configurations;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public interface IIAPNetwork
+    {
+        event Action<PurchaseInfo> OnProductPurchasedEvent;
+
+        bool IsInitialized { get; }
+
+        void Initialize(Action onInitialized, InAppsConfiguration products);
+
+        void Purchase(string productId);
+
+        void RestorePurchases();
+
+        public Product GetProductDetail(string productId);
+    }
+}

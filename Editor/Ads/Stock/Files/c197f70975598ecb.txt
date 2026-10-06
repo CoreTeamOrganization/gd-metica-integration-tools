@@ -1,0 +1,24 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Abstract base for analytics network ScriptableObjects.
+    /// Concrete subclasses implement whichever role interfaces they support
+    /// (IAnalyticsInitialization, IAnalyticsEventsService, IAnalyticsAdRevenueService, IMarketingServices).
+    /// AnalyticsManager inspects each SO at runtime and registers it into the correct lists automatically.
+    /// To add a new network: create a subclass, create its .asset, and add it to SDKConfiguration.AnalyticsNetworks.
+    /// Use the toggles below to opt a network out of specific roles without changing any code.
+    /// </summary>
+    public abstract class AnalyticsNetworkSO : ScriptableObject
+    {
+        [Tooltip("Register this network in InitializableNetworks (calls Initialize on startup)")]
+        public bool EnableInitialization = false;
+        [Tooltip("Register this network in EventsNetworks (receives SendEvent calls)")]
+        public bool EnableEvents = false;
+        [Tooltip("Register this network in RevenueNetworks (receives ReportAdRevenue calls)")]
+        public bool EnableRevenue = false;
+        [Tooltip("Register this network in MarketingNetworks (receives SendInAppPurchaseEvent calls)")]
+        public bool EnableMarketing = false;
+    }
+}

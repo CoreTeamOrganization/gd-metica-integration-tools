@@ -1,0 +1,82 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Sdk;
+using UnityEditor;
+using UnityEngine;
+
+namespace GDMonetization.Editor.MenuItems
+{
+    static class FirebaseMenu
+    {
+        #region Debug
+
+#if !UNITY_IOS
+        [MenuItem("GameDistrict/Monetization/Firebase/Debug/Start", false, 0)]
+        public static void Start()
+        {
+            string DebugCommand = $"/c adb shell setprop debug.firebase.analytics.app {Application.identifier}";
+
+            Process process = new Process();
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = @DebugCommand,
+                WorkingDirectory = @"C:\Users\" + Environment.UserName
+            };
+            process.StartInfo = startInfo;
+            process.Start();
+
+            UnityEngine.Debug.Log("Please Wait... The prompt will close automatically");
+        }
+
+        [MenuItem("GameDistrict/Monetization/Firebase/Debug/Stop", false, 0)]
+        public static void Stop()
+        {
+            string DebugCommand = $"/c adb shell setprop debug.firebase.analytics.app .none.";
+
+            Process process = new Process();
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = @DebugCommand,
+                WorkingDirectory = @"C:\Users\" + Environment.UserName
+            };
+            process.StartInfo = startInfo;
+            process.Start();
+
+            UnityEngine.Debug.Log("Please Wait... The prompt will close automatically");
+        }
+
+        [MenuItem("GameDistrict/Monetization/Firebase/Debug/Documentation", false, 0)]
+        public static void FirebaseDoc()
+        {
+            Application.OpenURL("https://firebase.google.com/docs/analytics/debugview");
+        }
+#endif
+
+        #endregion
+
+        #region Remote
+
+        [MenuItem("GameDistrict/Monetization/Firebase/Remote/ClipboardKey", false, 1)]
+        public static void ClipboardKey()
+        {
+            GUIUtility.systemCopyBuffer = RemoteConfigManager.REMOTE_KEY;
+            //Debug.Log("Create a json with clipboard Key in RemoteConfig");
+        }
+
+        [MenuItem("GameDistrict/Monetization/Firebase/Remote/ClipboardJson", false, 1)]
+        public static void ClipboardJson()
+        {
+            GUIUtility.systemCopyBuffer =
+                JsonUtility.ToJson(Resources.Load<RemoteConfiguration>(MonetizationConfigurationsPath.Remote));
+            //Debug.Log("Now, Paste the json to RemoteConfig");
+        }
+
+        #endregion
+    }
+}

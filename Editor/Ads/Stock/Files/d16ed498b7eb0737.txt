@@ -1,0 +1,59 @@
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public readonly struct InAppRevenueInfo
+    {
+        public readonly ProductType Type;
+        public readonly double Price;
+        public readonly string Currency;
+        public readonly string ItemId;
+        public readonly string ItemName;
+        public readonly string Receipt;
+        public readonly string TransactionId;
+        public readonly string AdjustToken;
+
+
+        public InAppRevenueInfo(ProductType type, double price, string currency, string itemName, string itemId,
+            string receipt, string transactionId, string adjustToken)
+        {
+            Type = type;
+            Price = price;
+            Currency = currency;
+            ItemId = itemId;
+            ItemName = itemName;
+            Receipt = receipt;
+            TransactionId = transactionId;
+            AdjustToken = adjustToken;
+        }
+
+        public override string ToString()
+        {
+            // return $"{nameof(ProductType)} : {Type} " +
+            //        $"{nameof(Price)} : {Price} " +
+            //        $"{nameof(Currency)} : {Currency} " +
+            //        $"{nameof(ItemId)} : {ItemId} " +
+            //        $"{nameof(ItemName)} : {ItemName} " +
+            //        $"{nameof(Receipt)} : {Receipt} " +
+            //        $"{nameof(TransactionId)} : {TransactionId}" +
+            //        $"{nameof(AdjustToken)} : {AdjustToken}";
+
+            var parameters = new Dictionary<string, string>()
+            {
+                { "Type", Type.ToString() },
+                { "Price", Price.ToString() },
+                { "Currency", Currency },
+                { "ItemId", ItemId },
+                { "ItemName", ItemName },
+                { "Receipt", Receipt },
+                { "TransactionId", TransactionId },
+                { "AdjustToken", AdjustToken }
+            };
+
+
+            return JsonConvert.SerializeObject(parameters);
+        }
+    }
+}

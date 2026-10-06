@@ -1,0 +1,93 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Analytics
+{
+    // LevelData fields: Level=R, LevelType=O, LevelDifficulty=O, LevelId=O
+    public class PuzzleSuccessFailLevelStarted : LevelData
+    {
+        public PuzzleSuccessFailLevelStarted(int level)
+        {
+            Level = level;
+        }
+    }
+
+    // LevelData fields: Level=R, LevelType=O, LevelDifficulty=O, LevelId=O
+    public class PuzzleSuccessFailLevelFinished : LevelData
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public string LevelStatus         { get; }
+        public string Reason              { get; }
+        public float  PlayTime            { get; }
+        public int    TotalObjectives     { get; }
+        public int    RemainingObjectives { get; }
+        public int    AttemptCount        { get; }
+        public int    PlayonCount         { get; }
+        public int                       UsedBoosterCount { get; }
+        public Dictionary<string, int>   UsedBoosters     { get; }
+        public Dictionary<string, float> Balances         { get; }
+        public Dictionary<string, float> BalanceBoosters  { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public float? TotalTime           { get; set; }
+        public float? RemainingTime       { get; set; }
+        public float? ExtraTime           { get; set; }
+        public int?   TotalMoves          { get; set; }
+        public int?   RemainingMoves      { get; set; }
+        public int?   ExtraMoves          { get; set; }
+        public int?   RemainingLife       { get; set; }
+        public int?   PlayonRewardedCount { get; set; }
+
+        public PuzzleSuccessFailLevelFinished(
+            int level, string levelStatus, string reason, float playTime,
+            int totalObjectives, int remainingObjectives,
+            int attemptCount, int playonCount,
+            int usedBoosterCount, Dictionary<string, int> usedBoosters,
+            Dictionary<string, float> balances, Dictionary<string, float> balanceBoosters)
+        {
+            Level               = level;
+            LevelStatus         = levelStatus;
+            Reason              = reason;
+            PlayTime            = playTime;
+            TotalObjectives     = totalObjectives;
+            RemainingObjectives = remainingObjectives;
+            AttemptCount        = attemptCount;
+            PlayonCount         = playonCount;
+            UsedBoosterCount    = usedBoosterCount;
+            UsedBoosters        = usedBoosters;
+            Balances            = balances;
+            BalanceBoosters     = balanceBoosters;
+        }
+    }
+
+    // AssetData fields: Level=R, Asset=R, Amount=R, Source=R
+    // LevelType=O, LevelDifficulty=O, LevelId=O
+    public class PuzzleSuccessFailEarnAsset : AssetData
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public string Type    { get; }
+        public float  Balance { get; }
+
+        public PuzzleSuccessFailEarnAsset(int level, string asset, float amount, string source,
+            string type, float balance)
+            : base(level, asset, amount, source)
+        {
+            Type    = type;
+            Balance = balance;
+        }
+    }
+
+    // AssetData fields: Level=R, Asset=R, Amount=R, Source=R
+    // LevelType=O, LevelDifficulty=O, LevelId=O
+    public class PuzzleSuccessFailSpendAsset : AssetData
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public float Balance { get; }
+
+        public PuzzleSuccessFailSpendAsset(int level, string asset, float amount, string source,
+            float balance)
+            : base(level, asset, amount, source)
+        {
+            Balance = balance;
+        }
+    }
+}

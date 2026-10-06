@@ -1,0 +1,26 @@
+namespace Monetization.Runtime.Ads
+{
+    public enum BannerPosition
+    {
+        Top,
+        TopLeft,
+        TopRight,
+        Bottom,
+        BottomLeft,
+        BottomRight,
+        Center
+    }
+
+    public enum MRecPosition
+    {
+        Top,
+        TopLeft,
+        TopRight,
+        Bottom,
+        BottomLeft,
+        BottomRight,
+        Center,
+        CenterLeft,
+        CenterRight,
+    }
+}

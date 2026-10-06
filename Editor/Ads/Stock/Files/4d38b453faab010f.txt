@@ -1,0 +1,19 @@
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.InAppPurchasing;
+using TMPro;
+using UnityEngine;
+
+public class TextMeshInAppButton : InAppButton
+{
+    [SerializeField] TextMeshProUGUI textMesh;
+
+    protected override void UpdateTextPriceTag(string price)
+    {
+        base.UpdateTextPriceTag(price);
+        if (textMesh != null)
+        {
+            textMesh.text = price;
+        }
+    }
+}

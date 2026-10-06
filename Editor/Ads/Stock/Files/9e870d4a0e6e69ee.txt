@@ -1,0 +1,391 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+using Unity.Services.Core;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public class UnityIAPNetwork : IIAPNetwork, IStoreListener
+    {
+        public event Action<PurchaseInfo> OnProductPurchasedEvent;
+        private Action _onInitializedCallback;
+        private InAppButton iapButtonHandler;
+
+        private IStoreController _storeController;
+        private IExtensionProvider _extensionProvider;
+        private IGooglePlayStoreExtensions _googlePlayStoreExtensions;
+        private IAppleExtensions _appleStoreExtensions;
+
+        private readonly IIAPVerifier localIAPVerifier = new CrossPlatformIAPVerifier();
+        private readonly IIAPVerifier serverIAPVerifier;
+
+        private InAppProductSO[] _products;
+        private InAppsConfiguration _configuration;
+        private List<InAppProductSO> _restoredProducts;
+        public bool IsRestoring => _restoredProducts != null;
+
+        public UnityIAPNetwork(IIAPVerifier serverValidator)
+        {
+            serverIAPVerifier = serverValidator;
+        }
+
+        public bool IsInitialized => _storeController != null && _extensionProvider != null;
+
+        public void Initialize(Action onInitialized, InAppsConfiguration configuration)
+        {
+            if (IsInitialized)
+            {
+                return;
+            }
+
+            _onInitializedCallback = onInitialized;
+            _configuration = configuration;
+            _products = configuration.AllProducts;
+            InitializeServices();
+            InitializeUnityIAP();
+        }
+
+        void InitializeServices()
+        {
+            try
+            {
+                Message.Log(Tag.InAppPurchasing, "Initializing UnityServices");
+                UnityServices.InitializeAsync();
+            }
+            catch (Exception e)
+            {
+                Message.LogException(Tag.InAppPurchasing, e);
+            }
+        }
+
+        private void InitializeUnityIAP()
+        {
+            Message.Log(Tag.InAppPurchasing, "Initializing IAP");
+            ConfigurationBuilder builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
+            builder.Configure<IGooglePlayConfiguration>().SetDeferredPurchaseListener(OnDeferredPurchase);
+
+            // Populate the builder with products defined in the Unity IAP catalog
+            //IAPConfigurationHelper.PopulateConfigurationBuilder(ref builder, ProductCatalog.LoadDefaultCatalog());
+
+            for (int i = 0; i < _products.Length; i++)
+            {
+                var product = _products[i];
+                product.SetDefaults();
+                builder.AddProduct(product.ProductId, product.ProductType);
+            }
+
+            UnityPurchasing.Initialize(this, builder);
+        }
+
+        private void OnDeferredPurchase(Product product)
+        {
+            Message.Log(Tag.InAppPurchasing, $"Deferred Purchase : {product.definition.id}");
+
+            InAppProductSO productObject = GetProductObjectFromId(product.definition.id);
+            productObject.SetDeferredState(true);
+        }
+
+        public void Purchase(string productId)
+        {
+            if (IsInitialized)
+            {
+                Product product = _storeController.products.WithID(productId);
+
+                if (product != null && product.availableToPurchase)
+                {
+                    Message.Log(Tag.InAppPurchasing, $"Initiating Purchase : productId {productId}");
+                    _storeController.InitiatePurchase(product);
+                }
+                else
+                {
+                    Message.LogWarning(Tag.InAppPurchasing,
+                        $"BuyProduct productId: {productId}: FAILED. Not purchasing product, either is not found or is not available for purchase");
+                }
+            }
+            else
+            {
+                Message.LogError(Tag.InAppPurchasing, $"IAP not Initialized to buy productId {productId}");
+            }
+        }
+
+        public Product GetProductDetail(string productId)
+        {
+            if (string.IsNullOrEmpty(productId))
+            {
+                return null;
+            }
+
+            return _storeController?.products?.WithID(productId);
+        }
+
+        public void RestorePurchases()
+        {
+            if (!IsInitialized)
+            {
+                Message.LogWarning(Tag.InAppPurchasing, $"IAP not Initialized to restore purchases!");
+                return;
+            }
+
+            if (IsRestoring)
+            {
+                Message.LogWarning(Tag.InAppPurchasing, $"Restoring is in progress!");
+                return;
+            }
+
+            _restoredProducts = new List<InAppProductSO>();
+            if (Application.platform == RuntimePlatform.Android)
+            {
+                //_googlePlayStoreExtensions.RestoreTransactions(OnRestore);
+
+                for (int i = 0; i < _products.Length; i++)
+                {
+                    var productSO = _products[i];
+                    if (productSO.ProductType == ProductType.NonConsumable ||
+                        productSO.ProductType == ProductType.Subscription)
+                    {
+                        Message.Log(Tag.InAppPurchasing,
+                            $"RestorePurchases: Added product '{productSO.ProductId}' for restore.");
+                        _restoredProducts.Add(productSO);
+                    }
+                }
+
+                GrantRestoreRewards();
+                _restoredProducts = null;
+            }
+            else if (Application.platform == RuntimePlatform.IPhonePlayer
+                     || Application.platform == RuntimePlatform.OSXPlayer)
+            {
+                _appleStoreExtensions.RestoreTransactions(OnRestore);
+            }
+            else
+            {
+                Message.LogWarning(Tag.InAppPurchasing,
+                    $"RestorePurchases is invalid for platform: {Application.platform}");
+            }
+        }
+
+        void OnRestore(bool success, string error)
+        {
+            if (success)
+            {
+                GrantRestoreRewards();
+                Message.Log(Tag.InAppPurchasing, $"Restore Successful");
+            }
+            else
+            {
+                Message.Log(Tag.InAppPurchasing, $"Restore Failed with error: {error}");
+            }
+
+            _restoredProducts = null;
+        }
+
+        public void OnInitializeFailed(InitializationFailureReason error)
+        {
+            Message.LogError(Tag.InAppPurchasing, $"IAP Initialization Failed: {error}");
+        }
+
+        public void OnInitializeFailed(InitializationFailureReason error, string message)
+        {
+            Message.LogError(Tag.InAppPurchasing, $"IAP Initialization Failed: {error} - {message}");
+        }
+
+        public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
+        {
+            Message.Log(Tag.InAppPurchasing, $"PurchaseProcessingResult.ProcessPurchase");
+            InAppProductSO productObject = GetProductObjectFromId(args.purchasedProduct.definition.id);
+            if (IsRestoring && productObject.ProductType is ProductType.NonConsumable or ProductType.Subscription)
+            {
+                Message.Log(Tag.InAppPurchasing,
+                    $"ProcessPurchase: Added product '{productObject.ProductId}' for restore.");
+                _restoredProducts.Add(productObject);
+                return PurchaseProcessingResult.Complete;
+            }
+
+#if UNITY_EDITOR
+            productObject.SetDeferredState(true);
+            GrantIAPReward(new InAppRevenueInfo(ProductType.Consumable, 0, "", "",
+                args.purchasedProduct.definition.id, "", ""));
+            return PurchaseProcessingResult.Complete;
+#endif
+
+            if (_googlePlayStoreExtensions.IsPurchasedProductDeferred(args.purchasedProduct))
+            {
+                Message.LogError(Tag.InAppPurchasing,
+                    $"Purchase deferred: waiting to be processed product id : {args.purchasedProduct.definition.id}");
+
+                productObject.SetDeferredState(true);
+                return PurchaseProcessingResult.Pending;
+            }
+
+            var purchasedInfo = new InAppRevenueInfo(args.purchasedProduct.definition.type,
+                (double)args.purchasedProduct.metadata.localizedPrice,
+                args.purchasedProduct.metadata.isoCurrencyCode,
+                productObject.ProductName,
+                args.purchasedProduct.definition.id,
+                args.purchasedProduct.receipt,
+                _configuration.AdjustInAppToken);
+
+            //Message.Log(Tag.InAppPurchasing, purchasedInfo.ToString());
+
+            localIAPVerifier.Verify(purchasedInfo, localValidation =>
+            {
+                purchasedInfo.SetTransactionId(MonetizationConstants.AndroidPlatform
+                    ? GetPurchaseToken(args.purchasedProduct)
+                    : args.purchasedProduct.transactionID);
+
+                if (localValidation.IsSuccess)
+                {
+                    productObject.SetDeferredState(true);
+
+                    if (_configuration.AdjustPurchaseVerification)
+                    {
+                        serverIAPVerifier.Verify(purchasedInfo,
+                            serverValidation =>
+                            {
+                                if (serverValidation.IsSuccess)
+                                {
+                                    GrantIAPRewardOnMainThread(args.purchasedProduct, purchasedInfo);
+                                }
+                                else
+                                {
+                                    productObject.SetDeferredState(false);
+                                }
+                            });
+                    }
+                    else
+                    {
+                        GrantIAPRewardOnMainThread(args.purchasedProduct, purchasedInfo);
+                    }
+                }
+            });
+
+
+            return PurchaseProcessingResult.Pending;
+        }
+
+        string GetPurchaseToken(Product product)
+        {
+            Dictionary<string, object> wrapper = (Dictionary<string, object>)MiniJson.JsonDecode(product.receipt);
+            string payloadIOSReceipt = (string)wrapper["Payload"];
+            Dictionary<string, object> googlePlayDetails =
+                (Dictionary<string, object>)MiniJson.JsonDecode(payloadIOSReceipt);
+            string googlePlayReceiptJson = (string)googlePlayDetails["json"];
+            Dictionary<string, object> googlePlayJsonDetails =
+                (Dictionary<string, object>)MiniJson.JsonDecode(googlePlayReceiptJson);
+            string purchaseToken = (string)googlePlayJsonDetails["purchaseToken"];
+            return purchaseToken;
+        }
+
+        public void OnPurchaseFailed(Product product, PurchaseFailureReason failureReason)
+        {
+            Message.LogError(Tag.InAppPurchasing,
+                $"Purchase failed: {product.definition.storeSpecificId}, Reason: {failureReason}");
+
+            InAppProductSO productObject = GetProductObjectFromId(product.definition.id);
+            productObject.SetDeferredState(false);
+            OnProductPurchasedEvent?.Invoke(new PurchaseInfo(false, null));
+        }
+
+        void GrantIAPRewardOnMainThread(Product product, InAppRevenueInfo info)
+        {
+            ThreadDispatcher.Enqueue(delegate
+            {
+                _storeController.ConfirmPendingPurchase(product);
+                GrantIAPReward(info);
+            });
+        }
+
+        void GrantIAPReward(InAppRevenueInfo info)
+        {
+            Message.Log(Tag.InAppPurchasing, $"Granting IAP Reward of product {info.ItemId}");
+            InAppProductSO productObject = GetProductObjectFromId(info.ItemId);
+            productObject.SetDeferredState(false);
+            productObject.OnPurchaseSuccess(false);
+
+            if (info.IsDuplicate)
+            {
+                Message.LogWarning(Tag.InAppPurchasing,
+                    $"Skipped revenue event because product '{info.ItemId}' already exists/duplicate");
+            }
+            else
+            {
+                Message.Log(Tag.InAppPurchasing,
+                    $"Revenue event triggered of product '{info.ItemId}'");
+                AnalyticsManager.ReportInAppRevenue(info);
+            }
+
+            //AnalyticsManager.SendEvent(info.ItemName);
+            OnProductPurchasedEvent?.Invoke(new PurchaseInfo(true, info));
+        }
+
+        void GrantRestoreRewards()
+        {
+            for (int i = 0; i < _restoredProducts.Count; i++)
+            {
+                var productSO = _restoredProducts[i];
+                if (GetProductDetail(productSO.ProductId).hasReceipt)
+                {
+                    Message.Log(Tag.InAppPurchasing, $"Restored IAP Reward of product '{productSO.ProductId}'");
+                    _storeController.ConfirmPendingPurchase(GetProductDetail(productSO.ProductId));
+                    productSO.SetDeferredState(false);
+                    productSO.OnPurchaseSuccess(true);
+                }
+            }
+        }
+
+        public void OnInitialized(IStoreController storeController, IExtensionProvider extensions)
+        {
+            _storeController = storeController;
+            _extensionProvider = extensions;
+            _googlePlayStoreExtensions = extensions.GetExtension<IGooglePlayStoreExtensions>();
+            _appleStoreExtensions = extensions.GetExtension<IAppleExtensions>();
+            _onInitializedCallback?.Invoke();
+
+            for (int i = 0; i < _products.Length; i++)
+            {
+                string price = GetProductDetail(_products[i].ProductId).metadata.localizedPriceString;
+                _products[i].SetLocalizedPrice(price);
+            }
+
+            if (!MonetizationPreferences.RestorePurchaseOnce.Get())
+            {
+                MonetizationPreferences.RestorePurchaseOnce.Set(true);
+#if !UNITY_EDITOR && UNITY_ANDROID
+            RestorePurchases();
+#endif
+            }
+
+            Message.Log(Tag.InAppPurchasing, $"Initialized Successfully!");
+        }
+
+        #region Logs
+
+        InAppProductSO GetProductObjectFromId(string productID)
+        {
+            if (_products != null)
+            {
+                for (int i = 0; i < _products.Length; i++)
+                {
+                    if (_products[i].ProductId.Equals(productID, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return _products[i];
+                    }
+                }
+            }
+
+            Message.LogWarning(Tag.InAppPurchasing, $"Failed to get IAPProductSO of id : {productID}");
+            return null;
+        }
+
+        #endregion
+    }
+}

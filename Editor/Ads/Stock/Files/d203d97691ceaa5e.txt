@@ -1,0 +1,141 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Firebase;
+using Firebase.Analytics;
+using Firebase.Extensions;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class FirebaseAnalyticsNetwork : IAnalyticsInitialization, IAnalyticsEventsService,
+        IAnalyticsAdRevenueService, IMarketingServices
+    {
+        public bool IsInitialized { get; private set; }
+
+        public void Initialize()
+        {
+            //FirebaseApp.LogLevel = AdConstants.UseLogs ? LogLevel.Info : LogLevel.Error;
+            Message.Log(Logger.Tag.Firebase, $"Initializing...");
+            IsInitialized = false;
+
+            FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
+            {
+                if (task.Result == DependencyStatus.Available)
+                {
+                    Message.Log(Logger.Tag.Firebase, "Successfully initialized");
+
+                    FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
+                    Message.Log(Logger.Tag.Firebase, $"Analytics collection enabled");
+
+                    RemoteConfigManager.Initialize();
+                    IsInitialized = true;
+                    Message.Log(Logger.Tag.Firebase, $"Initialized");
+                }
+            });
+        }
+
+        public void SendEvent(string name)
+        {
+            if (!IsInitialized || string.Equals(name, "ad_impression"))
+            {
+                return;
+            }
+
+            FirebaseAnalytics.LogEvent(name);
+        }
+
+        public void SendEvent(string name, Dictionary<string, object> parameters)
+        {
+            if (!IsInitialized || string.Equals(name, "ad_impression"))
+            {
+                return;
+            }
+
+            Parameter[] firebaseParams = ConvertToFirebaseParameters(parameters);
+            if (firebaseParams != null)
+            {
+                FirebaseAnalytics.LogEvent(name, firebaseParams);
+            }
+            else
+            {
+                FirebaseAnalytics.LogEvent(name);
+            }
+        }
+
+        internal Parameter[] ConvertToFirebaseParameters(Dictionary<string, object> parameters)
+        {
+            List<Parameter> fbParams = new List<Parameter>();
+            foreach (KeyValuePair<string, object> dicElement in parameters)
+            {
+                if (dicElement.Value is IDictionary) // Don't add dictionary because Event does not support array parameters | Error Code 21 | https://firebase.google.com/docs/analytics/errors
+                {
+                    Message.LogWarning(Tag.Firebase,
+                        $"Parameter '{dicElement.Key}' is a dictionary, and will be ignored. See error code '21' at https://firebase.google.com/docs/analytics/errors");
+                    continue;
+                }
+
+                fbParams.Add(dicElement.Value switch
+                {
+                    int intValue => new(dicElement.Key, intValue),
+                    long longValue => new(dicElement.Key, longValue),
+                    float floatValue => new(dicElement.Key, floatValue),
+                    double doubleValue => new(dicElement.Key, doubleValue),
+                    _ => new(dicElement.Key, dicElement.Value.ToString())
+                });
+            }
+
+            if (fbParams.Count > 0)
+            {
+                return fbParams.ToArray();
+            }
+
+            return null;
+        }
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            Parameter[] impressionParameters = new[]
+            {
+                new Parameter("ad_platform", adRevenueInfo.Platform),
+                new Parameter("ad_source", adRevenueInfo.AdSource),
+                new Parameter("ad_unit_name", adRevenueInfo.AdUnitName),
+                new Parameter("ad_format", adRevenueInfo.AdFormat.ToString()),
+                new Parameter("value", adRevenueInfo.Revenue),
+                new Parameter("currency", adRevenueInfo.Currency),
+                new Parameter("ad_placement", adRevenueInfo.AdPlacement)
+            };
+
+            FirebaseAnalytics.LogEvent("ad_impression", impressionParameters);
+        }
+
+        public void SendInAppPurchaseEvent(InAppRevenueInfo info)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            var purchaseParam = new Parameter[]
+            {
+                new Parameter(FirebaseAnalytics.ParameterCurrency, info.Currency),
+                new Parameter(FirebaseAnalytics.ParameterValue, info.Price),
+                new Parameter(FirebaseAnalytics.ParameterItemCategory, $"{info.Type}"),
+                new Parameter(FirebaseAnalytics.ParameterItemName, info.ItemName),
+                new Parameter(FirebaseAnalytics.ParameterItemID, info.ItemId)
+            };
+            FirebaseAnalytics.LogEvent(FirebaseAnalytics.EventPurchase, purchaseParam);
+
+            //new Parameter(FirebaseAnalytics.ParameterTransactionId, info.TransactionId),
+        }
+    }
+}

@@ -1,0 +1,39 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using Monetization.Runtime.Configurations;
+using UnityEditor;
+using UnityEngine;
+
+namespace GDMonetization.Editor.MenuItems
+{
+    static class InternetConfigMenu
+    {
+        [MenuItem("GameDistrict/Monetization/Internet Reachability/Reachable", false, 5)]
+        private static void Reachable()
+        {
+            EditorPrefs.SetBool("InternetAvailable", true);
+        }
+
+
+        [MenuItem("GameDistrict/Monetization/Internet Reachability/Reachable", true, 5)]
+        private static bool ReachableValidate()
+        {
+            return !EditorPrefs.GetBool("InternetAvailable", true);
+        }
+
+
+        [MenuItem("GameDistrict/Monetization/Internet Reachability/NotReachable", false, 6)]
+        private static void NotReachable()
+        {
+            EditorPrefs.SetBool("InternetAvailable", false);
+        }
+
+
+        [MenuItem("GameDistrict/Monetization/Internet Reachability/NotReachable", true, 6)]
+        private static bool NotReachableValidate()
+        {
+            return EditorPrefs.GetBool("InternetAvailable", true);
+        }
+    }
+}

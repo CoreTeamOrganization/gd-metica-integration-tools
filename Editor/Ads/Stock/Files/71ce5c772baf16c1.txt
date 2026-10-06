@@ -1,0 +1,104 @@
+using System;
+using UnityEngine;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public abstract class InAppProductSO : ScriptableObject
+    {
+        public ProductType ProductType;
+        public string ProductName = "Remove Ads";
+        public string ProductId = "remove_ads";
+        [SerializeField] string DefaultPrice = "$4.99";
+
+        private string LocalizedPrice;
+
+        public string Price
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(LocalizedPrice))
+                    return LocalizedPrice;
+                return DefaultPrice;
+            }
+        }
+
+        public bool IsPending { get; private set; }
+        public event Action<bool> OnStateDeferred;
+
+        /// <summary>
+        /// True once this NonConsumable/Subscription has been granted locally (see
+        /// MonetizationPreferences.ProductGranted). Read live from PlayerPrefs so it's correct
+        /// immediately on enable, even before the store has connected. Consumables are always
+        /// re-purchasable and never report as owned.
+        /// </summary>
+        public bool IsOwned =>
+            ProductType != ProductType.Consumable && MonetizationPreferences.ProductGranted(ProductId).Get();
+
+        /// <summary>
+        /// Fired only when ownership actually changes — a fresh grant/restore, or a
+        /// CheckEntitlement reconciliation flipping it (e.g. a refund/revocation clearing an
+        /// owned NonConsumable).
+        /// </summary>
+        public event Action<bool> OnOwnershipChanged;
+
+        /// <summary>
+        /// Persists ownership and notifies listeners only if it actually changed. No-op for
+        /// Consumables, which are never "owned" in the UI sense.
+        /// </summary>
+        public void SetOwned(bool owned)
+        {
+            if (ProductType == ProductType.Consumable) return;
+
+            bool changed = IsOwned != owned;
+            MonetizationPreferences.ProductGranted(ProductId).Set(owned);
+            if (changed) OnOwnershipChanged?.Invoke(owned);
+        }
+
+        public void SetDeferredState(bool value)
+        {
+            IsPending = value;
+            OnStateDeferred?.Invoke(value);
+        }
+
+        public void SetDefaults()
+        {
+            IsPending = false;
+            LocalizedPrice = null;
+            LastPurchaseQuantity = 1;
+        }
+
+        /// <summary>
+        /// Units purchased in the most recent successful transaction. Always 1 except for a
+        /// Google Play multi-quantity Consumable purchase — Google Play lets the buyer pick a
+        /// quantity in the store's own purchase sheet for eligible Consumable SKUs (configured
+        /// per-SKU in Play Console); NonConsumable/Subscription and restored/redelivered orders
+        /// are always 1. Read this inside your OnPurchaseSuccess override to grant
+        /// perUnitReward * LastPurchaseQuantity instead of a flat perUnitReward.
+        /// </summary>
+        public int LastPurchaseQuantity { get; private set; } = 1;
+
+        /// <summary>
+        /// Stamps the quantity for the transaction about to be granted. Called by the network
+        /// layer immediately before OnPurchaseSuccess. No-op-safe: values below 1 clamp to 1.
+        /// </summary>
+        public void SetLastPurchaseQuantity(int quantity)
+        {
+            LastPurchaseQuantity = quantity < 1 ? 1 : quantity;
+        }
+
+        public void SetLocalizedPrice(string localizedPrice)
+        {
+            LocalizedPrice = localizedPrice;
+        }
+
+        /// <summary>
+        /// Called when a purchase succeeds.
+        /// </summary>
+        /// <param name="isRestoring">
+        /// True if the purchase is being restored (for non-consumable or subscription types),
+        /// false if it’s a consumable purchase.
+        /// </param>
+        public abstract void OnPurchaseSuccess(bool isRestoring);
+    }
+}

@@ -1,0 +1,251 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace GDMonetization.Editor
+{
+    /// <summary>
+    /// Self-contained reorderable foldout list for Unity UIElements inspectors.
+    /// Drop-in replacement for the FlexList package — no external dependencies.
+    /// </summary>
+    public class GDFoldoutList : VisualElement
+    {
+        private IEnumerable<object> _source;
+        private Action _onCreate;
+        private Action<int> _onRemove;
+        private Action<int, int> _onReorder;
+        private Func<object, int, VisualElement> _renderItem;
+
+        private readonly Label _titleLabel;
+        private readonly VisualElement _itemsContainer;
+        private readonly Dictionary<object, bool> _foldoutStates = new();
+
+        public string Title
+        {
+            get => _titleLabel.text;
+            set => _titleLabel.text = value;
+        }
+
+        public Func<object, string> GetItemName;
+        public Func<object, bool> IsItemFixed;
+
+        private static readonly Color BorderColor = new(0.11f, 0.11f, 0.11f);
+        private static readonly Color FixedIconColor = Color.white;
+        private static readonly Color HeaderBg = new(0.33f, 0.33f, 0.33f);
+        private static readonly Color ItemBg = new(0.27f, 0.27f, 0.27f);
+        private static readonly Color ToggleBg = new(0.235f, 0.235f, 0.235f);
+        private static readonly Color LabelColor = new(0.77f, 0.77f, 0.77f);
+        private static readonly Color RemoveBg = new(0.55f, 0.1f, 0.1f);
+
+        public GDFoldoutList()
+        {
+            ApplyBorder(this, 6, 4);
+
+            var header = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    backgroundColor = HeaderBg
+                }
+            };
+            header.style.paddingTop = header.style.paddingBottom = 4;
+            header.style.paddingLeft = header.style.paddingRight = 4;
+            header.style.borderTopLeftRadius = header.style.borderTopRightRadius = 6;
+            header.style.borderBottomRightRadius = header.style.borderBottomLeftRadius = 6;
+            header.style.borderBottomWidth = 1;
+            header.style.borderBottomColor = BorderColor;
+
+            _titleLabel = new Label("List")
+            {
+                style =
+                {
+                    flexGrow = 1,
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    color = LabelColor,
+                    unityTextAlign = TextAnchor.MiddleCenter,
+                    fontSize = 13,
+                }
+            };
+
+            var addButton = new Button(() => _onCreate?.Invoke()) { text = "+" };
+
+            header.Add(_titleLabel);
+            header.Add(addButton);
+            Add(header);
+
+            _itemsContainer = new VisualElement { style = { flexGrow = 1 } };
+            Add(_itemsContainer);
+        }
+
+        // onRemove(index), onReorder(fromIndex, toIndex), renderItem(item, index)
+        public void Setup(
+            IEnumerable<object> source,
+            Action onCreate,
+            Action<int> onRemove,
+            Func<object, int, VisualElement> renderItem,
+            Action<int, int> onReorder = null)
+        {
+            _source = source ?? throw new ArgumentNullException(nameof(source));
+            _onCreate = onCreate ?? throw new ArgumentNullException(nameof(onCreate));
+            _onRemove = onRemove ?? throw new ArgumentNullException(nameof(onRemove));
+            _renderItem = renderItem ?? throw new ArgumentNullException(nameof(renderItem));
+            _onReorder = onReorder;
+        }
+
+        public void Refresh()
+        {
+            SaveFoldoutStates();
+            _itemsContainer.Clear();
+
+            var items = _source?.ToList() ?? new List<object>();
+
+            if (items.Count == 0)
+            {
+                _itemsContainer.Add(new Label("Empty — click + to add a step.")
+                {
+                    style = { marginLeft = 8, marginTop = 6, marginBottom = 6, color = new Color(0.6f, 0.6f, 0.6f) }
+                });
+                return;
+            }
+
+            for (int i = 0; i < items.Count; i++)
+                BuildItemRow(items[i], i, items.Count);
+
+            RestoreFoldoutStates();
+        }
+
+        private void BuildItemRow(object item, int index, int total)
+        {
+            var isFixed = IsItemFixed?.Invoke(item) == true;
+
+            var wrapper = new VisualElement();
+            ApplyBorder(wrapper, 6, 6);
+
+            var displayName = item != null
+                ? (GetItemName?.Invoke(item) ?? $"Step {index}")
+                : $"[NULL] Step {index}";
+
+            var foldout = new Foldout
+            {
+                text = displayName,
+                value = false,
+                userData = item ?? index,
+                style =
+                {
+                    backgroundColor = ItemBg
+                }
+            };
+            foldout.style.borderTopLeftRadius = foldout.style.borderTopRightRadius = 4;
+            foldout.style.borderBottomRightRadius = foldout.style.borderBottomLeftRadius = 4;
+            foldout.style.marginTop = foldout.style.marginRight =
+                foldout.style.marginBottom = foldout.style.marginLeft = 2;
+
+            var toggle = foldout.Q<Toggle>();
+            if (toggle != null)
+            {
+                toggle.style.marginLeft = toggle.style.marginTop = toggle.style.marginBottom = 0;
+                toggle.style.backgroundColor = ToggleBg;
+
+                var labelRow = toggle.Q<Label>()?.parent;
+                if (labelRow != null)
+                {
+                    var textLabel = labelRow.Q<Label>();
+                    if (textLabel != null)
+                        textLabel.style.flexGrow = 1;
+
+                    if (isFixed)
+                    {
+                        var lockImg = new Image
+                        {
+                            image = EditorGUIUtility.IconContent("LockIcon-On").image as Texture2D,
+                            tintColor = FixedIconColor,
+                            style = { width = 14, height = 14, marginRight = 4, alignSelf = Align.Center }
+                        };
+                        labelRow.Add(lockImg);
+                    }
+
+                    if (_onReorder != null && !isFixed)
+                    {
+                        var i = index;
+                        labelRow.Add(SmallButton("↑", () =>
+                        {
+                            _onReorder(i, Math.Max(0, i - 1));
+                            Refresh();
+                        }));
+                        labelRow.Add(SmallButton("↓", () =>
+                        {
+                            _onReorder(i, Math.Min(total - 1, i + 1));
+                            Refresh();
+                        }));
+                    }
+
+                    if (!isFixed)
+                    {
+                        var removeIndex = index;
+                        var removeBtn = SmallButton("✖", () =>
+                        {
+                            _onRemove(removeIndex);
+                            Refresh();
+                        });
+                        removeBtn.style.backgroundColor = RemoveBg;
+                        labelRow.Add(removeBtn);
+                    }
+                }
+            }
+
+            foldout.contentContainer.style.paddingTop = 6;
+            foldout.Add(item != null
+                ? (_renderItem(item, index) ?? new Label("(no content)"))
+                : new Label("Step reference is missing. Remove and re-add.")
+                {
+                    style = { color = new Color(1f, 0.5f, 0.5f), marginLeft = 4, marginBottom = 4 }
+                });
+
+            wrapper.Add(foldout);
+            _itemsContainer.Add(wrapper);
+        }
+
+        private void SaveFoldoutStates()
+        {
+            _foldoutStates.Clear();
+            var fs = _itemsContainer.Query<Foldout>().ToList();
+            for (var index = 0; index < fs.Count; index++)
+            {
+                var f = fs[index];
+                if (f.userData != null) _foldoutStates[f.userData] = f.value;
+            }
+        }
+
+        private void RestoreFoldoutStates()
+        {
+            foreach (var f in _itemsContainer.Query<Foldout>().ToList())
+                if (f.userData != null && _foldoutStates.TryGetValue(f.userData, out var state))
+                    f.value = state;
+        }
+
+        private static Button SmallButton(string label, Action onClick)
+        {
+            return new Button(onClick)
+            {
+                text = label,
+                style = { paddingLeft = 3, paddingRight = 3, marginRight = 4, width = 21 }
+            };
+        }
+
+        private static void ApplyBorder(VisualElement el, float radius, float margin)
+        {
+            el.style.borderTopWidth = el.style.borderRightWidth =
+                el.style.borderBottomWidth = el.style.borderLeftWidth = 1;
+            el.style.borderTopColor = el.style.borderRightColor =
+                el.style.borderBottomColor = el.style.borderLeftColor = BorderColor;
+            el.style.borderTopLeftRadius = el.style.borderTopRightRadius =
+                el.style.borderBottomRightRadius = el.style.borderBottomLeftRadius = radius;
+            el.style.marginTop = el.style.marginRight =
+                el.style.marginBottom = el.style.marginLeft = margin;
+        }
+    }
+}

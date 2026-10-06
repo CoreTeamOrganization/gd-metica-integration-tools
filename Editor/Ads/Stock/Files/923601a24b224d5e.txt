@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "ShooterAnalyticsSO", menuName = "GDMonetization/MeticaAnalytics/GenreSO/Shooter")]
+    public class ShooterAnalyticsSO : AnalyticsGenreSO
+    {
+        [SerializeField] private ShooterAnalytics _shooterAnalytics;
+
+        public override GameGenre Genre => GameGenre.Shooter;
+        public override GDMeticaAnalytics GetAnalytics() => _shooterAnalytics ??= new ShooterAnalytics();
+    }
+}

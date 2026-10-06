@@ -1,0 +1,15 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Logger
+{
+    public interface ILoggerService
+    {
+        void Log(Tag tag, string message);
+        void LogWarning(Tag tag, string message);
+        void LogError(Tag tag, string message);
+        void LogException(Tag tag, Exception e);
+    }
+}

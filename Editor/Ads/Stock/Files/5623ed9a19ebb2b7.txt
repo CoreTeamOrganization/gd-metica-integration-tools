@@ -1,0 +1,16 @@
+using System;
+
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class RewardedAdUnit : AdUnit
+    {
+        protected string placementName;
+        protected Action onRewardComplete;
+
+        public override AdFormat AdType => AdFormat.Rewarded;
+
+        public abstract void LoadRewarded();
+        public abstract void ShowRewarded(string placementName, Action onRewardedCallback);
+        public abstract bool HasRewarded(bool doRequest);
+    }
+}

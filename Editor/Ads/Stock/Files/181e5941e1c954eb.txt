@@ -1,0 +1,22 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.RemoteConfig
+{
+    public abstract class BaseRemoteConfigService
+    {
+        public abstract void Initialize();
+        public abstract void AddOrUpdateValue(string key, object value);
+        public abstract RemoteValue<T> GetRemoteValue<T>(string key);
+
+        public event Action OnFetchComplete;
+
+        protected void InvokeOnFetchComplete()
+        {
+            OnFetchComplete?.Invoke();
+        }
+    }
+}

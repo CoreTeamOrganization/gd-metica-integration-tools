@@ -1,0 +1,16 @@
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Events
+{
+    public struct InitializationStepsCompletionEvent : IEvent
+    {
+        public bool IsSuccess;
+        public string ErrorMessage;
+
+        public InitializationStepsCompletionEvent(bool isSuccess, string errorMessage = "")
+        {
+            IsSuccess = isSuccess;
+            ErrorMessage = errorMessage;
+        }
+    }
+}

@@ -1,0 +1,20 @@
+using Monetization.Runtime.Ads;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "AdjustNetworkSO", menuName = "GDMonetization/Analytics/Networks/Adjust")]
+    public class AdjustNetworkSO : AnalyticsNetworkSO, IAnalyticsInitialization, IAnalyticsAdRevenueService
+    {
+        private void Reset() { EnableInitialization = true; EnableRevenue = true; }
+
+        private AdjustAnalyticsNetwork _network;
+        private AdjustAnalyticsNetwork Network => _network ??= new AdjustAnalyticsNetwork();
+
+        public bool IsInitialized => Network.IsInitialized;
+
+        public void Initialize() => Network.Initialize(MeticaInitializer.UserId);
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo) => Network.ReportAdRevenue(adRevenueInfo);
+    }
+}

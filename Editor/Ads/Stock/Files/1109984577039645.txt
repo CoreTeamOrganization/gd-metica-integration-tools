@@ -1,0 +1,68 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using Firebase.Analytics;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class FirebaseTaichiCampaign : IAnalyticsAdRevenueService
+    {
+        double custom_revenue;
+        double currentAccumulatedRevenue;
+        private bool firebaseInitialized = false;
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (!firebaseInitialized)
+            {
+                firebaseInitialized = AnalyticsManager.IsNetworkInitialized<FirebaseAnalyticsNetwork>();
+                if (!firebaseInitialized)
+                {
+                    return;
+                }
+            }
+
+            bool useTaichi = RemoteConfigManager.GetRemoteValue<bool>("Taichi_Enabled").Value;
+            if (useTaichi)
+            {
+                double _rev = adRevenueInfo.Revenue;
+                double remoteValue = RemoteConfigManager.GetRemoteValue<float>("Taichi_MaxValue").Value;
+                Debug.Log("RevenueAds:" + _rev);
+                if (!double.TryParse(PlayerPrefs.GetString("revenue_add", "0"), NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out custom_revenue))
+                {
+                    custom_revenue = 0.0;
+                }
+
+                currentAccumulatedRevenue = (custom_revenue + _rev);
+                Debug.Log("RevenueAds!:" + currentAccumulatedRevenue);
+                Debug.Log("RevenueAds!:" + currentAccumulatedRevenue + ":" + remoteValue);
+
+                if (currentAccumulatedRevenue >= remoteValue)
+                {
+                    var impressionParameters = new[]
+                    {
+                        new Parameter(FirebaseAnalytics.ParameterValue, currentAccumulatedRevenue),
+                        new Parameter(FirebaseAnalytics.ParameterCurrency, "USD"),
+                    };
+                    FirebaseAnalytics.LogEvent("custom_ad_impression", impressionParameters);
+                    AnalyticsManager.SendEvent("Monetization", new()
+                    {
+                        { "custom_ad_impression", currentAccumulatedRevenue.ToString() }
+                    });
+                    Debug.Log("RevenueAds!:" + currentAccumulatedRevenue + ":" + remoteValue);
+
+                    PlayerPrefs.SetString("revenue_add", "0");
+                }
+                else
+                {
+                    PlayerPrefs.SetString("revenue_add",
+                        currentAccumulatedRevenue.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+        }
+    }
+}

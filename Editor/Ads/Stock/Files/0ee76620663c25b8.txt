@@ -1,0 +1,116 @@
+using UnityEditor;
+using UnityEngine;
+
+public class GDMonetizationRemoveSdkBase : EditorWindow
+{
+    public enum Result
+    {
+        Confirmed,
+        Cancelled
+    }
+
+    static System.Action<Result> resultHandler;
+
+    string message;        // main scrollable message
+    string confirmText;
+    string cancelText;
+    string alertText;      // optional alert text above buttons
+
+    Vector2 scroll;
+    GUIStyle messageStyle;
+    GUIStyle alertTextStyle;
+
+    // -------- Public API --------
+    public static void Show(
+        string title,
+        string message,
+        string confirmText,
+        string cancelText = null,
+        string alertText = null,          // ✅ renamed
+        System.Action<Result> onResult = null
+    )
+    {
+        resultHandler = onResult;
+
+        var window = CreateInstance<GDMonetizationRemoveSdkBase>();
+        window.titleContent = new GUIContent(title);
+        window.message = message;
+        window.confirmText = confirmText;
+        window.cancelText = cancelText;
+        window.alertText = alertText;
+
+        window.minSize = new Vector2(500, 350);
+        window.maxSize = new Vector2(1000, 700);
+        window.ShowUtility();
+    }
+
+    void OnEnable()
+    {
+        messageStyle = new GUIStyle(EditorStyles.helpBox)
+        {
+            fontSize = 14,
+            wordWrap = true,
+            richText = true
+        };
+
+        alertTextStyle = new GUIStyle(EditorStyles.label)
+        {
+            fontSize = 13,
+            richText = true,
+            normal = { textColor = Color.green },
+            wordWrap = true
+        };
+    }
+
+    // -------- UI --------
+    void OnGUI()
+    {
+        // Scrollable main message
+        scroll = EditorGUILayout.BeginScrollView(scroll);
+        GUILayout.Label(message, messageStyle);
+        EditorGUILayout.EndScrollView();
+
+        GUILayout.Space(10);
+
+        // Optional alert text left-aligned above buttons
+        if (!string.IsNullOrEmpty(alertText))
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(alertText, alertTextStyle);
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        GUILayout.Space(5);
+
+        // Buttons
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+
+        if (!string.IsNullOrEmpty(cancelText))
+        {
+            if (GUILayout.Button(cancelText, GUILayout.Width(130), GUILayout.Height(30)))
+            {
+                CloseWithResult(Result.Cancelled);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(confirmText))
+        {
+            if (GUILayout.Button(confirmText, GUILayout.Width(130), GUILayout.Height(30)))
+            {
+                CloseWithResult(Result.Confirmed);
+            }
+        }
+
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(10);
+    }
+
+    void CloseWithResult(Result result)
+    {
+        resultHandler?.Invoke(result);
+        resultHandler = null;
+        Close();
+    }
+}

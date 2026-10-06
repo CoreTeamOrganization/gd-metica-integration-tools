@@ -1,0 +1,34 @@
+using UnityEditor;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CustomEditor(typeof(AnalyticsNetworkSO), true)]
+    public class AnalyticsNetworkSOEditor : Editor
+    {
+        public override void OnInspectorGUI()
+        {
+            serializedObject.Update();
+
+            var so = (AnalyticsNetworkSO)target;
+
+            EditorGUILayout.LabelField("Active Roles", EditorStyles.boldLabel);
+
+            DrawFlagIfSupported<IAnalyticsInitialization>(so, "EnableInitialization", "Initialization");
+            DrawFlagIfSupported<IAnalyticsEventsService>(so, "EnableEvents", "Events");
+            DrawFlagIfSupported<IAnalyticsAdRevenueService>(so, "EnableRevenue", "Revenue");
+            DrawFlagIfSupported<IMarketingServices>(so, "EnableMarketing", "Marketing");
+
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private void DrawFlagIfSupported<T>(AnalyticsNetworkSO so, string propertyName, string label)
+        {
+            if (so is not T) return;
+
+            var prop = serializedObject.FindProperty(propertyName);
+            if (prop != null)
+                EditorGUILayout.PropertyField(prop, new GUIContent(label));
+        }
+    }
+}

@@ -57,6 +57,19 @@ namespace GameDistrict.MeticaIntegrationTools
             return this;
         }
 
+        /// <summary>
+        /// The check could not be made yet — Unity still has to compile what the step wrote.
+        /// Not passed, but not a failure either: a sign-off is kept through it, so a re-check
+        /// mid-compile does not send the run back to this step.
+        /// </summary>
+        public bool Waiting { get; private set; }
+
+        public VerifyResult Wait(string message = ScriptCompile.WaitingMessage)
+        {
+            Waiting = true;
+            return Problem(message);
+        }
+
         /// <summary>Seals the result: passes only when nothing blocking was recorded.</summary>
         public VerifyResult Seal()
         {

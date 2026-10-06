@@ -1,0 +1,22 @@
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+
+namespace Monetization.Runtime.Ads
+{
+    /// <summary>Raised when an ad network begins SDK initialization.</summary>
+    public readonly struct AdNetworkInitStartedEvent : IEvent
+    {
+        public readonly string NetworkName;
+        public readonly string AppKey;
+
+        public AdNetworkInitStartedEvent(string networkName, string appKey)
+        {
+            NetworkName = networkName;
+            AppKey = appKey;
+        }
+
+        public override string ToString()
+        {
+            return $"{NetworkName}:{AppKey}";
+        }
+    }
+}

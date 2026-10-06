@@ -1,0 +1,195 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinBanner : BannerAdUnit
+    {
+        private bool isCreated;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                bannerPriority = 1;
+                ListenEvents();
+                LoadBanner();
+            }
+        }
+
+        public void ListenEvents()
+        {
+            MaxSdkCallbacks.Banner.OnAdLoadedEvent += Banner_OnAdLoadedEvent;
+            MaxSdkCallbacks.Banner.OnAdLoadFailedEvent += Banner_OnAdLoadFailedEvent;
+            MaxSdkCallbacks.Banner.OnAdRevenuePaidEvent += OnBannerAdRevenuePaidEvent;
+            MaxSdkCallbacks.Banner.OnAdClickedEvent += Banner_OnAdClickedEvent;
+        }
+
+        public override bool HasBanner()
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            bannerStatus = true;
+            if (!isCreated)
+            {
+                LoadBanner();
+                return false;
+            }
+
+            return isLoaded;
+        }
+
+        public override void ShowBanner()
+        {
+            bannerStatus = true;
+            MaxSdk.ShowBanner(adUnitId);
+        }
+
+        public override void HideBanner()
+        {
+            bannerStatus = false;
+            if (isCreated)
+            {
+                MaxSdk.HideBanner(adUnitId);
+            }
+        }
+
+        public override void DestroyBanner()
+        {
+            if (isCreated)
+            {
+                MaxSdk.DestroyBanner(adUnitId);
+            }
+
+            bannerStatus = false;
+            isCreated = false;
+        }
+
+        protected override void LoadBanner()
+        {
+            if (IsAdUnitEmpty)
+                return;
+
+            if (!isCreated)
+            {
+                MaxSdk.CreateBanner(adUnitId, GetBannerPosition());
+                if (bannerInfo.bannerSize == BannerSize.Adaptive)
+                {
+                    MaxSdk.SetBannerExtraParameter(adUnitId, "adaptive_banner", "true");
+                }
+                else if(bannerInfo.bannerSize == BannerSize.Simple_320x50)
+                {
+                    MaxSdk.SetBannerWidth(adUnitId, 320f);
+                }
+
+                MaxSdk.StartBannerAutoRefresh(adUnitId);
+                Message.Log(Tag.Applovin, $"BANNER IS LOADING, SIZE : {bannerInfo.bannerSize}");
+                isCreated = true;
+            }
+        }
+
+        MaxSdk.BannerPosition GetBannerPosition()
+        {
+            switch (bannerInfo.BannerPosition)
+            {
+                case BannerPosition.Top: return MaxSdk.BannerPosition.TopCenter;
+                case BannerPosition.TopLeft: return MaxSdk.BannerPosition.TopLeft;
+                case BannerPosition.TopRight: return MaxSdk.BannerPosition.TopRight;
+                case BannerPosition.Bottom: return MaxSdk.BannerPosition.BottomCenter;
+                case BannerPosition.BottomLeft: return MaxSdk.BannerPosition.BottomLeft;
+                case BannerPosition.BottomRight: return MaxSdk.BannerPosition.BottomRight;
+                case BannerPosition.Center: return MaxSdk.BannerPosition.Centered;
+                default: return MaxSdk.BannerPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void Banner_OnAdLoadedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            isLoaded = true;
+            Message.Log(Tag.Applovin, "BANNER IS LOADED");
+
+            if (!bannerStatus)
+            {
+                HideBanner();
+                return;
+            }
+
+            if (IsTopPriority)
+            {
+                ShowBanner();
+                AdsManager.HideAllBannersExcept(this);
+            }
+        }
+
+        private void Banner_OnAdLoadFailedEvent(string arg1, MaxSdkBase.ErrorInfo arg2)
+        {
+            isLoaded = false;
+            Message.LogError(Tag.Applovin, "BANNER FAILED TO LOAD : " + arg2.Message);
+            if (!bannerStatus)
+            {
+                HideBanner();
+            }
+            else
+            {
+                AdsManager.ShowBanner();
+            }
+        }
+
+        private void OnBannerAdRevenuePaidEvent(string adUnitId, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.Banner, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, "adaptive");
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void Banner_OnAdClickedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+
+        #region AutoRefreshStatus
+
+        // private AutoRefresh refreshStatus = AutoRefresh.NotSet;
+        //
+        // void SetBannerAutoRefreshStatus(AutoRefresh value)
+        // {
+        //     if (refreshStatus == AutoRefresh.NotSet || refreshStatus != value)
+        //     {
+        //         refreshStatus = value;
+        //         if (refreshStatus == AutoRefresh.Enabled)
+        //         {
+        //             Message.LogWarning(Tag.Applovin, "BANNER REFRESH : " + value.ToString());
+        //             MaxSdk.StartBannerAutoRefresh(adUnitId);
+        //         }
+        //         else
+        //         {
+        //             Message.LogWarning(Tag.Applovin, "BANNER REFRESH : " + value.ToString());
+        //             MaxSdk.StopBannerAutoRefresh(adUnitId);
+        //         }
+        //     }
+        // }
+        //
+        // public enum AutoRefresh
+        // {
+        //     NotSet,
+        //     Enabled,
+        //     Disabled
+        // }
+
+        #endregion
+    }
+}

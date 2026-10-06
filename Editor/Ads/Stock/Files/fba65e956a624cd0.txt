@@ -1,0 +1,149 @@
+#nullable enable
+using System.Collections.Generic;
+using Metica;
+using Metica.Analytics.Abstractions;
+using UnityEngine;
+using Monetization.Runtime.Logger;
+using Newtonsoft.Json;
+using Message = Monetization.Runtime.Logger.Message;
+
+namespace Monetization.Runtime.Analytics
+{
+    public class GDMeticaAnalytics : ScriptableObject, IGDMeticaAnalytics, IMeticaAnalytics
+    {
+        public string? AbTest { get; set; } = null;
+        public string? AbGroup { get; set; } = null;
+        public string? AbTestStartDate { get; set; } = null;
+
+
+        public virtual Dictionary<string, object> CreateBaseEvent()
+        {
+            var baseEvents = new Dictionary<string, object>
+            {
+                { "adid", AdjustAnalyticsNetwork.AdId },
+                { "appToken", AdjustAnalyticsNetwork.AppToken }
+            };
+
+            return WithAbTestFields(baseEvents);
+        }
+
+        private Dictionary<string, object> WithAbTestFields(Dictionary<string, object> payload)
+        {
+            if(!string.IsNullOrEmpty(AbTest))
+                payload["abTest"] = AbTest;
+
+            if(!string.IsNullOrEmpty(AbGroup))
+                payload["abGroup"] = AbGroup;
+
+            if(!string.IsNullOrEmpty(AbTestStartDate))
+                payload["abTestStartDate"] = AbTestStartDate;
+            return payload;
+        }
+
+        protected void MergeCustomFields(Dictionary<string, object> payload, AnalyticsEventData data)
+        {
+            if (data.CustomFields == null) return;
+            foreach (var kvp in data.CustomFields)
+                payload[kvp.Key] = kvp.Value;
+        }
+
+        private Dictionary<string, object> WithBaseFields(Dictionary<string, object>? payload)
+        {
+            var result = new Dictionary<string, object>
+            {
+                { "adid", AdjustAnalyticsNetwork.AdId },
+                { "appToken", AdjustAnalyticsNetwork.AppToken }
+            };
+
+            if (payload != null)
+                foreach (var kvp in payload)
+                    result[kvp.Key] = kvp.Value;
+
+            return WithAbTestFields(result);
+        }
+
+        #region metica-events
+        public virtual void LogPurchaseEvent(string productId, string currency, double amount, string status, string? errorCode, string? referenceId, Dictionary<string, object>? customPayload)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(customPayload);
+            MeticaSdk.Analytics.LogPurchaseEvent(productId, currency, amount, status, errorCode, referenceId, mergedPayload);
+            Message.Log(Tag.Metica, $"LogPurchaseEvent: {productId}, {currency}, {amount}, {status}\nPayload: {JsonConvert.SerializeObject(mergedPayload)}");
+#endif
+        }
+
+        public virtual void LogSessionStartEvent(Dictionary<string, object>? customPayload)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(customPayload);
+            MeticaSdk.Analytics.LogSessionStartEvent(mergedPayload);
+            Message.Log(Tag.Metica, $"LogSessionStartEvent\nPayload: {JsonConvert.SerializeObject(mergedPayload)}");
+#endif
+        }
+
+        public virtual void LogInstallEvent(Dictionary<string, object>? customPayload)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(customPayload);
+            MeticaSdk.Analytics.LogInstallEvent(mergedPayload);
+            Message.Log(Tag.Metica, $"LogInstallEvent\nPayload: {JsonConvert.SerializeObject(mergedPayload)}");
+#endif
+        }
+
+        public virtual void LogImpressionEvent(double value, string type, string mediator, string source, string? placement, Dictionary<string, object>? customPayload)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(customPayload);
+            MeticaSdk.Analytics.LogImpressionEvent(value, type, mediator, source, placement, mergedPayload);
+            Message.Log(Tag.Metica, $"LogImpressionEvent: {value}, {type}, {mediator}, {source}\nPayload: {JsonConvert.SerializeObject(mergedPayload)}");
+#endif
+        }
+
+        public virtual void LogFullStateUpdateEvent(Dictionary<string, object> attributes)
+        {
+#if METICA_ANALYTICS
+            var mergedAttributes = WithBaseFields(attributes);
+            MeticaSdk.Analytics.LogFullStateUpdateEvent(mergedAttributes);
+            Message.Log(Tag.Metica, $"LogFullStateUpdateEvent: {mergedAttributes.Count} attributes\nAttributes: {JsonConvert.SerializeObject(mergedAttributes)}");
+#endif
+        }
+
+        public virtual void LogPartialStateUpdateEvent(Dictionary<string, object> attributes)
+        {
+#if METICA_ANALYTICS
+            var mergedAttributes = WithBaseFields(attributes);
+            MeticaSdk.Analytics.LogPartialStateUpdateEvent(mergedAttributes);
+            Message.Log(Tag.Metica, $"LogPartialStateUpdateEvent: {mergedAttributes.Count} attributes\nAttributes: {JsonConvert.SerializeObject(mergedAttributes)}");
+#endif
+        }
+
+        public virtual void LogCustomEvent(string eventName, Dictionary<string, object>? properties)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(properties);
+            MeticaSdk.Analytics.LogCustomEvent(eventName, mergedPayload);
+            var propertiesJson = mergedPayload != null ? JsonConvert.SerializeObject(new { mergedPayload }) : "null";
+            Message.Log(Tag.Metica, $"LogCustomEvent: {eventName}\nProperties: {propertiesJson}");
+#endif
+        }
+
+        public virtual void LogPerfStatsEvent(Dictionary<string, object>? customPayload)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(customPayload);
+            MeticaSdk.Analytics.LogCustomEvent("perfStats", mergedPayload);
+            Debug.Log($"[MeticaAnalytics] LogPerfStatsEvent\nPayload: {JsonConvert.SerializeObject(mergedPayload)}");
+#endif
+        }
+
+        public virtual void LogLoadTimeEvent(Dictionary<string, object>? customPayload)
+        {
+#if METICA_ANALYTICS
+            var mergedPayload = WithBaseFields(customPayload);
+            MeticaSdk.Analytics.LogCustomEvent("loadTime", mergedPayload);
+            Debug.Log($"[MeticaAnalytics] LogLoadTimeEvent\nPayload: {JsonConvert.SerializeObject(mergedPayload)}");
+#endif
+        }
+        #endregion
+    }
+}

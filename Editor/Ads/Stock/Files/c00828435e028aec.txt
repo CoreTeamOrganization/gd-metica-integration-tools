@@ -1,0 +1,204 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Firebase;
+using Firebase.Analytics;
+using Firebase.Extensions;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class FirebaseAnalyticsNetwork : IAnalyticsInitialization, IAnalyticsEventsService,
+        IAnalyticsAdRevenueService, IMarketingServices
+    {
+        public static bool DependenciesAvailable { get; private set; }
+
+        public bool IsInitialized { get; private set; }
+        private List<Parameter> fbParams = new List<Parameter>(16);
+        private List<FirebaseEvent> cacheEvents = new List<FirebaseEvent>(8);
+
+        public static void CheckAndFixDependenciesAsync(Action onComplete)
+        {
+            DependenciesAvailable = false;
+            Message.Log(Logger.Tag.Firebase, "CheckAndFixDependenciesAsync");
+            FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
+            {
+                Message.Log(Logger.Tag.Firebase, $"DependencyStatus: {task.Result}");
+                if (task.Result == DependencyStatus.Available)
+                {
+                    DependenciesAvailable = true;
+                    onComplete?.Invoke();
+                }
+            });
+        }
+
+        public void Initialize()
+        {
+            if (DependenciesAvailable)
+            {
+                IsInitialized = true;
+                FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
+                ConsentManager.AddAndUpdateConsentService(new FirebaseConsentSettings());
+                Message.Log(Logger.Tag.Firebase, $"Analytics collection enabled");
+                for (int i = 0; i < cacheEvents.Count; i++)
+                {
+                    Message.Log(Tag.Firebase, $"Sending cached event '{cacheEvents[i].name}'");
+                    SendEvent(cacheEvents[i].name, cacheEvents[i].parameters);
+                    cacheEvents[i].Dispose();
+                }
+
+                cacheEvents.Clear();
+                cacheEvents = null;
+            }
+        }
+
+        public void SendEvent(string name)
+        {
+            if (string.Equals(name, "ad_impression"))
+            {
+                return;
+            }
+
+            if (!IsInitialized)
+            {
+                Message.Log(Tag.Firebase, $"Cached event '{name}'");
+                cacheEvents.Add(new FirebaseEvent(name));
+                return;
+            }
+
+            FirebaseAnalytics.LogEvent(name);
+        }
+
+        public void SendEvent(string name, Dictionary<string, object> parameters)
+        {
+            if (string.Equals(name, "ad_impression"))
+            {
+                return;
+            }
+
+            if (!IsInitialized)
+            {
+                Message.Log(Tag.Firebase, $"Cached event '{name}'");
+                cacheEvents.Add(new FirebaseEvent(name, parameters));
+                return;
+            }
+
+            Parameter[] firebaseParams = ConvertToFirebaseParameters(parameters);
+            if (firebaseParams != null)
+            {
+                FirebaseAnalytics.LogEvent(name, firebaseParams);
+            }
+            else
+            {
+                FirebaseAnalytics.LogEvent(name);
+            }
+        }
+
+        internal Parameter[] ConvertToFirebaseParameters(Dictionary<string, object> parameters)
+        {
+            if (parameters == null)
+            {
+                return null;
+            }
+
+            fbParams.Clear();
+            foreach (KeyValuePair<string, object> dicElement in parameters)
+            {
+                if (dicElement.Value == null || dicElement.Value is IDictionary) // Don't add dictionary because Event does not support array parameters | Error Code 21 | https://firebase.google.com/docs/analytics/errors
+                {
+                    Message.LogWarning(Tag.Firebase,
+                        $"Parameter '{dicElement.Key}' is a dictionary, and will be ignored. See error code '21' at https://firebase.google.com/docs/analytics/errors");
+                    continue;
+                }
+
+                fbParams.Add(dicElement.Value switch
+                {
+                    int intValue => new(dicElement.Key, intValue),
+                    long longValue => new(dicElement.Key, longValue),
+                    float floatValue => new(dicElement.Key, floatValue),
+                    double doubleValue => new(dicElement.Key, doubleValue),
+                    _ => new(dicElement.Key, dicElement.Value.ToString())
+                });
+            }
+
+            if (fbParams.Count > 0)
+            {
+                return fbParams.ToArray();
+            }
+
+            return null;
+        }
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            Parameter[] impressionParameters = new[]
+            {
+                new Parameter("ad_platform", adRevenueInfo.Platform),
+                new Parameter("ad_source", adRevenueInfo.AdSource),
+                new Parameter("ad_unit_name", adRevenueInfo.AdUnitName),
+                new Parameter("ad_format", adRevenueInfo.AdFormat.ToString()),
+                new Parameter("value", adRevenueInfo.Revenue),
+                new Parameter("currency", adRevenueInfo.Currency),
+                new Parameter("ad_placement", adRevenueInfo.AdPlacement)
+            };
+
+            FirebaseAnalytics.LogEvent("ad_impression", impressionParameters);
+#if UNITY_IOS
+            FirebaseAnalytics.LogEvent("paid_ad_impression", impressionParameters);
+#endif
+        }
+
+        public void SendInAppPurchaseEvent(InAppRevenueInfo info)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            var purchaseParam = new Parameter[]
+            {
+                new Parameter(FirebaseAnalytics.ParameterCurrency, info.Currency),
+                new Parameter(FirebaseAnalytics.ParameterValue, info.Price),
+                new Parameter(FirebaseAnalytics.ParameterItemCategory, $"{info.Type}"),
+                new Parameter(FirebaseAnalytics.ParameterItemName, info.ItemName),
+                new Parameter(FirebaseAnalytics.ParameterItemID, info.ItemId)
+            };
+            FirebaseAnalytics.LogEvent(FirebaseAnalytics.EventPurchase, purchaseParam);
+
+            //new Parameter(FirebaseAnalytics.ParameterTransactionId, info.TransactionId),
+        }
+
+        public class FirebaseEvent : IDisposable
+        {
+            public readonly string name;
+            public readonly Dictionary<string, object> parameters;
+
+            public FirebaseEvent(string name, Dictionary<string, object> parameters = null)
+            {
+                this.name = name;
+                if (parameters != null)
+                {
+                    this.parameters = new Dictionary<string, object>(parameters);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (parameters != null)
+                {
+                    parameters.Clear();
+                }
+            }
+        }
+    }
+}

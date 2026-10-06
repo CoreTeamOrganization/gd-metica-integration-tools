@@ -1,0 +1,19 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "MeticaNetworkSO", menuName = "GDMonetization/Analytics/Networks/Metica")]
+    public class MeticaNetworkSO : AnalyticsNetworkSO,
+        IAnalyticsInitialization, IAnalyticsEventsService
+    {
+        private MeticaAnalyticsNetwork _network;
+        private MeticaAnalyticsNetwork Network => _network ??= new MeticaAnalyticsNetwork();
+
+        public bool IsInitialized => Network.IsInitialized;
+        public void Initialize() => Network.Initialize();
+
+        public void SendEvent(string name) => Network.SendEvent(name);
+        public void SendEvent(string name, Dictionary<string, object> parameters) => Network.SendEvent(name, parameters);
+    }
+}

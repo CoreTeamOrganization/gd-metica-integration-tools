@@ -1,0 +1,15 @@
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Metica analytics interface for the Arcade genre.
+    /// Retrieve via <c>AnalyticsManager.Game</c> using this interface as the type parameter.
+    /// </summary>
+    public interface IArcadeAnalytics : IGDMeticaAnalytics
+    {
+        /// <summary>Logs a levelStarted event when the player enters an arcade level.</summary>
+        void LevelStarted(ArcadeLevelStarted data);
+
+        /// <summary>Logs a levelFinished event when an arcade level ends (win or fail).</summary>
+        void LevelFinished(ArcadeLevelFinished data);
+    }
+}

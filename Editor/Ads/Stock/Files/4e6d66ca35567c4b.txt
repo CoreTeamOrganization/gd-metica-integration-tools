@@ -1,0 +1,30 @@
+using Monetization.Runtime.InAppPurchasing;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "InAppPurchasing", menuName = "GDMonetization/InAppsConfig")]
+    public sealed class InAppsConfiguration : ScriptableObject
+    {
+        [Header("Adjust")]
+        public bool PurchaseVerification = false;
+        [SerializeField] private string AndroidInAppToken = "mcrz4v";
+        [SerializeField] private string iOSInAppToken = "mcrz4v";
+
+        [Header("Products")]
+        public InAppProductSO[] AllProducts;
+        public string AdjustInAppToken
+        {
+            get
+            {
+                #if UNITY_ANDROID
+                    return AndroidInAppToken;
+                #elif UNITY_IOS
+                    return iOSInAppToken;
+                #else
+                    return string.Empty;
+                #endif
+            }
+        }
+    }
+}

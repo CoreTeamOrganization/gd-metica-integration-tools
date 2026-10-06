@@ -1,0 +1,53 @@
+using System;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Core
+{
+    public readonly struct LoadingStepResult
+    {
+        public BootstrapStepName StepName { get; }
+
+        public bool IsSuccess { get; }
+        public bool IsSkipped { get; }
+        public string ErrorMessage { get; }
+        public TimeSpan ExecutionTime { get; }
+
+        private LoadingStepResult(BootstrapStepName stepName, bool isSuccess, TimeSpan executionTime,
+            string errorMessage = "", bool isSkipped = false)
+        {
+            IsSuccess = isSuccess;
+            IsSkipped = isSkipped;
+            StepName = stepName;
+            ErrorMessage = errorMessage;
+            ExecutionTime = executionTime;
+        }
+
+        public static LoadingStepResult Success(BootstrapStepName stepName, TimeSpan executionTime)
+        {
+            return new LoadingStepResult(stepName: stepName, isSuccess: true,
+                executionTime: executionTime);
+        }
+
+        public static LoadingStepResult Failure(BootstrapStepName stepName, string errorMessage,
+            TimeSpan executionTime)
+        {
+            return new LoadingStepResult(stepName: stepName, isSuccess: false,
+                errorMessage: errorMessage,
+                executionTime: executionTime);
+        }
+
+        public static LoadingStepResult Skipped(BootstrapStepName stepName)
+        {
+            return new LoadingStepResult(stepName: stepName, isSuccess: true,
+                executionTime: TimeSpan.Zero, isSkipped: true);
+        }
+
+        public override string ToString()
+        {
+            if (IsSkipped)
+                return $"[SKIPPED] {StepName}";
+            return IsSuccess
+                ? $"[SUCCESS] {StepName} - Completed in {ExecutionTime.TotalMilliseconds:F2}ms"
+                : $"[FAILURE] {StepName} - {ErrorMessage} - Failed in {ExecutionTime.TotalMilliseconds:F2}ms";
+        }
+    }
+}

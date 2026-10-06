@@ -1,0 +1,12 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "SDKConfig", menuName = "GDMonetization/SDKConfig")]
+    [System.Serializable]
+    public sealed class SDKConfiguration : ScriptableObject
+    {
+        public bool AutoInitialize = true;
+        public bool UseMetica = true;
+    }
+}

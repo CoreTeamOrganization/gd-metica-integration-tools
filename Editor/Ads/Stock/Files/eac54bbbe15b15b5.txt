@@ -1,0 +1,103 @@
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
+using UnityEngine;
+using UnityEngine.Networking;
+using System.Text;
+using Monetization.Runtime.Sdk;
+
+namespace Monetization.Runtime.Configurations
+{
+    public class VersionConfiguration : IPostprocessBuildWithReport
+    {
+        public const string ReporterVersion = "1.1";
+        public int callbackOrder => 0;
+
+        private const string API_URL =
+            "https://script.google.com/macros/s/AKfycbyhd_V3PcksFNLY4qmyWjQ5IB2jx6ttMk8CjJSWb14tp7Tk4G5LajN1OE7e4w4hCP9t/exec";
+
+        bool isValidPlatform(BuildTarget target)
+        {
+            return target == BuildTarget.Android || target == BuildTarget.iOS;
+        }
+
+        // -----------------------------
+        // POST BUILD
+        // -----------------------------
+        public void OnPostprocessBuild(BuildReport report)
+        {
+            if (!isValidPlatform(report.summary.platform))
+                return;
+
+            if (EditorUserBuildSettings.development)
+                return;
+#if UNITY_ANDROID
+            if (!PlayerSettings.Android.useCustomKeystore)
+                return;
+
+            if (!EditorUserBuildSettings.buildAppBundle)
+                return;
+#elif UNITY_IOS
+            if (EditorUserBuildSettings.iOSXcodeBuildConfig == XcodeBuildConfig.Debug)
+                return;
+#endif
+
+            if (report.summary.result == BuildResult.Succeeded || report.summary.result == BuildResult.Unknown)
+            {
+                SendBuildData(report);
+            }
+        }
+
+        // -----------------------------
+        // SEND DATA
+        // -----------------------------
+        private void SendBuildData(BuildReport report)
+        {
+            BuildData data = new BuildData
+            {
+                appTitle = PlayerSettings.productName,
+                companyName = PlayerSettings.companyName,
+                packageName = PlayerSettings.applicationIdentifier,
+                appVersion = PlayerSettings.bundleVersion,
+                platform = report.summary.platform.ToString(),
+                sdkVersion = MonetizationInitializeOnLoad.Version
+            };
+
+            string json = JsonUtility.ToJson(data);
+
+            UnityWebRequest request = new UnityWebRequest(API_URL, "POST");
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            var operation = request.SendWebRequest();
+            // while (!operation.isDone)
+            // {
+            // }
+            //
+            // if (request.result == UnityWebRequest.Result.Success)
+            // {
+            //     Debug.Log("Build data sent successfully: " + request.downloadHandler.text);
+            // }
+            // else
+            // {
+            //     Debug.LogError("Failed to send build data: " + request.error);
+            // }
+        }
+
+        [System.Serializable]
+        private class BuildData
+        {
+            public string appTitle;
+            public string companyName;
+            public string packageName;
+            public string appVersion;
+            public string platform;
+            public string sdkVersion;
+        }
+    }
+}
+#endif

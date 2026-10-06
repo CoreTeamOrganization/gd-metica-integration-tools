@@ -1,0 +1,183 @@
+# Bootstrap
+
+The Bootstrap system is the SDK's initialization orchestration layer. It runs at startup, executing a configurable sequence of `LoadingStepBase` instances that set up all SDK subsystems (analytics, ads, IAP, consent, remote config, etc.) before gameplay begins.
+
+---
+
+## Folder Structure
+
+```
+Bootstrap/
+├── Core/
+│   ├── AppLoader.cs                        # Singleton orchestrator — runs all steps in sequence
+│   ├── BootstrapStepName.cs                # Enum of all step identifiers
+│   ├── DependentStep.cs                    # Abstract base for sequentially-chained child steps
+│   ├── LoadingStepBase.cs                  # Abstract base for all steps (timeout, result, async)
+│   ├── LoadingStepResult.cs                # Readonly result struct (Success / Failure / Skipped)
+│   ├── ParallelStep.cs                     # Composite step that runs child steps concurrently
+│   └── SubStepListAttribute.cs             # Marks a List<LoadingStepBase> field for custom editor rendering
+├── Events/
+│   ├── InitializationStepsCompletionEvent.cs  # Raised when entire bootstrap sequence finishes
+│   └── LoadingStepExecutedEvent.cs            # Raised after each individual step completes
+└── LoadingSteps/
+    ├── AdsSetupStep.cs                     # Initializes AdsManager
+    ├── AnalyticsSetupStep.cs               # Initializes AnalyticsManager
+    ├── AutoInitializeStep.cs               # Conditionally runs child steps (SDKConfiguration.AutoInitialize)
+    ├── ConsentInitializationStep.cs        # Async consent system initialization
+    ├── CreateAnalyticsStep.cs              # Creates AnalyticsManager component instance
+    ├── InAppPurchaseStep.cs                # Initializes GDInAppPurchaseManager
+    ├── InitialSetupStep.cs                 # Creates MonetizationMonoBehaviour, disables screen sleep
+    ├── PreferencesCheckStep.cs             # Increments and logs session count
+    ├── PrivacyPolicySetupStep.cs           # Shows privacy policy UI if not yet accepted
+    ├── RemoteConfigSetupStep.cs            # Sets remote config defaults and initializes Firebase RC
+    └── WaitStep.cs                         # Configurable delay step
+```
+
+---
+
+## Architecture
+
+| Pattern | Where Used |
+|---|---|
+| Serializable C# classes | Steps are plain `[Serializable]` classes; `AppLoader` is still a Resources-loaded ScriptableObject singleton |
+| `[SerializeReference]` | `AppLoader.steps` uses managed references — steps are serialized inline, no `.asset` files needed |
+| Reflection-based editor | The `+` button in `AppLoaderEditor` discovers all non-abstract `LoadingStepBase` subclasses via `TypeCache` at edit time |
+| Template Method | `LoadingStepBase.ExecuteAsync` wraps `PerformStepAsync` with timeout + error handling |
+| Composite | `DependentStep` (sequential) and `ParallelStep` (concurrent) compose child steps |
+| Result Object | `LoadingStepResult` (readonly struct) carries outcome without exceptions |
+| Event-Driven | `EventBus` publishes `LoadingStepExecutedEvent` and `InitializationStepsCompletionEvent` |
+
+---
+
+## Execution Flow
+
+1. `AppLoader.ExecuteAsync(CancellationToken)` iterates its configured `steps` list.
+2. For each step, `ShouldExecute()` is checked — if false, a `Skipped` result is emitted.
+3. `LoadingStepBase.ExecuteAsync` runs `PerformStepAsync` inside a linked `CancellationTokenSource` respecting `TimeoutSeconds`.
+4. A `LoadingStepExecutedEvent` is raised via `EventBus` after every step (including skipped/failed).
+5. If a step where `IsCritical == true` returns failure, the sequence halts immediately.
+6. After all steps complete (or a critical failure stops them), `InitializationStepsCompletionEvent` is raised with the overall success state.
+
+`ParallelStep` runs its child steps with `Task.WhenAll`; any critical child failure aggregates into an exception that fails the parallel step.
+
+`AutoInitializeStep` (a `DependentStep`) only runs if `SDKConfiguration.AutoInitialize` is `true`.
+
+---
+
+## Core Classes
+
+| Class | Type | Responsibility |
+|---|---|---|
+| `AppLoader` | ScriptableObject (singleton) | Loads from Resources, iterates and executes all configured steps |
+| `LoadingStepBase` | Abstract `[Serializable]` class | Defines `ExecuteAsync` contract with timeout, timing, and error wrapping |
+| `LoadingStepResult` | Readonly struct | Immutable outcome: Success / Failure / Skipped, with `ExecutionTime` and `ErrorMessage` |
+| `BootstrapStepName` | Enum | Identifies each step; values 1–10 are concrete steps, 100–101 are composite flow steps |
+| `DependentStep` | Abstract `[Serializable]` class | Base for steps that own a sequential list of child steps |
+| `ParallelStep` | `[Serializable]` class | Runs all child steps concurrently via `Task.WhenAll` |
+| `SubStepListAttribute` | `PropertyAttribute` | Applied to `List<LoadingStepBase>` fields — tells the editor to render them with the `+` button UI |
+
+---
+
+## Virtual Properties on `LoadingStepBase`
+
+Override any of these in a subclass to customise behaviour.
+
+| Property | Default | Description |
+|---|---|---|
+| `StepName` | `BootstrapStepName.None` | Identifies this step in events and logs |
+| `ShouldExecute()` | `true` | Return `false` to skip the step at runtime without failure |
+| `SubStepCount` | `0` | Number of child steps reported for UI progress tracking |
+| `IsCritical` | `false` | If `true`, a failure halts the entire bootstrap sequence |
+| `TimeoutSeconds` | `0` | Per-step timeout; `0` means no timeout |
+| `IsFixed` | `false` | If `true`, the step cannot be removed or reordered in the editor |
+
+---
+
+## Events
+
+| Event | When Raised | Payload |
+|---|---|---|
+| `LoadingStepExecutedEvent` | After every step (success, failure, or skipped) | `LoadingStepResult` (step name, outcome, execution time) |
+| `InitializationStepsCompletionEvent` | After entire sequence finishes or is halted | `IsSuccess`, `ErrorMessage` |
+
+---
+
+## Loading Steps
+
+| Class | `BootstrapStepName` | Async | Fixed | What It Does |
+|---|---|---|---|---|
+| `PreferencesCheckStep` | `CheckPreferences` | No | No | Increments `MonetizationPreferences.SessionCount` |
+| `CreateAnalyticsStep` | `CreateAnalyticsComponent` | No | No | Calls `AnalyticsManager.Create()` |
+| `AutoInitializeStep` | `AutomaticallyInitialize` | Yes | No | Runs child steps only if `SDKConfiguration.AutoInitialize` is `true` |
+| `InitialSetupStep` | `SetupInitialComponents` | No | No | Creates `MonetizationMonoBehaviour` GameObject, sets `Screen.sleepTimeout = NeverSleep` |
+| `RemoteConfigSetupStep` | `SetupRemoteConfig` | No (callback) | No | Sets RC defaults, hooks fetch callback, initializes `RemoteConfigManager` via Firebase |
+| `PrivacyPolicySetupStep` | `HandlePrivacyPolicy` | Yes | No | Shows `PrivacyPolicyPanel` prefab if policy not yet accepted; awaits user action |
+| `InAppPurchaseStep` | `SetupInAppPurchase` | No | No | Calls `GDInAppPurchaseManager.Initialize()` |
+| `ConsentInitializationStep` | `InitializeConsent` | Yes | No | Awaits `ConsentManager.InitializeAsync()` |
+| `AdsSetupStep` | `SetupAdvertisement` | No | **Yes** | Calls `AdsManager.Initialize()` |
+| `AnalyticsSetupStep` | `SetupAnalytics` | No | No | Calls `AnalyticsManager.Initialize()` |
+| `WaitStep` | _(utility)_ | Yes | No | `Task.Delay(delay * 1000)` — configurable pause |
+
+---
+
+## Adding a New Step
+
+1. Create a new `[Serializable]` class that extends `LoadingStepBase` (or `DependentStep` / `ParallelStep` for composite steps).
+2. Override `PerformStepAsync` with your logic.
+3. Override any virtual properties you need (`StepName`, `IsCritical`, `IsFixed`, etc.).
+4. Add a value to `BootstrapStepName` for your step (optional but recommended).
+5. In the Unity Inspector, open the `AppLoader` asset and click **+** — your new type will appear in the menu automatically.
+
+No `.asset` file creation required. Steps are stored inline in the `AppLoader` asset via `[SerializeReference]`.
+
+### Making a Step Fixed
+
+Override `IsFixed` to return `true` to prevent the step from being removed or reordered in the editor:
+
+```csharp
+[Serializable]
+public class MyRequiredStep : LoadingStepBase
+{
+    public override bool IsFixed => true;
+    // ...
+}
+```
+
+### Composite Steps
+
+**`DependentStep`** — child steps run sequentially. Extend it and override `PerformStepAsync` to iterate `dependentSteps`.
+
+**`ParallelStep`** — add child steps via its own sub-step list; they run concurrently with `Task.WhenAll`.
+
+Both expose a sub-step list in the editor with the same `+` / remove / reorder UI as the top-level list.
+
+---
+
+## Editor
+
+The custom `AppLoaderEditor` (UIElements-based) provides:
+
+- **Foldout list** (`GDFoldoutList`) with ↑ ↓ reorder and ✖ remove per step.
+- **+ button** — opens a `GenericMenu` of all discovered `LoadingStepBase` subclasses. Types already present in the list are greyed out (no duplicates per list).
+- **Fixed steps** — steps with `IsFixed == true` have no ↑ ↓ or ✖ buttons.
+- **Inline field rendering** — each step's serialized fields are rendered inside the foldout via `PropertyField` bound to `SerializedObject`.
+- **Sub-step lists** — `DependentStep` / `ParallelStep` sub-step lists render with the same UI, driven by `[SubStepList]` attribute detection via reflection.
+
+---
+
+## Key Dependencies
+
+| System | Used By |
+|---|---|
+| `EventBus` | `AppLoader`, `ParallelStep`, `AutoInitializeStep` |
+| `AdsManager` | `AdsSetupStep` |
+| `AnalyticsManager` | `AnalyticsSetupStep`, `CreateAnalyticsStep`, `RemoteConfigSetupStep` |
+| `ConsentManager` | `ConsentInitializationStep`, `PrivacyPolicySetupStep` |
+| `GDInAppPurchaseManager` | `InAppPurchaseStep` |
+| `RemoteConfigManager` | `RemoteConfigSetupStep` |
+| `FirebaseAnalyticsNetwork` | `RemoteConfigSetupStep` |
+| `SDKConfiguration` | `AutoInitializeStep` |
+| `RemoteConfiguration` | `RemoteConfigSetupStep` |
+| `PrivacyConfiguration` | `PrivacyPolicySetupStep` |
+| `MonetizationPreferences` | `PreferencesCheckStep`, `PrivacyPolicySetupStep` |
+| `MonetizationMonoBehaviour` | `InitialSetupStep` |

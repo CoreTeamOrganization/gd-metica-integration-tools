@@ -1,0 +1,7 @@
+namespace Monetization.Runtime.Utilities
+{
+    public interface ITickable
+    {
+        void Tick();
+    }
+}

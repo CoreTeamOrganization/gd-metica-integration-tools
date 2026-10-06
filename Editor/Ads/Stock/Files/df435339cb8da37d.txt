@@ -1,0 +1,102 @@
+using System;
+using AdjustSdk;
+using Monetization.Runtime.Logger;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public class AdjustVerifyPlayStorePurchase : IIAPVerifier
+    {
+        //private const int PURCHASE_VERIFICATION_CLOSED_CODE = 20011;
+
+        public void Verify(InAppRevenueInfo info, Action<IAPVerifyResult> callback)
+        {
+#if UNITY_EDITOR
+            callback?.Invoke(new IAPVerifyResult(true));
+            return;
+#endif
+
+#if UNITY_ANDROID
+            AdjustEvent adjustEvent = new AdjustEvent(info.AdjustToken);
+            adjustEvent.SetRevenue(info.Price, info.Currency);
+            adjustEvent.ProductId = info.ItemId; // Android & iOS
+            adjustEvent.PurchaseToken = info.TransactionId; // Android only
+
+            Adjust.VerifyAndTrackPlayStorePurchase(adjustEvent,
+                a =>
+                {
+                    bool isSuccess = (a.VerificationStatus.Equals("success", StringComparison.OrdinalIgnoreCase))
+                                     || (a.VerificationStatus.Equals("duplicate", StringComparison.OrdinalIgnoreCase)
+                                         && info.Type == ProductType.NonConsumable);
+
+                    Message.Log(Tag.InAppPurchasing,
+                        $"Adjust.VerifyPlayStorePurchase = ItemId : {info.ItemId}, ItemType : {info.Type}, VerificationStatus : {a.VerificationStatus}, Message : {a.Message}, Code : {a.Code}, Success : {isSuccess}");
+                    if (isSuccess)
+                    {
+                        callback?.Invoke(new IAPVerifyResult(true));
+                        return;
+                    }
+
+                    // if (a.Code == PURCHASE_VERIFICATION_CLOSED_CODE)
+                    // {
+                    //     callback?.Invoke(new IAPVerifyResult(true));
+                    //     return;
+                    // }
+
+                    callback?.Invoke(new IAPVerifyResult(false));
+
+                    // GDNetworkManager.Get<VerificationStatus>(URIContainer.PURCHASE_VALIDATION, result =>
+                    // {
+                    //     if (!result.IsSuccessful())
+                    //     {
+                    //         callback?.Invoke(new IAPVerifyResult(false));
+                    //         return;
+                    //     }
+                    //
+                    //     IAPVerifyResult iapVerifyResult = result.ResolvedObject.data.IsVerificationActive()
+                    //         ? new IAPVerifyResult(false)
+                    //         : new IAPVerifyResult(true);
+                    //
+                    //     callback?.Invoke(iapVerifyResult);
+                    // });
+                });
+#endif
+
+// #if UNITY_IOS
+//             Adjust.VerifyAppStorePurchase(
+//                 new AdjustAppStorePurchase(product.transactionID, product.definition.storeSpecificId),
+//                 a =>
+//                 {
+//                     bool isSuccess = (a.VerificationStatus == "success");
+//
+//                     if (isSuccess)
+//                     {
+//                         callback?.Invoke(new IAPVerifyResult(true));
+//                         return;
+//                     }
+//
+//                     if (a.Code == PURCHASE_VERIFICATION_CLOSED_CODE)
+//                     {
+//                         callback?.Invoke(new IAPVerifyResult(true));
+//                         return;
+//                     }
+//
+//                     GDNetworkManager.Get<VerificationStatus>(URIContainer.PURCHASE_VALIDATION, result =>
+//                     {
+//                         if (!result.IsSuccessful())
+//                         {
+//                             callback?.Invoke(new IAPVerifyResult(false));
+//                             return;
+//                         }
+//
+//                         IAPVerifyResult iapVerifyResult = result.ResolvedObject.data.IsVerificationActive()
+//                             ? new IAPVerifyResult(false)
+//                             : new IAPVerifyResult(true);
+//
+//                         callback?.Invoke(iapVerifyResult);
+//                     });
+//                 });
+// #endif
+        }
+    }
+}

@@ -1,0 +1,20 @@
+using UnityEditor;
+using Monetization.Runtime.Configurations;
+
+namespace GDMonetization.Editor
+{
+    [CustomEditor(typeof(SDKConfiguration))]
+    class SDKConfigurationEditor : UnityEditor.Editor
+    {
+        public override void OnInspectorGUI()
+        {
+            EditorGUI.BeginChangeCheck();
+            DrawDefaultInspector();
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+                MeticaDefineSymbolManager.Sync();
+            }
+        }
+    }
+}

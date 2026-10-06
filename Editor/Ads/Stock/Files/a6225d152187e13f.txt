@@ -1,0 +1,21 @@
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Metica analytics interface for the Simulation (Makeover) genre.
+    /// Retrieve via <c>AnalyticsManager.Game</c> using this interface as the type parameter.
+    /// </summary>
+    public interface ISimulationMakeoverAnalytics : IGDMeticaAnalytics
+    {
+        /// <summary>Logs a levelStarted event when the player enters a makeover level.</summary>
+        void LevelStarted(SimulationMakeoverLevelStarted data);
+
+        /// <summary>Logs a levelFinished event when a makeover level ends (win or fail).</summary>
+        void LevelFinished(SimulationMakeoverLevelFinished data);
+
+        /// <summary>Logs an earnAsset event when the player receives an in-game asset.</summary>
+        void EarnAsset(SimulationMakeoverEarnAsset data);
+
+        /// <summary>Logs a spendAsset event when the player spends an in-game asset.</summary>
+        void SpendAsset(SimulationMakeoverSpendAsset data);
+    }
+}

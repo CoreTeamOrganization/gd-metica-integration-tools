@@ -1,0 +1,65 @@
+using System;
+using System.Threading.Tasks;
+using Metica;
+using Metica.Ads;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal static class MeticaInitializer
+    {
+        private static Task<MeticaInitResponse> _initTask;
+
+        public static bool IsInitialized => MeticaSdk.ApiKey != null;
+        public static string UserId { get; } = SystemInfo.deviceUniqueIdentifier;
+
+        /// <summary>
+        /// Fires once when Metica SDK (ads + analytics) initialization completes.
+        /// </summary>
+        public static event Action OnInitialized;
+
+        /// <summary>
+        /// Initializes Metica analytics only (synchronous). Called from AnalyticsManager.Create()
+        /// before consent. AdNetworkMetica later upgrades to ads+analytics via StartInitialize.
+        /// </summary>
+        public static void InitializeAnalytics()
+        {
+            var meticaSO = Resources.Load<MeticaConfiguration>(MonetizationConfigurationsPath.Metica);
+            if (!meticaSO)
+                throw new InvalidOperationException("MeticaInitializer: MeticaConfiguration asset not found. Ensure it is placed under a Resources folder.");
+
+            MeticaSdk.SetLogEnabled(true);
+            var config = new MeticaInitConfig(meticaSO.ApiKey, meticaSO.AppID, UserId);
+            MeticaSdk.InitializeAnalytics(config);
+            Message.Log(Tag.Metica, "MeticaInitializer: Initializing Metica Analytics");
+        }
+
+        /// <summary>
+        /// Upgrades to full Metica SDK (analytics + ads). Called only by AdNetworkMetica with mediationInfo.
+        /// </summary>
+        public static async Task<MeticaInitResponse> InitializeAds(MeticaMediationInfo mediationInfo)
+        {
+            if (_initTask != null) return await _initTask;
+
+            var meticaSO = Resources.Load<MeticaConfiguration>(MonetizationConfigurationsPath.Metica);
+            MeticaSdk.SetLogEnabled(true);
+            var config = new MeticaInitConfig(meticaSO.ApiKey, meticaSO.AppID, UserId);
+
+            Message.Log(Tag.Metica, "MeticaInitializer: Initializing Metica SDK with mediation (Ads)");
+
+            _initTask = MeticaSdk.InitializeAsync(config, mediationInfo);
+
+            var result = await _initTask;
+            OnInitialized?.Invoke();
+            return result;
+        }
+
+        public static void Reset()
+        {
+            _initTask = null;
+        }
+    }
+}

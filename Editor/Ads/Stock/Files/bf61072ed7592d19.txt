@@ -1,0 +1,86 @@
+using AdjustSdk;
+using Io.AppMetrica;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class AdjustAnalyticsNetwork : IAnalyticsInitialization, IAnalyticsAdRevenueService
+    {
+        private static bool CanAdjustStartManually { get; set; }
+        public bool IsInitialized { get; private set; }
+
+        internal static string AppToken { get; private set; } = string.Empty;
+        internal static string AdId { get; private set; } = string.Empty;
+
+        public void Initialize() => Initialize(null);
+
+        public static void SetCanAdjustStartManually(Adjust adjust) => CanAdjustStartManually = adjust.startManually;
+
+        public void Initialize(string meticaUserId)
+        {
+            Message.Log(Logger.Tag.Adjust, string.IsNullOrEmpty(meticaUserId)
+                ? "Initializing Adjust (no Metica userId)"
+                : $"Initializing Adjust with Metica userId: {meticaUserId}");
+
+            var adjustSO = Resources.Load<AdjustConfiguration>(MonetizationConfigurationsPath.Adjust);
+            AppToken = adjustSO.AppToken;
+
+            AdjustConfig adjustConfig = new AdjustConfig(adjustSO.AppToken, adjustSO.Environment)
+            {
+                LogLevel = adjustSO.LogLevel,
+            };
+
+            if (!string.IsNullOrEmpty(meticaUserId))
+            {
+                adjustConfig.ExternalDeviceId = meticaUserId;
+                Adjust.AddGlobalCallbackParameter("muid", meticaUserId);
+            }
+
+            adjustConfig.AttributionChangedDelegate += (attribution =>
+            {
+                AppMetrica.ReportExternalAttribution(ExternalAttributions.Adjust(attribution));
+            });
+
+            Adjust.InitSdk(adjustConfig);
+            ConsentManager.AddAndUpdateConsentService(new AdjustConsentSettings());
+            IsInitialized = true;
+
+            Adjust.GetAdid(adid =>
+            {
+                if (!string.IsNullOrEmpty(adid))
+                    AdId = adid;
+            });
+        }
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (IsInitialized)
+            {
+                string adSource = GetAdSource(adRevenueInfo.Platform);
+
+                AdjustAdRevenue adjustAdRevenue = new AdjustAdRevenue(adSource);
+                adjustAdRevenue.SetRevenue(adRevenueInfo.Revenue, adRevenueInfo.Currency);
+                adjustAdRevenue.AdRevenuePlacement = adRevenueInfo.AdPlacement;
+                adjustAdRevenue.AdRevenueNetwork = adRevenueInfo.AdSource;
+                adjustAdRevenue.AdRevenueUnit = adRevenueInfo.AdUnitName;
+                Adjust.TrackAdRevenue(adjustAdRevenue);
+            }
+        }
+
+        private string GetAdSource(string adPlatform)
+        {
+            return adPlatform switch
+            {
+                AdPlatforms.APPLOVIN => "applovin_max_sdk",
+                AdPlatforms.ADMOB => "admob_sdk",
+                AdPlatforms.METICA => "applovin_max_sdk",
+                _ => null
+            };
+        }
+    }
+}

@@ -1,0 +1,22 @@
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Core
+{
+    public enum BootstrapStepName
+    {
+        None = 0 ,
+
+        CheckPreferences = 1,
+        CreateAnalyticsComponent = 2,
+        AutomaticallyInitialize = 3,
+        SetupInitialComponents = 4,
+        SetupRemoteConfig = 5,
+        HandlePrivacyPolicy = 6,
+        SetupInAppPurchase = 7,
+        InitializeConsent = 8,
+        SetupAdvertisement = 9,
+        SetupAnalytics = 10,
+
+        //Flow Steps starts from 100
+        Dependent = 100,
+        Parallel = 101,
+    }
+}

@@ -1,0 +1,20 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.InAppPurchasing;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class InAppPurchaseStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.SetupInAppPurchase;
+        public override bool IsFixed => true;
+        protected override Task PerformStepAsync(CancellationToken cToken)
+        {
+            GDInAppPurchaseManager.Initialize();
+            return Task.CompletedTask;
+        }
+    }
+}

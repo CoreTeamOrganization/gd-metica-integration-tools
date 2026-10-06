@@ -1,0 +1,23 @@
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.InAppPurchasing;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "AppMetricaNetworkSO", menuName = "GDMonetization/Analytics/Networks/AppMetrica")]
+    public class AppMetricaNetworkSO : AnalyticsNetworkSO, IAnalyticsEventsService, IAnalyticsAdRevenueService, IMarketingServices
+    {
+        private void Reset() { EnableInitialization = true; EnableEvents = true; EnableRevenue = true; EnableMarketing = true; }
+
+        private AppMetricaAnalyticsNetwork _network;
+        private AppMetricaAnalyticsNetwork Network => _network ??= new AppMetricaAnalyticsNetwork();
+
+        public void SendEvent(string name) => Network.SendEvent(name);
+        public void SendEvent(string name, Dictionary<string, object> parameters) => Network.SendEvent(name, parameters);
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo) => Network.ReportAdRevenue(adRevenueInfo);
+
+        public void SendInAppPurchaseEvent(InAppRevenueInfo info) => Network.SendInAppPurchaseEvent(info);
+    }
+}

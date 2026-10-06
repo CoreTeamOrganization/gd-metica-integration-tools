@@ -1,0 +1,66 @@
+using System;
+using System.Collections.Generic;
+using Io.AppMetrica;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+using Newtonsoft.Json;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public class PrivacyPolicyPanel : MonoBehaviour
+    {
+        [SerializeField] Canvas m_Canvas;
+
+        private static event Action _onPolicyAcceptedCallback;
+        public static event Action OnPolicyAcceptedEvent
+        {
+            add
+            {
+                if (MonetizationPreferences.PrivacyPolicy.Get())
+                {
+                    value?.Invoke();
+                    return;
+                }
+
+                _onPolicyAcceptedCallback += value;
+            }
+            remove => _onPolicyAcceptedCallback -= value;
+        }
+
+        private void Start()
+        {
+            new GameObject("MonetizationDebugger", typeof(MonetizationDebugger));
+
+            Dictionary<string, object> parameters = new Dictionary<string, object>()
+            {
+                { "PrivacyPolicy", "Show" }
+            };
+            AnalyticsManager.SendEvent("Monetization",parameters);
+        }
+
+        public void Accept()
+        {
+            MonetizationPreferences.PrivacyPolicy.Set(true);
+            _onPolicyAcceptedCallback?.Invoke();
+            m_Canvas.enabled = false;
+
+            Dictionary<string, object> parameters = new Dictionary<string, object>()
+            {
+                { "PrivacyPolicy", "Accept" }
+            };
+            AnalyticsManager.SendEvent("Monetization",parameters);
+        }
+
+        public void VisitLink()
+        {
+            MonetizationInitializeOnLoad.VisitPrivacyPolicy();
+        }
+
+        private void OnDestroy()
+        {
+            _onPolicyAcceptedCallback = null;
+        }
+    }
+}

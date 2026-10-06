@@ -1,0 +1,13 @@
+using System;
+using Monetization.Runtime.Utilities;
+
+public static partial class MonetizationServices
+{
+    public static class Dispatcher
+    {
+        public static void Add(Action action)
+        {
+            ThreadDispatcher.Enqueue(action);
+        }
+    }
+}

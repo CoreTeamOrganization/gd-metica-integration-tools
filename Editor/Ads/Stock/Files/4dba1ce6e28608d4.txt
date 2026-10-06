@@ -1,0 +1,24 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class InitialSetupStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.SetupInitialComponents;
+        public override bool IsFixed => true;
+        protected override Task PerformStepAsync(CancellationToken cToken)
+        {
+            Message.Log(Tag.SDK, $"Initializing GDMonetization v{MonetizationInitializeOnLoad.Version}");
+            new GameObject("MonetizationObject").AddComponent<MonetizationMonoBehaviour>();
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            return Task.CompletedTask;
+        }
+    }
+}

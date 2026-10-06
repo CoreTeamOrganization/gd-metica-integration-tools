@@ -1,0 +1,30 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Logger
+{
+    internal sealed class MonetizationLoggerEditor : ILoggerService
+    {
+        public void Log(Tag tag, string message)
+        {
+            Debug.Log($"[{tag}] {message}");
+        }
+
+        public void LogWarning(Tag tag, string message)
+        {
+            Debug.LogWarning($"[{tag}] {message}");
+        }
+
+        public void LogError(Tag tag, string message)
+        {
+            Debug.LogError($"[{tag}] {message}");
+        }
+
+        public void LogException(Tag tag, Exception e)
+        {
+            LogError(tag, $"Exception > Message : {e.Message}, StackTrace : {e.StackTrace}");
+        }
+    }
+}

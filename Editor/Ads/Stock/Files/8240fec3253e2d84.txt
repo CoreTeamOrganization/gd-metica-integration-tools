@@ -1,0 +1,69 @@
+using System;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Sdk;
+using UnityEngine.Purchasing;
+using UnityEngine;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public static class GDInAppPurchaseManager
+    {
+        private static event Action<PurchaseInfo> OnProductPurchasedEvent;
+
+        private static Action _onInitializedCallback;
+
+        public static event Action OnInitializedEvent
+        {
+            add
+            {
+                if (IAPNetwork.IsInitialized)
+                {
+                    value?.Invoke();
+                    return;
+                }
+
+                _onInitializedCallback += value;
+            }
+            remove => _onInitializedCallback -= value;
+        }
+
+        public static void Initialize()
+        {
+            var configuration = Resources.Load<InAppsConfiguration>(MonetizationConfigurationsPath.InApps);
+            IAPNetwork.Initialize(_onInitializedCallback, configuration);
+            IAPNetwork.OnProductPurchasedEvent += OnProductPurchased;
+        }
+
+        private static void OnProductPurchased(PurchaseInfo obj)
+        {
+            OnProductPurchasedEvent?.Invoke(obj);
+        }
+
+        private static readonly IIAPNetwork IAPNetwork = new UnityIAPNetwork(new AdjustPurchaseVerification());
+
+        public static bool IsInitialized => IAPNetwork.IsInitialized;
+
+        public static void Purchase(string productId)
+        {
+            AdsManager.ExtendAppOpenTime();
+            IAPNetwork.Purchase(productId);
+        }
+
+        public static void RestorePurchases()
+        {
+            AdsManager.ExtendAppOpenTime();
+            IAPNetwork.RestorePurchases();
+        }
+
+        public static Product GetProductDetail(string productId)
+        {
+            return IAPNetwork.GetProductDetail(productId);
+        }
+
+        // public static void RestorePurchases(Action<ProductRestoreResult> callback)
+        // {
+        //     IAPNetwork.RestorePurchases(callback);
+        // }
+    }
+}

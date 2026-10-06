@@ -1,0 +1,163 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using Io.AppMetrica;
+using Metica;
+using Monetization.Runtime.Ads;
+using Newtonsoft.Json;
+using UnityEngine;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.InAppPurchasing;
+using Monetization.Runtime.Sdk;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class AppMetricaAnalyticsNetwork : IAnalyticsEventsService, IAnalyticsAdRevenueService,
+        IMarketingServices
+    {
+        public bool IsInitialized { get; private set; }
+        private readonly StringBuilder stringBuilder = new StringBuilder();
+
+        public AppMetricaAnalyticsNetwork()
+        {
+            var config = Resources.Load<AppMetricaConfiguration>(MonetizationConfigurationsPath.AppMetrica);
+            AppMetrica.Activate(new AppMetricaConfig(config.ApiKey)
+            {
+                SessionsAutoTrackingEnabled = config.SessionsAutoTracking,
+                NativeCrashReporting = config.NativeCrashReporting,
+                CrashReporting = config.CrashReporting,
+                SessionTimeout = config.SessionTimeout,
+                Logs = config.Logs,
+                FirstActivationAsUpdate = false
+            });
+
+            IsInitialized = true;
+        }
+
+        private bool IsFirstLaunch()
+        {
+            return MonetizationPreferences.SessionCount.Get().Equals(1);
+        }
+
+        public void SendEvent(string name)
+        {
+            if (IsInitialized)
+            {
+                AppMetrica.ReportEvent(name);
+            }
+        }
+
+        public void SendEvent(string name, Dictionary<string, object> parameters)
+        {
+            if (IsInitialized)
+            {
+                AppMetrica.ReportEvent(name, JsonConvert.SerializeObject(parameters));
+            }
+        }
+
+        [Obsolete("Use SendEvent instead", true)]
+        public void SendEvent(string name, params string[] parameters)
+        {
+            if (IsInitialized)
+            {
+                AppMetrica.ReportEvent(name, GetJsonFromParams(parameters));
+            }
+        }
+
+        [Obsolete("Use SendEvent instead", true)]
+        public void SendEvent(string name, string json)
+        {
+            if (IsInitialized)
+            {
+                AppMetrica.ReportEvent(name, json);
+            }
+        }
+
+        string GetJsonFromParams(params string[] data)
+        {
+            stringBuilder.Clear();
+            int dataLength = data.Length;
+            for (int i = 0; i < dataLength; i++)
+            {
+                if (i == dataLength - 1)
+                {
+                    stringBuilder.Append($"\"{data[i]}\"");
+                    break;
+                }
+
+                stringBuilder.Append($"{{\"{data[i]}\":");
+            }
+
+            stringBuilder.Append('}', data.Length - 1);
+            return stringBuilder.ToString();
+        }
+
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            var payload = new Dictionary<string, string>()
+            {
+                { "SDK_Version", MonetizationInitializeOnLoad.Version },
+                { "Ad_Platform", adRevenueInfo.Platform }
+            };
+
+            if (adRevenueInfo.RevenuePayload != null)
+            {
+                foreach (var payloadItem in adRevenueInfo.RevenuePayload)
+                {
+                    payload.Add(payloadItem.Key, payloadItem.Value.ToString());
+                }
+            }
+
+            AdRevenue rev = new AdRevenue(adRevenueInfo.Revenue, adRevenueInfo.Currency)
+            {
+                AdNetwork = adRevenueInfo.AdSource,
+                AdUnitId = adRevenueInfo.AdUnitName,
+                AdPlacementName = adRevenueInfo.AdPlacement,
+                AdType = GetAdType(adRevenueInfo.AdFormat),
+                Payload = payload
+            };
+
+
+            AppMetrica.ReportAdRevenue(rev);
+        }
+
+        static AdType GetAdType(AdFormat format)
+        {
+            switch (format)
+            {
+                case AdFormat.CollapsibleBanner: return AdType.Banner;
+                case AdFormat.Banner: return AdType.Banner;
+                case AdFormat.Interstitial: return AdType.Interstitial;
+                case AdFormat.Rewarded: return AdType.Rewarded;
+                case AdFormat.AppOpen: return AdType.Other;
+                case AdFormat.MRec: return AdType.Mrec;
+                default: return AdType.Other;
+            }
+        }
+        public void SendInAppPurchaseEvent(InAppRevenueInfo info)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+            // Revenue.PriceMicros stays PER-UNIT here — AppMetrica's own SDK computes
+            // Revenue = PriceMicros * Quantity internally (see Revenue.Quantity's doc comment).
+            // Pre-multiplying price here as well would double-count quantity.
+            long price = Convert.ToInt64(info.Price * 1000000f);
+            Revenue revenue = new Revenue(price, info.Currency)
+            {
+                ProductID = info.ItemId,
+                Quantity = info.Quantity
+            };
+
+            AppMetrica.ReportRevenue(revenue);
+        }
+    }
+}

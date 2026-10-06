@@ -1,0 +1,16 @@
+using System;
+using System.Threading.Tasks;
+
+namespace Monetization.Runtime.Ads
+{
+    public interface IAdNetworkService
+    {
+        [Obsolete("Use InitializeAsync instead")]
+        void Initialize(string appID, Action onInitialized);
+    }
+
+    public interface IAsyncAdNetworkService
+    {
+        Task InitializeAsync(string appID, Action onInitialized);
+    }
+}

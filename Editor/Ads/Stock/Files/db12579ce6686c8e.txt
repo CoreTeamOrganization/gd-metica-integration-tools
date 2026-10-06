@@ -1,0 +1,77 @@
+using System.Collections.Generic;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using UnityEditor;
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "SDKConfig", menuName = "GDMonetization/SDKConfig")]
+    [System.Serializable]
+    public sealed class SDKConfiguration : ScriptableObject
+    {
+        public bool AutoInitialize = true;
+        public bool UseMeticaForAds = true;
+        public bool UseMeticaForAnalytics = true;
+
+        /// <summary>
+        /// Assign the genre ScriptableObject asset for your game.
+        /// Only this SO will be initialized — no folder scanning.
+        /// </summary>
+        public AnalyticsGenreSO GenreSO;
+
+        /// <summary>
+        /// Analytics networks active at runtime. Each SO is inspected for the interfaces it implements
+        /// (IAnalyticsInitialization, IAnalyticsEventsService, IAnalyticsAdRevenueService, IMarketingServices)
+        /// and registered into the correct lists automatically.
+        /// Add or remove networks here without changing any code.
+        /// </summary>
+        public List<AnalyticsNetworkSO> AnalyticsNetworks;
+
+#if  UNITY_EDITOR
+        private void OnValidate()
+        {
+            if (AnalyticsNetworks == null || AnalyticsNetworks.Count == 0) return;
+
+            var meticaNetwork = AnalyticsNetworks.Find(network => network is MeticaNetworkSO);
+            switch (UseMeticaForAnalytics)
+            {
+                case true when !meticaNetwork:
+                {
+                    var meticaNetworkScriptable = Resources.Load<MeticaNetworkSO>($"{MonetizationConfigurationsPath.AnalyticNetworks}/MeticaNetworkSO");
+                    if (!meticaNetworkScriptable)
+                    {
+                        if (EditorUtility.DisplayDialog(
+                            "Monetization SDK",
+                            "Metica network scriptable not found.\nDo you want to create one?",
+                            "Yes",
+                            "No"))
+                        {
+                            meticaNetworkScriptable = CreateInstance<MeticaNetworkSO>();
+
+                            meticaNetworkScriptable.EnableInitialization = true;
+                            meticaNetworkScriptable.EnableEvents = true;
+
+                            AssetDatabase.CreateAsset(meticaNetworkScriptable,"Assets/GDMonetization/Runtime/Resources/Configurations/Analytics Networks/MeticaNetworkSO.asset");
+                            AssetDatabase.SaveAssets();
+                        }
+                        else
+                        {
+                            UseMeticaForAnalytics = false;
+                        }
+                    }
+                    AnalyticsNetworks.Add(meticaNetworkScriptable);
+
+                    Selection.activeObject = meticaNetworkScriptable;
+                    EditorGUIUtility.PingObject(meticaNetworkScriptable);
+                    break;
+                }
+                case false when meticaNetwork:
+                    AnalyticsNetworks.Remove(meticaNetwork);
+                    break;
+            }
+        }
+#endif
+    }
+}

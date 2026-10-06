@@ -1,0 +1,62 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using AdjustSdk;
+using Monetization.Runtime.Analytics;
+using Newtonsoft.Json;
+
+public static partial class MonetizationServices
+{
+    public static class Analytics
+    {
+        public static void SendEvent(string eventName)
+        {
+            AnalyticsManager.SendEvent(eventName);
+        }
+
+        public static void SendEvent(string eventName, Dictionary<string, object> parameters)
+        {
+            AnalyticsManager.SendEvent(eventName, parameters);
+        }
+
+        [Obsolete("Use SendEvent instead", false)]
+        public static void SendAppMetricaEvent(string eventName, params string[] parameters)
+        {
+            if (parameters.Length > 1)
+            {
+                var dictionary =
+                    JsonConvert.DeserializeObject<Dictionary<string, object>>(GetJsonFromParams(parameters));
+                AnalyticsManager.SendEvent(eventName, dictionary);
+            }
+            else
+            {
+                var dictionary = new Dictionary<string, object>()
+                {
+                    { parameters[0], "" }
+                };
+                AnalyticsManager.SendEvent(eventName, dictionary);
+            }
+        }
+
+        static StringBuilder stringBuilder = new StringBuilder();
+
+        static string GetJsonFromParams(params string[] data)
+        {
+            stringBuilder.Clear();
+            int dataLength = data.Length;
+            for (int i = 0; i < dataLength; i++)
+            {
+                if (i == dataLength - 1)
+                {
+                    stringBuilder.Append($"\"{data[i]}\"");
+                    break;
+                }
+
+                stringBuilder.Append($"{{\"{data[i]}\":");
+            }
+
+            stringBuilder.Append('}', data.Length - 1);
+            return stringBuilder.ToString();
+        }
+    }
+}

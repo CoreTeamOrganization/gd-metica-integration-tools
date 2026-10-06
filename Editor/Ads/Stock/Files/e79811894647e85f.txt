@@ -1,0 +1,26 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Configurations;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class MRecAdUnit : AdUnit
+    {
+        protected bool isLoaded;
+        protected AdUnitsConfiguration.BannerInfo bannerInfo;
+        public override AdFormat AdType => AdFormat.MRec;
+
+        public void SetMRecPosition(AdUnitsConfiguration.BannerInfo bannerInfo)
+        {
+            this.bannerInfo = bannerInfo;
+        }
+
+        public abstract bool HasMRec();
+        public abstract void ShowMRec();
+        public abstract void HideMRec();
+        public abstract void LoadMRec();
+        public abstract void DestroyMRec();
+    }
+}

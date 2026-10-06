@@ -1,0 +1,126 @@
+using System;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Internet;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+public class TestAds : MonoBehaviour
+{
+    [SerializeField] Text RewardCounter;
+    [SerializeField] Dropdown BannerPositionDropdown;
+    [SerializeField] Dropdown MrecPositionDropdown;
+    int rewardCount;
+
+    void Start()
+    {
+        UpdateBannerPositionDropdownOptions();
+        UpdateMrecPositionDropdownOptions();
+    }
+    public void ShowInterstitial()
+    {
+        AdsManager.ShowInterstitial("test_ads");
+    }
+
+    public void ShowRewarded()
+    {
+        AdsManager.ShowRewarded("TestAds_Count", () =>
+        {
+            rewardCount++;
+            RewardCounter.text = "Reward Count : " + rewardCount.ToString();
+        });
+    }
+
+    public void ShowAppOpen()
+    {
+        AdsManager.ShowAppOpen();
+    }
+
+    public void BannerShow()
+    {
+        AdsManager.ShowBanner();
+    }
+
+    public void BannerHide()
+    {
+        AdsManager.HideBanner();
+    }
+
+    public void BannerDestroy()
+    {
+        AdsManager.DestroyBanner();
+    }
+
+    public void MrecShow()
+    {
+        AdsManager.ShowMRec();
+    }
+
+    public void MrecHide()
+    {
+        AdsManager.HideMRec();
+    }
+
+    public void MrecDestroy()
+    {
+        AdsManager.DestroyMRec();
+    }
+
+    public void ShowPrivacyPolicy()
+    {
+        //GDMonetizationObject.
+    }
+
+    public void ReloadScene()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public void ShowIfNoInternetAvailable()
+    {
+        InternetPanelManager.ShowIfNoInternetAvailable();
+    }
+
+    public void ShowShortToastMessage()
+    {
+        MobileToast.Show("Shot Test Toast is showing",false);
+    }
+
+    public void ShowLongToastMessage()
+    {
+        MobileToast.Show("Long Test Toast is showing",true);
+    }
+
+    void UpdateBannerPositionDropdownOptions()
+    {
+        BannerPositionDropdown.options.Clear();
+        foreach (BannerPosition position in Enum.GetValues(typeof(BannerPosition)))
+        {
+            BannerPositionDropdown.options.Add(new Dropdown.OptionData(position.ToString()));
+        }
+        BannerPositionDropdown.value = 0;
+        BannerPositionDropdown.RefreshShownValue();
+    }
+
+    void UpdateMrecPositionDropdownOptions()
+    {
+        MrecPositionDropdown.options.Clear();
+        foreach (MRecPosition position in Enum.GetValues(typeof(MRecPosition)))
+        {
+            MrecPositionDropdown.options.Add(new Dropdown.OptionData(position.ToString()));
+        }
+        MrecPositionDropdown.value = 0;
+        MrecPositionDropdown.RefreshShownValue();
+    }
+
+    public void SetBannerPosition()
+    {
+        AdsManager.RepositionBanner((BannerPosition)BannerPositionDropdown.value);
+    }
+
+    public void SetMrecPosition()
+    {
+        AdsManager.RepositionMRec((MRecPosition)MrecPositionDropdown.value);
+    }
+}

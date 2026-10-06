@@ -32,8 +32,22 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Checklist rows (<see cref="StepItem"/>) currently expanded, by title.</summary>
         [SerializeField] private List<string> _openItems = new List<string>();
 
+        /// <summary>Commit sections whose file list is expanded, by step id.</summary>
+        [SerializeField] private List<string> _commitFilesOpen = new List<string>();
+
         private MeticaFlow _ads;
         private MeticaFlow _genre;
+
+        /// <summary>Count-only GD SDK comparison for the Home line; refreshed on every re-check of Home.</summary>
+        private SdkCompareResult _sdkSummary;
+
+        /// <summary>Each shown step's uncommitted changes, from git; emptied on every re-check.</summary>
+        private readonly Dictionary<string, (List<StepCommit.Change> changes, string unavailable)> _commitChanges =
+            new Dictionary<string, (List<StepCommit.Change>, string)>();
+
+        /// <summary>The commit summary and description as typed, by step id, so a rebuild keeps them.</summary>
+        private readonly Dictionary<string, string> _commitSummary = new Dictionary<string, string>();
+        private readonly Dictionary<string, string> _commitBody = new Dictionary<string, string>();
 
         private bool _busy;
         private bool _refreshQueued;
@@ -78,9 +92,19 @@ namespace GameDistrict.MeticaIntegrationTools
             _genre = GenreFlow.Create();
 
             AssemblyReloadEvents.afterAssemblyReload += QueueRefresh;
+
+            // A failed compile has no reload after it; re-check anyway, so a step waiting on
+            // the compile turns into the real error.
+            UnityEditor.Compilation.CompilationPipeline.compilationFinished += OnCompilationFinished;
         }
 
-        private void OnDisable() => AssemblyReloadEvents.afterAssemblyReload -= QueueRefresh;
+        private void OnDisable()
+        {
+            AssemblyReloadEvents.afterAssemblyReload -= QueueRefresh;
+            UnityEditor.Compilation.CompilationPipeline.compilationFinished -= OnCompilationFinished;
+        }
+
+        private void OnCompilationFinished(object context) => QueueRefresh();
 
         private void OnFocus() => QueueRefresh();
 
@@ -157,8 +181,10 @@ namespace GameDistrict.MeticaIntegrationTools
             try
             {
                 MeticaPaths.ForgetCache();
+                _commitChanges.Clear();
                 _ads.Refresh();
                 _genre.Refresh();
+                _sdkSummary = _page == Page.Home && MeticaPaths.HasGDSdk ? SdkCompare.Run(false) : null;
             }
             catch (Exception e)
             {
@@ -304,6 +330,9 @@ namespace GameDistrict.MeticaIntegrationTools
                 _menu.Add(El("mi-menu__divider"));
             }
 
+            if (MeticaPaths.HasGDSdk)
+                _menu.Add(MenuRow(MiIcon.Kind.Columns, "Compare with original GD SDK…", SdkCompareWindow.Open));
+
             _menu.Add(MenuRow(MiIcon.Kind.Trash, "Remove Metica Integration Tools…",
                 () => NextTick(ToolRemover.Remove)));
 
@@ -349,6 +378,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 : $"GD Monetization SDK {(gdSdk == null ? "" : gdSdk + " ")}detected — {adsCount} steps",
                 gdSdkSupported, () => ShowPage(Page.Ads)));
 
+            // Going back to Home rebuilds without a re-check, so compute it here when missing.
+            if (_sdkSummary == null && MeticaPaths.HasGDSdk)
+            {
+                try { _sdkSummary = SdkCompare.Run(false); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
+            if (_sdkSummary != null) _content.Add(CompareLine(_sdkSummary));
+
             var meticaInstalled = AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "Metica.SDK");
             _content.Add(FlowCard(_genre, MiIcon.Kind.Chart,
                 "Set up the Android toolchain and create genre analytics files.",
@@ -356,6 +393,19 @@ namespace GameDistrict.MeticaIntegrationTools
                     ? "Needs the Metica SDK — installed"
                     : "Needs the Metica SDK — install it in Ads Integration first",
                 meticaInstalled, () => ShowPage(Page.Genre)));
+        }
+
+        /// <summary>How the project's GD SDK differs from the original it declares, and a way to look.</summary>
+        private static VisualElement CompareLine(SdkCompareResult summary)
+        {
+            var row = El("mi-home-compare");
+            row.Add(new MiIcon(MiIcon.Kind.Columns, 1.75f, "mi-icon--16"));
+            row.Add(Text(summary.Version == null
+                ? summary.Problem ?? "GD SDK version unreadable"
+                : summary.Changes.Count == 0 ? $"GD SDK {summary.Version} · matches the original"
+                : $"GD SDK {summary.Version} · {summary.Changes.Count} file{(summary.Changes.Count == 1 ? "" : "s")} differ from the original"));
+            row.Add(new Button(SdkCompareWindow.Open) { text = "<u>Compare…</u>" }.With("mi-link"));
+            return row;
         }
 
         private Button FlowCard(MeticaFlow flow, MiIcon.Kind icon, string description, string check, bool checkOk,
@@ -497,9 +547,17 @@ namespace GameDistrict.MeticaIntegrationTools
 
             // Status: at most one problem line, or the success line of a finished step.
             var status = El("mi-notes");
-            if (state == StepState.Done)
+            if (state == StepState.Done && !result.Waiting)
             {
-                status.Add(Box("mi-success", MiIcon.Kind.Check, "Done — verified and signed off."));
+                var sha = MeticaIntegrationProgress.CommittedAs(step.Id);
+                status.Add(Box("mi-success", MiIcon.Kind.Check, sha == null
+                    ? "Done — verified and signed off."
+                    : $"Done — verified, signed off and committed ({sha})."));
+            }
+            else if (result.Waiting)
+            {
+                // Not a failure — Unity is catching up; the window re-checks when it's done.
+                status.Add(Box("mi-warning", MiIcon.Kind.Refresh, result.Problems[0]));
             }
             else if (result.Problems.Count > 0)
             {
@@ -555,6 +613,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (reviewing) _content.Add(ReviewPanel(flow, index));
 
+            // A done step revisited still offers its commit, until it has one.
+            if (state == StepState.Done)
+            {
+                var commit = CommitSection(flow, index, false);
+                if (commit != null) _content.Add(commit);
+            }
+
             if (step.Why != null || extra > 0) _content.Add(WhySection(step, result, extra));
         }
 
@@ -606,7 +671,171 @@ namespace GameDistrict.MeticaIntegrationTools
             }, "mi-btn--primary"));
             panel.Add(buttons);
 
+            var commit = CommitSection(flow, index, true);
+            if (commit != null) panel.Add(commit);
+
             return panel;
+        }
+
+        // ── Commit ─────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Commit this step's changes, prefilled: the files git reports as changed under the
+        /// step's paths, a summary and a description — edit them or just press Commit. Null
+        /// once the step has been committed, and outside the review panel whenever there is
+        /// nothing to commit.
+        /// </summary>
+        private VisualElement CommitSection(MeticaFlow flow, int index, bool inReview)
+        {
+            var step = flow.Steps[index];
+            if (MeticaIntegrationProgress.CommittedAs(step.Id) != null) return null;
+
+            if (!_commitChanges.TryGetValue(step.Id, out var pending))
+            {
+                StepCommit.TryGetChanges(step, out var found, out var unavailable);
+                _commitChanges[step.Id] = pending = (found, unavailable);
+            }
+
+            if (pending.unavailable != null || pending.changes.Count == 0)
+            {
+                if (!inReview) return null;
+
+                var quiet = El("mi-commit");
+                quiet.Add(Text(pending.unavailable != null
+                    ? "No commit — " + pending.unavailable
+                    : "Nothing to commit — this step's files have no uncommitted changes.", "mi-caption"));
+                return quiet;
+            }
+
+            var changes = pending.changes;
+            var section = El("mi-commit");
+            section.Add(Text("COMMIT THIS STEP", "mi-section-label"));
+
+            // "12 files — 10 new, 2 modified", opening to the list.
+            var open = _commitFilesOpen.Contains(step.Id);
+            var counts = string.Join(", ", changes.GroupBy(change => change.Kind)
+                .OrderBy(group => group.Key == "new" ? 0 : group.Key == "modified" ? 1 : 2)
+                .Select(group => $"{group.Count()} {group.Key}"));
+            var toggle = new Button(() =>
+            {
+                if (!_commitFilesOpen.Remove(step.Id)) _commitFilesOpen.Add(step.Id);
+                Rebuild();
+            }).With("mi-commit__files-toggle");
+            toggle.Add(new MiIcon(open ? MiIcon.Kind.ChevronDown : MiIcon.Kind.ChevronRight, 2f, "mi-icon--12"));
+            toggle.Add(Text($"{changes.Count} file{(changes.Count == 1 ? "" : "s")} — {counts}"));
+            section.Add(toggle);
+
+            if (open)
+            {
+                var list = new ScrollView(ScrollViewMode.Vertical);
+                list.AddToClassList("mi-commit__files");
+                foreach (var change in changes)
+                {
+                    var line = Text($"{change.Kind,-9}{change.ProjectPath}", "mi-commit__file");
+                    Mono(line);
+                    list.Add(line);
+                }
+                section.Add(list);
+            }
+
+            var machinePath = MachineSpecific(changes);
+            if (machinePath != null) section.Add(Box("mi-warning", MiIcon.Kind.Error, machinePath));
+
+            if (!_commitSummary.ContainsKey(step.Id)) _commitSummary[step.Id] = $"{flow.Name}: {step.Title}";
+            if (!_commitBody.ContainsKey(step.Id))
+                _commitBody[step.Id] = $"{step.Summary}\n\nStep {index + 1} of {flow.Steps.Length}, " +
+                                       "applied with the Metica Integration Tools.";
+
+            section.Add(CommitField("Summary", step.Id, _commitSummary, false));
+            section.Add(CommitField("Description", step.Id, _commitBody, true));
+
+            var buttons = El("mi-row");
+            var commit = IconTextButton(MiIcon.Kind.Check, $"Commit {changes.Count} file{(changes.Count == 1 ? "" : "s")}",
+                () => CommitStep(step, changes), "mi-btn--secondary");
+            commit.SetEnabled(!_busy);
+            buttons.Add(commit);
+            section.Add(buttons);
+
+            return section;
+        }
+
+        private VisualElement CommitField(string label, string stepId, Dictionary<string, string> store, bool multiline)
+        {
+            var row = El("mi-field");
+            if (multiline) row.AddToClassList("mi-field--multiline");
+            row.Add(Text(label, "mi-field__label"));
+
+            var field = new TextField { value = store[stepId], multiline = multiline };
+            field.AddToClassList("mi-text");
+            if (multiline) field.AddToClassList("mi-text--multiline");
+            field.RegisterValueChangedCallback(change => store[stepId] = change.newValue);
+            field.SetEnabled(!_busy);
+            row.Add(field);
+            return row;
+        }
+
+        /// <summary>A warning when a file about to be committed holds this machine's paths.</summary>
+        private static string MachineSpecific(IEnumerable<StepCommit.Change> changes)
+        {
+            foreach (var change in changes)
+            {
+                if (change.Kind == "deleted" || !change.ProjectPath.EndsWith("gradleTemplate.properties")) continue;
+
+                try
+                {
+                    if (File.ReadAllText(MeticaPaths.ToAbsolute(change.ProjectPath)).Contains("org.gradle.java.home"))
+                        return "gradleTemplate.properties holds this machine's JDK path (org.gradle.java.home) — " +
+                               "other machines won't have it.";
+                }
+                catch
+                {
+                    // Unreadable — nothing to warn about.
+                }
+            }
+            return null;
+        }
+
+        private void CommitStep(MeticaStep step, List<StepCommit.Change> changes)
+        {
+            if (_busy) return;
+            _busy = true;
+            Rebuild();
+
+            NextTick(() =>
+            {
+                try
+                {
+                    // Unity may still hold asset changes in memory.
+                    AssetDatabase.SaveAssets();
+
+                    EditorUtility.DisplayProgressBar("Metica Integration", $"Committing {step.Title}…", 0.5f);
+                    string sha, error;
+                    try
+                    {
+                        sha = StepCommit.Commit(changes, _commitSummary[step.Id], _commitBody[step.Id], out error);
+                    }
+                    finally
+                    {
+                        EditorUtility.ClearProgressBar();
+                    }
+
+                    if (sha == null)
+                    {
+                        MeticaIntegrationLog.Record(step.Title, "Commit failed: " + error);
+                        EditorUtility.DisplayDialog("Commit failed", error, "OK");
+                        return;
+                    }
+
+                    MeticaIntegrationProgress.MarkCommitted(step.Id, sha);
+                    MeticaIntegrationLog.Record(step.Title, $"Committed {changes.Count} files as {sha}");
+                    ShowNotification(new GUIContent($"Committed {sha}"));
+                }
+                finally
+                {
+                    _busy = false;
+                    if (this != null) RefreshNow();
+                }
+            });
         }
 
         private VisualElement WhySection(MeticaStep step, VerifyResult result, int extra)
@@ -892,8 +1121,8 @@ namespace GameDistrict.MeticaIntegrationTools
             row.Add(Ghost("Reset sign-offs", () =>
             {
                 if (!EditorUtility.DisplayDialog("Reset sign-offs",
-                        "Forget which steps you have reviewed or skipped? Nothing in the project changes — " +
-                        "the run just asks you to sign each step off again.", "Reset", "Cancel"))
+                        "Forget which steps you have reviewed, skipped or committed? Nothing in the project " +
+                        "or in git changes — the run just asks you to sign each step off again.", "Reset", "Cancel"))
                     return;
 
                 if (flow != null) flow.ResetSignOffs();
@@ -927,16 +1156,16 @@ namespace GameDistrict.MeticaIntegrationTools
 
         // ── Small builders ─────────────────────────────────────────────────────
 
-        private static VisualElement El(params string[] classes)
+        internal static VisualElement El(params string[] classes)
         {
             var element = new VisualElement();
             foreach (var c in classes) element.AddToClassList(c);
             return element;
         }
 
-        private static Label Text(string text, params string[] classes) => new Label(text).With(classes);
+        internal static Label Text(string text, params string[] classes) => new Label(text).With(classes);
 
-        private static VisualElement Box(string boxClass, MiIcon.Kind icon, string text, string textClass = null)
+        internal static VisualElement Box(string boxClass, MiIcon.Kind icon, string text, string textClass = null)
         {
             var box = El(boxClass);
             box.Add(new MiIcon(icon, 2f, "mi-icon"));
@@ -951,7 +1180,7 @@ namespace GameDistrict.MeticaIntegrationTools
             return button;
         }
 
-        private static Button IconTextButton(MiIcon.Kind icon, string label, Action action, string style)
+        internal static Button IconTextButton(MiIcon.Kind icon, string label, Action action, string style)
         {
             var button = new Button(action).With("mi-btn", style);
             button.Add(new MiIcon(icon, 1.75f));
@@ -965,7 +1194,7 @@ namespace GameDistrict.MeticaIntegrationTools
         private static Font _monoFont;
 
         /// <summary>The editor's own monospace font, or a system one; left as is if neither loads.</summary>
-        private static void Mono(VisualElement element)
+        internal static void Mono(VisualElement element)
         {
             try
             {

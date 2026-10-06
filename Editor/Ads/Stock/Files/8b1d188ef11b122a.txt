@@ -1,0 +1,89 @@
+using System;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Sdk;
+
+public static partial class MonetizationServices
+{
+    public static class Ads
+    {
+        #region Banner
+
+        public static void ShowBanner()
+        {
+            AdsManager.ShowBanner();
+        }
+
+        public static void HideBanner()
+        {
+            AdsManager.HideBanner();
+        }
+
+        public static void DestroyBanner()
+        {
+            AdsManager.DestroyBanner();
+        }
+
+        public static void ShowMRec()
+        {
+            AdsManager.ShowMRec();
+        }
+
+        public static void HideMRec()
+        {
+            AdsManager.HideMRec();
+        }
+
+        public static void DestroyMRec()
+        {
+            AdsManager.DestroyMRec();
+        }
+
+        public static void RepositionBanner(BannerPosition newPosition)
+        {
+            AdsManager.RepositionBanner(newPosition);
+        }
+
+        public static void RepositionMRec(MRecPosition newPosition)
+        {
+            AdsManager.RepositionMRec(newPosition);
+        }
+
+        #endregion
+
+        #region Interstitial
+
+        public static bool HasInterstitial => AdsManager.HasInterstitial();
+
+        public static void ShowInterstitial(string placementName, Action onAdClose = null)
+        {
+            AdsManager.ShowInterstitial(placementName, onAdClose);
+        }
+
+        public static void ExtendInterstitialTime()
+        {
+            AdsManager.ExtendInterstitialTime();
+        }
+
+        #endregion
+
+        #region Rewarded
+
+        public static bool HasRewarded => AdsManager.HasRewardedAd();
+
+        public static void ShowRewarded(Action onRewarded, string placementName)
+        {
+            AdsManager.ShowRewarded(placementName, onRewarded);
+        }
+
+        #endregion
+
+        #region AppOpen
+
+        public static void ExtendAppOpenTime()
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+    }
+}

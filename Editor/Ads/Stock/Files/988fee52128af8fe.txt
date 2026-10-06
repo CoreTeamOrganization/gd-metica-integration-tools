@@ -1,0 +1,90 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Firebase;
+using Firebase.Analytics;
+using Firebase.Extensions;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    internal sealed class FirebaseAnalyticsNetwork : IAnalyticsInitialization, IAnalyticsEventsService,
+        IAnalyticsAdRevenueService
+    {
+        public bool IsInitialized { get; private set; }
+
+        public void Initialize()
+        {
+            //FirebaseApp.LogLevel = AdConstants.UseLogs ? LogLevel.Info : LogLevel.Error;
+            Message.Log(Logger.Tag.Firebase, $"Initializing...");
+            IsInitialized = false;
+
+            FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
+            {
+                if (task.Result == DependencyStatus.Available)
+                {
+                    Message.Log(Logger.Tag.Firebase, "Successfully initialized");
+
+                    FirebaseAnalytics.SetAnalyticsCollectionEnabled(true);
+                    Message.Log(Logger.Tag.Firebase, $"Analytics collection enabled");
+
+                    RemoteConfigManager.Initialize();
+                    IsInitialized = true;
+                    Message.Log(Logger.Tag.Firebase, $"Initialized");
+                }
+            });
+        }
+
+        public void SendEvent(string name)
+        {
+            if (IsInitialized)
+            {
+                FirebaseAnalytics.LogEvent(name);
+            }
+        }
+
+        public void SendEvent(string name, Dictionary<string, object> parameters)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            Parameter[] firebaseParameters = new Parameter[parameters.Count];
+
+            int index = 0;
+
+            foreach ((string key, object value) in parameters)
+            {
+                firebaseParameters[index] = new Parameter(key, value?.ToString() ?? string.Empty);
+                index++;
+            }
+
+            FirebaseAnalytics.LogEvent(name, firebaseParameters);
+        }
+
+        public void ReportAdRevenue(AdRevenueInfo adRevenueInfo)
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            Parameter[] impressionParameters = new[]
+            {
+                new Parameter("ad_platform", adRevenueInfo.Platform),
+                new Parameter("ad_source", adRevenueInfo.AdSource),
+                new Parameter("ad_unit_name", adRevenueInfo.AdUnitName),
+                new Parameter("ad_format", adRevenueInfo.AdFormat.ToString()),
+                new Parameter("value", adRevenueInfo.Revenue),
+                new Parameter("currency", adRevenueInfo.Currency),
+                new Parameter("ad_placement", adRevenueInfo.AdPlacement)
+            };
+
+            FirebaseAnalytics.LogEvent("ad_impression", impressionParameters);
+        }
+    }
+}

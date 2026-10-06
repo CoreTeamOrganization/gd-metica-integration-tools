@@ -1,0 +1,40 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Analytics
+{
+    // LevelData fields: Level=R, LevelType=O, LevelDifficulty=O, LevelId=O
+    public class SimulationVehicleLevelStarted : LevelData
+    {
+        public SimulationVehicleLevelStarted(int level)
+        {
+            Level = level;
+        }
+    }
+
+    public class SimulationVehicleLevelFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level       { get; }
+        public string LevelStatus { get; }
+        public float  PlayTime    { get; }
+        public int    AttemptCount { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public string LevelName        { get; set; }
+        public string LevelType        { get; set; }
+        public string OperatingType    { get; set; }
+        public int?   PlayonCount      { get; set; }
+        public int?                      UsedBoosterCount { get; set; }
+        public Dictionary<string, int>?  UsedBoosters     { get; set; }
+        public Dictionary<string, float>? Balances        { get; set; }
+        public Dictionary<string, float>? BalanceBoosters { get; set; }
+
+        public SimulationVehicleLevelFinished(int level, string levelStatus, float playTime, int attemptCount)
+        {
+            Level        = level;
+            LevelStatus  = levelStatus;
+            PlayTime     = playTime;
+            AttemptCount = attemptCount;
+        }
+    }
+}

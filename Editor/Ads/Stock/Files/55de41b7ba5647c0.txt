@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "PuzzleSuccessFailAnalyticsSO", menuName = "GDMonetization/MeticaAnalytics/GenreSO/PuzzleSuccessFail")]
+    public class PuzzleSuccessFailAnalyticsSO : AnalyticsGenreSO
+    {
+        [SerializeField] private PuzzleSuccessFailAnalytics _puzzleSuccessFailAnalytics;
+
+        public override GameGenre Genre => GameGenre.PuzzleSuccessFail;
+        public override GDMeticaAnalytics GetAnalytics() => _puzzleSuccessFailAnalytics ??= new PuzzleSuccessFailAnalytics();
+    }
+}

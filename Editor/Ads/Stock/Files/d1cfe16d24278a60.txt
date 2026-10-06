@@ -1,0 +1,189 @@
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinMRec : MRecAdUnit
+    {
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            ListenEvents();
+            CreateMRec();
+        }
+
+        public void ListenEvents()
+        {
+            MaxSdkCallbacks.MRec.OnAdLoadedEvent += MRec_OnAdLoadedEvent;
+            MaxSdkCallbacks.MRec.OnAdLoadFailedEvent += MRec_OnAdLoadFailedEvent;
+            MaxSdkCallbacks.MRec.OnAdRevenuePaidEvent += MRec_OnAdRevenuePaidEvent;
+            MaxSdkCallbacks.MRec.OnAdClickedEvent += MRec_OnAdClickedEvent;
+        }
+
+        public void CreateMRec()
+        {
+            MaxSdk.CreateMRec(adUnitId, ConvertToApplovinMRecPos());
+            SetMRecAutoRefreshStatus(AutoRefresh.Enabled);
+            Message.Log(Tag.Applovin, $"MRec IS CREATED & LOADING");
+            isLoading = true;
+        }
+
+
+        public override bool HasMRec()
+        {
+            if (!hasMrec)
+            {
+                LoadMRec();
+                return false;
+            }
+
+            return true;
+        }
+
+        public override void LoadMRec()
+        {
+            if (isLoading)
+            {
+                Message.LogWarning(Tag.Applovin, $"MRec IS ALREADY LOADING");
+                return;
+            }
+
+            isLoading = true;
+            Message.LogWarning(Tag.Applovin, $"MRec IS LOADING");
+            MaxSdk.LoadMRec(adUnitId);
+        }
+
+
+        public override void ShowMRec()
+        {
+            Message.Log(Tag.Applovin, "MRec IS SHOWING");
+            MaxSdk.ShowMRec(adUnitId);
+        }
+
+        public override void HideMRec()
+        {
+            Message.Log(Tag.Applovin, "MRec IS HIDDEN");
+            MaxSdk.HideMRec(adUnitId);
+        }
+
+        public override void DestroyMRec()
+        {
+            Message.Log(Tag.Applovin, "MRec IS DESTROYED");
+            HideMRec();
+        }
+
+        public override void RepositionMRec(MRecPosition newPosition)
+        {
+            bannerInfo.MrecPosition = newPosition;
+            MaxSdk.UpdateMRecPosition(adUnitId, ConvertToApplovinMRecPos());
+        }
+
+        MaxSdk.AdViewPosition ConvertToApplovinMRecPos()
+        {
+            switch (bannerInfo.MrecPosition)
+            {
+                case MRecPosition.Top: return MaxSdk.AdViewPosition.TopCenter;
+                case MRecPosition.TopLeft: return MaxSdk.AdViewPosition.TopLeft;
+                case MRecPosition.TopRight: return MaxSdk.AdViewPosition.TopRight;
+                case MRecPosition.Bottom: return MaxSdk.AdViewPosition.BottomCenter;
+                case MRecPosition.BottomLeft: return MaxSdk.AdViewPosition.BottomLeft;
+                case MRecPosition.BottomRight: return MaxSdk.AdViewPosition.BottomRight;
+                case MRecPosition.Center: return MaxSdk.AdViewPosition.Centered;
+                case MRecPosition.CenterLeft: return MaxSdk.AdViewPosition.CenterLeft;
+                case MRecPosition.CenterRight: return MaxSdk.AdViewPosition.CenterRight;
+                default: return MaxSdk.AdViewPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void MRec_OnAdLoadedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasMrec = true;
+                Message.Log(Tag.Applovin, "MRec IS LOADED");
+                SetMRecAutoRefreshStatus(AutoRefresh.Enabled);
+                if (AdsManager.MRecStatus)
+                {
+                    AdsManager.ShowMRec();
+                    return;
+                }
+
+                HideMRec();
+            });
+        }
+
+        private void MRec_OnAdLoadFailedEvent(string arg1, MaxSdkBase.ErrorInfo arg2)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoading = false;
+                hasMrec = false;
+                SetMRecAutoRefreshStatus(AutoRefresh.Disabled);
+                HideMRec();
+                // ToString is safe to do in ThreadDispatcher
+                Message.LogError(Tag.Applovin, "MRec failed to load");
+
+                DelayedActionManager.Add(() =>
+                {
+                    if (AdsManager.MRecStatus)
+                    {
+                        AdsManager.ShowMRec();
+                    }
+                }, 3f, "Retry MAX MRec");
+            });
+        }
+
+        private void MRec_OnAdRevenuePaidEvent(string adUnitId, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.MRec, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, "none");
+
+            Message.Log(Tag.Applovin,
+                $"MRec revenue paid - AdUnit: {arg2.AdUnitIdentifier}, Revenue: {arg2.Revenue}, Network: {arg2.NetworkName}");
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void MRec_OnAdClickedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdsManager.ExtendAppOpenTime();
+        }
+
+        #endregion
+
+        #region AutoRefreshStatus
+
+        private AutoRefresh refreshStatus = AutoRefresh.NotSet;
+
+        void SetMRecAutoRefreshStatus(AutoRefresh value)
+        {
+            if (refreshStatus == AutoRefresh.NotSet || refreshStatus != value)
+            {
+                refreshStatus = value;
+                if (refreshStatus == AutoRefresh.Enabled)
+                {
+                    Message.LogWarning(Tag.Applovin, "MRec REFRESH : " + value.ToString());
+                    MaxSdk.StartMRecAutoRefresh(adUnitId);
+                }
+                else
+                {
+                    Message.LogWarning(Tag.Applovin, "MRec REFRESH : " + value.ToString());
+                    MaxSdk.StopMRecAutoRefresh(adUnitId);
+                }
+            }
+        }
+
+        public enum AutoRefresh
+        {
+            NotSet,
+            Enabled,
+            Disabled
+        }
+
+        #endregion
+    }
+}

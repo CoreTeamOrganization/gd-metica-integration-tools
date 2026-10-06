@@ -1,0 +1,74 @@
+# Genre Creator
+
+Editor tooling for generating Metica analytics genre files from scratch or from an Excel event schema.
+
+**Location:** `Assets/GDMonetization/Editor/Scripts/GenreCreator/`
+**Menu:** `GameDistrict → Monetization → Metica Analytics → Create New Genre…`
+
+---
+
+## Files
+
+| File | Responsibility |
+|---|---|
+| `GenreCreatorWindow.cs` | `EditorWindow` UI — tabs, event/field editor, import orchestration, apply to SDKConfiguration |
+| `GenreDefinition.cs` | Data model — `GenreEventDef`, `GenreFieldDef`, `GenreFieldType` |
+| `IdentifierValidator.cs` | Validates C# identifiers (letters/digits only, starts with letter) — used for genre, event, and field names. Genre validation also checks disk existence. |
+| `GenreCodeGenerator.cs` | Generates the 4 C# source files (interface, data, implementation, ScriptableObject) |
+| `GenreAssetCreator.cs` | Writes files to disk, triggers recompile, post-compile asset creation via `[DidReloadScripts]` |
+| `GenreExcelParser.cs` | Parses `.xlsx` event schema files — sheet names, column detection, type inference, core-event filtering |
+
+---
+
+## Workflow
+
+### Manual
+1. Open the window → **Manual** tab
+2. Enter a genre name (PascalCase, letters/digits only)
+3. Add/edit events and their fields
+4. Click **Create Genre Files** — writes 4 `.cs` files and triggers recompile
+5. Unity recompiles → `.asset` files are created automatically
+6. Click **Apply Genre SO to SDKConfiguration** to activate it
+
+### Import from Excel
+1. Open the window → **Import from Excel** tab
+2. Browse to an `.xlsx` event schema file
+3. Select the sheet and click **Import & Preview**
+4. Review/edit the imported events and set the genre name
+5. Continue from step 4 above
+
+---
+
+## Generated Files
+
+For a genre named `Shooter`, the following are created under `Assets/GDMonetization/Runtime/Scripts/Analytics/Genres/Shooter/`:
+
+| File | Contents |
+|---|---|
+| `IShooterAnalytics.cs` | Interface extending `IGDMeticaAnalytics` with one method per event |
+| `ShooterData.cs` | Data classes (one per event) with readonly properties and a constructor |
+| `ShooterAnalytics.cs` | Implementation — builds payload, calls `LogCustomEvent` |
+| `ShooterAnalyticsSO.cs` | `ScriptableObject` wrapping the analytics class |
+
+Two `.asset` files are created at `Assets/GDMonetization/Runtime/Resources/Configurations/Game Genres/`.
+
+---
+
+## Excel Schema Format
+
+The parser expects a sheet with at minimum a **`parameter`** column. It auto-detects the layout:
+
+| Column | Header | Notes |
+|---|---|---|
+| Event name | `metica event name` (or the column left of `parameter` if absent) | camelCase → PascalCase (used as C# identifier) |
+| Parameter | `parameter` | Raw cell value stored as the analytics payload key; PascalCase version used as the C# property name |
+| Value | `value` | Used for type inference |
+
+**Skipped parameters:** `adid`, `appToken`, `abTest`, `abGroup`, `abTestStartDate`
+**Skipped events:** All events corresponding to `IGDMeticaAnalytics` methods (purchase, impression, install, sessionStart, etc.) — derived at runtime via reflection, no hardcoded list.
+
+**Type inference from value cell:**
+- `"50.0"` → `int` (no fractional part)
+- `"0.55"` → `float`
+- `"true"` / `"false"` → `bool`
+- Everything else → `string`

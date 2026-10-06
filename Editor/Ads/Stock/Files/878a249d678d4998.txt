@@ -1,0 +1,30 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "ArcadeAnalytics", menuName = "GDMonetization/MeticaAnalytics/ScriptSO/Arcade")]
+    public class ArcadeAnalytics : GDMeticaAnalytics, IArcadeAnalytics
+    {
+        public void LevelStarted(ArcadeLevelStarted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]      = data.Level;
+            payload["level_type"] = data.LevelType;
+            LogCustomEvent("levelStarted", payload);
+        }
+
+        public void LevelFinished(ArcadeLevelFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]         = data.Level;
+            payload["level_type"]    = data.LevelType;
+            payload["level_status"]  = data.LevelStatus;
+            payload["play_time"]     = data.PlayTime;
+            payload["attempt_count"] = data.AttemptCount;
+
+            if (data.OperatingType != null) payload["operating_type"] = data.OperatingType;
+
+            LogCustomEvent("levelFinished", payload);
+        }
+    }
+}

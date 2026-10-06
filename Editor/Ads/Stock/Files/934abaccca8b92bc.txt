@@ -1,0 +1,15 @@
+namespace Monetization.Runtime.Consent
+{
+    public readonly struct ConsentInfo
+    {
+        public readonly bool IsEuropeArea;
+
+        public readonly bool IsPersonalized;
+
+        public ConsentInfo(bool isEuropeArea, bool isPersonalized)
+        {
+            IsEuropeArea = isEuropeArea;
+            IsPersonalized = isPersonalized;
+        }
+    }
+}

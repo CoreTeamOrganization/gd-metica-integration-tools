@@ -1,0 +1,22 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Utilities
+{
+    public static class DelayedActionManager
+    {
+        private static IDelayedActionService actionService = new ConcurrentActions();
+
+        public static void Add(Action action, float delay, bool ignoreTimeScale)
+        {
+            actionService.AddAction(action, delay, ignoreTimeScale);
+        }
+
+        internal static ITickable GetTickable()
+        {
+            return actionService;
+        }
+    }
+}

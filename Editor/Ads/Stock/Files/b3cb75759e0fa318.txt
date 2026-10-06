@@ -1,0 +1,16 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Configurations;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public interface IUserMessagingPlatformService
+    {
+        [Obsolete]
+        void Initialize(ConsentConfiguration settings, Action<string> onComplete);
+        void ShowPrivacyOptionsForm(Action<string> onComplete);
+        bool PrivacyOptionsRequired { get; }
+    }
+}

@@ -1,0 +1,46 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "SimulationVehicleAnalytics", menuName = "GDMonetization/MeticaAnalytics/ScriptSO/SimulationVehicle")]
+    public class SimulationVehicleAnalytics : GDMeticaAnalytics, ISimulationVehicleAnalytics
+    {
+        public void LevelStarted(SimulationVehicleLevelStarted data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"] = data.Level.Value;
+
+            if (data.LevelType != null)       payload["level_type"]       = data.LevelType;
+            if (data.LevelDifficulty != null) payload["level_difficulty"] = data.LevelDifficulty;
+            if (data.LevelId.HasValue)        payload["level_id"]         = data.LevelId.Value;
+
+            LogCustomEvent("levelStarted", payload);
+        }
+
+        public void LevelFinished(SimulationVehicleLevelFinished data)
+        {
+            var payload = CreateBaseEvent();
+            payload["level"]         = data.Level;
+            payload["level_status"]  = data.LevelStatus;
+            payload["play_time"]     = data.PlayTime;
+            payload["attempt_count"] = data.AttemptCount;
+
+            if (data.LevelName != null)         payload["level_name"]         = data.LevelName;
+            if (data.LevelType != null)         payload["level_type"]         = data.LevelType;
+            if (data.OperatingType != null)     payload["operating_type"]     = data.OperatingType;
+            if (data.PlayonCount.HasValue)      payload["playon_count"]       = data.PlayonCount.Value;
+            if (data.UsedBoosterCount.HasValue) payload["used_booster_count"] = data.UsedBoosterCount.Value;
+            if (data.UsedBoosters != null)
+                foreach (var kvp in data.UsedBoosters)
+                    payload["used_booster_" + kvp.Key] = kvp.Value;
+            if (data.Balances != null)
+                foreach (var kvp in data.Balances)
+                    payload["balance_" + kvp.Key] = kvp.Value;
+            if (data.BalanceBoosters != null)
+                foreach (var kvp in data.BalanceBoosters)
+                    payload["balance_booster_" + kvp.Key] = kvp.Value;
+
+            LogCustomEvent("levelFinished", payload);
+        }
+    }
+}

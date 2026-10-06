@@ -1,0 +1,36 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Configurations;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class BannerAdUnit : AdUnit
+    {
+        protected bool isLoaded;
+        protected bool bannerStatus;
+
+        public bool IsTopPriority;
+        protected int bannerPriority;
+
+        protected AdUnitsConfiguration.BannerInfo bannerInfo;
+        public override AdFormat AdType => AdFormat.Banner;
+
+        public void SetBannerPosition(AdUnitsConfiguration.BannerInfo bannerInfo)
+        {
+            this.bannerInfo = bannerInfo;
+        }
+
+        protected abstract void LoadBanner();
+        public abstract bool HasBanner();
+        public abstract void ShowBanner();
+        public abstract void HideBanner();
+        public abstract void DestroyBanner();
+
+        public int GetPriority()
+        {
+            return bannerPriority;
+        }
+    }
+}

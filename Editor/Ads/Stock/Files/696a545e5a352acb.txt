@@ -1,0 +1,134 @@
+using UnityEngine;
+using GoogleMobileAds.Api;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using GoogleMobileAds.Common;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdmobAppOpen : AppOpenAdUnit
+    {
+        private bool isLoadingAd;
+        AppOpenAd appOpenAd;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                LoadAppOpen();
+            }
+        }
+
+        public override bool HasAppOpen(bool doRequest)
+        {
+            if (IsAdUnitEmpty || isAppOpenVisible || isLoadingAd) return false;
+
+            bool isReady = appOpenAd != null && appOpenAd.CanShowAd();
+
+            if (!isReady && doRequest)
+                LoadAppOpen();
+
+            return isReady;
+        }
+
+        public override void ShowAppOpen(string placementName)
+        {
+            Message.Log(Tag.Admob, $"Appopen Showed: {placementName}");
+            this.placementName = placementName;
+            AdsManager.HideAllBanners();
+            appOpenAd.Show();
+        }
+
+        public override void LoadAppOpen()
+        {
+            if (IsAdUnitEmpty || isAppOpenVisible || isLoadingAd) return;
+
+            isLoadingAd = true;
+            if (appOpenAd != null)
+                appOpenAd.Destroy();
+
+            AppOpenAd.Load(adUnitId, MonetizationConstants.CreateAdRequest(), AppOpenResponse);
+        }
+
+        void Destroy()
+        {
+            isAppOpenVisible = false;
+            if (appOpenAd != null)
+            {
+                appOpenAd.Destroy();
+                appOpenAd = null;
+            }
+        }
+
+        #region Callbacks
+
+        public void AppOpenResponse(AppOpenAd ad, LoadAdError error)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoadingAd = false;
+                if (error == null && ad != null)
+                {
+                    appOpenAd = ad;
+                    appOpenAd.OnAdFullScreenContentOpened += AppOpenAd_OnAdFullScreenContentOpened;
+                    appOpenAd.OnAdFullScreenContentClosed += AppOpenAd_OnAdFullScreenContentClosed;
+                    appOpenAd.OnAdFullScreenContentFailed += AppOpenAd_OnAdFullScreenContentFailed;
+                    appOpenAd.OnAdPaid += AppOpenAd_OnAdPaid;
+
+                    if (showAppOpenOnLoad)
+                    {
+                        AdsManager.ShowAppOpenOnLoad(false);
+                        AdsManager.ExtendAppOpenTime();
+                        ShowAppOpen("on_first_load");
+                    }
+                }
+                else
+                    Destroy();
+            });
+        }
+
+        private void AppOpenAd_OnAdFullScreenContentOpened()
+        {
+            isAppOpenVisible = true;
+        }
+
+        private void AppOpenAd_OnAdFullScreenContentClosed()
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                Message.Log(Tag.Admob, $"Appopen Closed");
+                AdsManager.ResumeAllBanners();
+                Destroy();
+                LoadAppOpen();
+            });
+        }
+
+        private void AppOpenAd_OnAdFullScreenContentFailed(AdError obj)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                Destroy();
+            });
+        }
+
+        private void AppOpenAd_OnAdPaid(AdValue adValue)
+        {
+            if (adValue == null) return;
+
+            double revenue = (adValue.Value / 1000000f);
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.AppOpen, AdPlatforms.ADMOB, "Admob_Native",
+                adUnitId, "USD", revenue, placementName);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        #endregion
+    }
+}

@@ -1,0 +1,48 @@
+#nullable enable
+using System.Collections.Generic;
+
+/// <summary>
+/// Abstraction for GD Metica analytics. Implementations forward to the Metica SDK and inject common params (adid, app_token).
+/// </summary>
+public interface IGDMeticaAnalytics
+{
+    /// <summary>
+    /// Create a base event dictionary with common params (adid, app_token). Use when building custom or genre event payloads.
+    /// </summary>
+    Dictionary<string, object> CreateBaseEvent();
+
+    /// <summary>
+    /// Log a purchase event to Metica (productId, currency, amount, status, optional errorCode/referenceId/customPayload).
+    /// </summary>
+    void LogPurchaseEvent(string productId, string currency, double amount, string status, string? errorCode, string? referenceId, Dictionary<string, object>? customPayload);
+
+    /// <summary>
+    /// Log a session start event to Metica. Optional customPayload for extra properties.
+    /// </summary>
+    void LogSessionStartEvent(Dictionary<string, object>? customPayload);
+
+    /// <summary>
+    /// Log an install event to Metica. Optional customPayload for extra properties.
+    /// </summary>
+    void LogInstallEvent(Dictionary<string, object>? customPayload);
+
+    /// <summary>
+    /// Log an impression event to Metica (value, type, mediator, source, optional placement and customPayload).
+    /// </summary>
+    void LogImpressionEvent(double value, string type, string mediator, string source, string? placement, Dictionary<string, object>? customPayload);
+
+    /// <summary>
+    /// Log a full user state snapshot to Metica. customPayload is not allowed for this event.
+    /// </summary>
+    void LogFullStateUpdateEvent(Dictionary<string, object> attributes);
+
+    /// <summary>
+    /// Log a partial user state update to Metica. customPayload is not allowed for this event.
+    /// </summary>
+    void LogPartialStateUpdateEvent(Dictionary<string, object> attributes);
+
+    /// <summary>
+    /// Log a custom event to Metica with the given eventName and optional properties (primitives only).
+    /// </summary>
+    void LogCustomEvent(string eventName, Dictionary<string, object>? properties);
+}

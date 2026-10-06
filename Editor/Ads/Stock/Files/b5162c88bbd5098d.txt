@@ -1,0 +1,78 @@
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public class InAppRevenueInfo
+    {
+        public readonly ProductType Type;
+        public readonly double Price;
+        public readonly string Currency;
+        public readonly string ItemId;
+        public readonly string ItemName;
+        public readonly string Receipt;
+        public readonly string AdjustToken;
+
+        /// <summary>
+        /// Units purchased in this transaction. Google Play consumables can let the buyer pick
+        /// this via the store's quantity selector; always 1 elsewhere (NonConsumable/Subscription,
+        /// Apple, restores). Price stays the PER-UNIT price — total charged is Price * Quantity.
+        /// </summary>
+        public readonly int Quantity;
+
+        public string TransactionId { get; private set; }
+        public bool IsDuplicate { get; private set; }
+
+
+        // Untouched on purpose: this exact 7-parameter signature must keep existing precompiled
+        // callers linking after an SDK update. Add new overloads instead of changing this one.
+        public InAppRevenueInfo(ProductType type, double price, string currency, string itemName, string itemId,
+            string receipt, string adjustToken)
+            : this(type, price, currency, itemName, itemId, receipt, adjustToken, 1)
+        {
+        }
+
+        public InAppRevenueInfo(ProductType type, double price, string currency, string itemName, string itemId,
+            string receipt, string adjustToken, int quantity)
+        {
+            Type = type;
+            Price = price;
+            Currency = currency;
+            ItemId = itemId;
+            ItemName = itemName;
+            Receipt = receipt;
+            AdjustToken = adjustToken;
+            Quantity = quantity < 1 ? 1 : quantity;
+        }
+
+        public void SetTransactionId(string transactionId)
+        {
+            TransactionId = transactionId;
+        }
+
+        internal void SetDuplicateStatus(bool isDuplicate)
+        {
+            IsDuplicate = isDuplicate;
+        }
+
+        public override string ToString()
+        {
+            var parameters = new Dictionary<string, object>()
+            {
+                { "Type", Type },
+                { "Price", Price },
+                { "Currency", Currency },
+                { "ItemId", ItemId },
+                { "ItemName", ItemName },
+                { "Quantity", Quantity },
+                { "Receipt", Receipt },
+                { "AdjustToken", AdjustToken },
+                { "TransactionId", TransactionId },
+                { "IsDuplicate", IsDuplicate }
+            };
+
+            return JsonConvert.SerializeObject(parameters);
+        }
+    }
+}

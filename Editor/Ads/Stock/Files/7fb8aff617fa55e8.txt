@@ -1,0 +1,18 @@
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Metica analytics interface for the Simulation (Job) genre.
+    /// Retrieve via <c>AnalyticsManager.Game</c> using this interface as the type parameter.
+    /// </summary>
+    public interface ISimulationJobAnalytics : IGDMeticaAnalytics
+    {
+        /// <summary>Logs a dayCompleted event when the player finishes an in-game day.</summary>
+        void DayCompleted(SimulationJobDayCompleted data);
+
+        /// <summary>Logs a levelFinished event when a job simulation level ends.</summary>
+        void LevelFinished(SimulationJobLevelFinished data);
+
+        /// <summary>Logs a tutorialCompleted event when the player finishes a tutorial step.</summary>
+        void TutorialCompleted(SimulationJobTutorialCompleted data);
+    }
+}

@@ -1,0 +1,10 @@
+using System;
+using UnityEngine.Purchasing;
+
+namespace Monetization.Runtime.InAppPurchasing
+{
+    public interface IIAPVerifier
+    {
+        void Verify(InAppRevenueInfo inAppInfo, Action<IAPVerifyResult> callback);
+    }
+}

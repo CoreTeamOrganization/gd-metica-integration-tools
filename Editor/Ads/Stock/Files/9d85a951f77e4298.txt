@@ -1,0 +1,71 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Utilities
+{
+    [Obsolete("Use PerformantParallelActions instead.", true)]
+    internal sealed class ConcurrentActions : IDelayedActionService
+    {
+        private List<ActionData> _delayedActions = new List<ActionData>(8);
+        private bool eventsListEmpty = true;
+
+        public void AddAction(Action action, float delay, string actionName)
+        {
+            _delayedActions.Add(new ActionData(action, delay));
+            eventsListEmpty = false;
+        }
+
+        public void Tick()
+        {
+            if (eventsListEmpty) return;
+
+            if (_delayedActions.Count > 0)
+            {
+                for (int i = 0; i < _delayedActions.Count; i++)
+                {
+                    bool delayCompleted = _delayedActions[i].ExecuteTimer();
+                    if (!delayCompleted) continue;
+
+                    _delayedActions[i].Invoke();
+                    _delayedActions.RemoveAt(i);
+                    i--;
+                }
+
+                return;
+            }
+
+            eventsListEmpty = true;
+        }
+
+        private class ActionData
+        {
+            Action action;
+            float delay;
+
+            public ActionData(Action action, float delay)
+            {
+                this.action = action;
+                this.delay = delay;
+            }
+
+            public bool ExecuteTimer()
+            {
+                delay -= Time.deltaTime;
+
+                if (delay <= 0)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            public void Invoke()
+            {
+                action?.Invoke();
+            }
+        }
+    }
+}

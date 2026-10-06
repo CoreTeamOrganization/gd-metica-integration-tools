@@ -1,0 +1,10 @@
+using System.Collections.Generic;
+
+namespace Monetization.Runtime.Analytics
+{
+    public interface IAnalyticsEventsService
+    {
+        void SendEvent(string name);
+        void SendEvent(string name, Dictionary<string, object> parameters);
+    }
+}

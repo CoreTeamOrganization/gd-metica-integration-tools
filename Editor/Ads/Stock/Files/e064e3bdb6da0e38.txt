@@ -1,0 +1,33 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+namespace Monetization.Runtime.Logger
+{
+    internal sealed class MonetizationLoggerAndroid : ILoggerService
+    {
+        AndroidJavaClass m_logger = new AndroidJavaClass("com.gamedistrict.utils.Logger");
+
+        public void Log(Tag tag, string message)
+        {
+            m_logger.CallStatic("logMessage", $"[{tag}] {message}");
+        }
+
+        public void LogWarning(Tag tag, string message)
+        {
+            m_logger.CallStatic("logWarning", $"[{tag}] {message}");
+        }
+
+        public void LogError(Tag tag, string message)
+        {
+            m_logger.CallStatic("logError", $"[{tag}] {message}");
+        }
+
+        public void LogException(Tag tag, Exception e)
+        {
+            LogError(tag, $"Exception > Message : {e.Message}, StackTrace : {e.StackTrace}");
+        }
+    }
+}

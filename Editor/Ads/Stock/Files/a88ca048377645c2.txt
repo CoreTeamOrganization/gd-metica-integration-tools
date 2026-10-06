@@ -1,0 +1,47 @@
+using GoogleMobileAds.Api;
+using System;
+using Monetization.Runtime.Logger;
+using System.Threading.Tasks;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class AdNetworkAdmob : IAsyncAdNetworkService
+    {
+        private Action callback;
+        private TaskCompletionSource<bool> _initTcs;
+
+        public async Task InitializeAsync(string appID, Action onInitialized)
+        {
+            Message.Log(Logger.Tag.Admob, "Initializing...");
+            callback = onInitialized;
+            SetConfigurations();
+            MobileAds.SetiOSAppPauseOnBackground(true);
+            MobileAds.RaiseAdEventsOnUnityMainThread = true; // MUST be true
+
+            _initTcs = new TaskCompletionSource<bool>();
+
+            // Call MobileAds.Initialize on main thread
+            MobileAds.Initialize(HandleInitCompleteAction);
+
+            // Await completion
+            await _initTcs.Task;
+        }
+
+
+        void SetConfigurations()
+        {
+            MobileAds.SetRequestConfiguration(new RequestConfiguration
+            {
+                TagForUnderAgeOfConsent = TagForUnderAgeOfConsent.False,
+                TagForChildDirectedTreatment = TagForChildDirectedTreatment.False
+            });
+        }
+
+        private void HandleInitCompleteAction(InitializationStatus status)
+        {
+            Message.Log(Logger.Tag.Admob, "Successfully initialized");
+            callback?.Invoke();
+            _initTcs.TrySetResult(true);
+        }
+    }
+}

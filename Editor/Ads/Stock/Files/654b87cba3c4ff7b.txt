@@ -1,0 +1,38 @@
+namespace Monetization.Runtime.Analytics
+{
+    public class ArcadeLevelStarted
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level    { get; }
+        public string LevelType { get; }
+
+        public ArcadeLevelStarted(int level, string levelType)
+        {
+            Level     = level;
+            LevelType = levelType;
+        }
+    }
+
+    public class ArcadeLevelFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level        { get; }
+        public string LevelType    { get; }
+        public string LevelStatus  { get; }
+        public float  PlayTime     { get; }
+        public int    AttemptCount { get; }
+
+        // ── Optional — null means not set, will not appear in payload ─────────
+        public string OperatingType { get; set; }
+
+        public ArcadeLevelFinished(int level, string levelType, string levelStatus,
+            float playTime, int attemptCount)
+        {
+            Level        = level;
+            LevelType    = levelType;
+            LevelStatus  = levelStatus;
+            PlayTime     = playTime;
+            AttemptCount = attemptCount;
+        }
+    }
+}

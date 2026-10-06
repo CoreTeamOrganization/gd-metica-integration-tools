@@ -1,0 +1,15 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Utilities
+{
+    public static class MobileToast
+    {
+        private static readonly IToastService service =
+            ToastServiceFactory.Create();
+
+        public static void Show(string message, bool isLong = false)
+        {
+            service.Show(message, isLong);
+        }
+    }
+}

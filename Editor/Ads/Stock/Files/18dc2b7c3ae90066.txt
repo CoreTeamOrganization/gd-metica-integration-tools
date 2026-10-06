@@ -1,0 +1,120 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Events;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+using JetBrains.Annotations;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Sdk;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.Core
+{
+    [CreateAssetMenu(fileName = "AppLoader", menuName = "GDMonetization/Bootstrap/AppLoader")]
+    public class AppLoader : ScriptableObject
+    {
+        [Header("(Order Matters)")]
+        [SerializeReference]
+        public List<LoadingStepBase> steps;
+
+        public int TotalStepsCount
+        {
+            get
+            {
+                return steps.Sum(step => step.SubStepCount + 1);
+            }
+        }
+        private static AppLoader _instance;
+
+        [CanBeNull]
+        public static AppLoader Instance
+        {
+            get
+            {
+                if (_instance)
+                    return _instance;
+
+                _instance = Resources.Load<AppLoader>(MonetizationConfigurationsPath.AppLoader);
+                if (!_instance)
+                    Message.LogError(Tag.SDK, "AppLoader not found in resources folder.");
+                return _instance;
+            }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetInstance() => _instance = null;
+
+        public async Task ExecuteAsync(CancellationToken cToken = default)
+        {
+            try
+            {
+                if (steps == null || steps.Count == 0)
+                {
+                    EventBus.Raise(new InitializationStepsCompletionEvent(false, "No loading steps configured"));
+                    return;
+                }
+
+                var total = steps.Count;
+
+                for (var i = 0; i < total; i++)
+                {
+                    if (steps[i] == null)
+                    {
+                        EventBus.Raise(new InitializationStepsCompletionEvent(false, $"Step {i} is null"));
+                        return;
+                    }
+
+                    LoadingStepResult loadingStepResult;
+                    if (!steps[i].ShouldExecute())
+                    {
+                        Message.Log(Tag.SDK, $"Skipping step: {steps[i].StepName}");
+                        loadingStepResult = LoadingStepResult.Skipped(steps[i].StepName);
+                    }
+                    else
+                    {
+                        loadingStepResult = await steps[i].ExecuteAsync(cToken);
+                    }
+
+                    EventBus.Raise(new LoadingStepExecutedEvent(loadingStepResult));
+
+                    if (!loadingStepResult.IsSuccess && !loadingStepResult.IsSkipped && steps[i].IsCritical)
+                    {
+                        var msg = $"Critical step '{steps[i].StepName}' failed: {loadingStepResult.ErrorMessage}";
+                        Message.LogError(Tag.SDK, msg);
+                        EventBus.Raise(new InitializationStepsCompletionEvent(false, msg));
+                        return;
+                    }
+                }
+
+                EventBus.Raise(new InitializationStepsCompletionEvent(true));
+            }
+            catch (Exception e)
+            {
+                EventBus.Raise(new InitializationStepsCompletionEvent(false, e.Message));
+                Message.LogException(Tag.SDK, e);
+            }
+        }
+
+        public async Task<LoadingStepResult> ExecuteStepManually(LoadingStepBase step)
+        {
+            if (step == null)
+                return LoadingStepResult.Failure(BootstrapStepName.None, "step not found", TimeSpan.Zero);
+            return await step.ExecuteAsync();
+        }
+
+        public async Task<LoadingStepResult> ExecuteStepManually(BootstrapStepName stepName)
+        {
+            if (stepName is BootstrapStepName.None)
+                return await Task.FromResult(LoadingStepResult.Failure(BootstrapStepName.None, "step name not found",
+                    TimeSpan.Zero));
+
+            var step = steps.Find(x => x.StepName == stepName);
+            if (step == null)
+                return await Task.FromResult(LoadingStepResult.Failure(BootstrapStepName.None,
+                    $"Step '{stepName}' not found", TimeSpan.Zero));
+            return await step.ExecuteAsync();
+        }
+    }
+}

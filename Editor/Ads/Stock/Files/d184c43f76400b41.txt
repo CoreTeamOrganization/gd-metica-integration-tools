@@ -1,0 +1,28 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "PrivacyConfig", menuName = "GDMonetization/PrivacyConfig")]
+    public sealed class PrivacyConfiguration : ScriptableObject
+    {
+        [Header("Privacy Policy")]
+        [SerializeField] private string AndroidLink = "https://friedchickengames.com/privacy-policy/";
+        [SerializeField] private string iOSLink = "https://friedchickengames.com/privacy-policy/";
+        public string PrivacyPolicyLink
+        {
+            get
+            {
+                #if UNITY_ANDROID
+                    return AndroidLink;
+                #elif UNITY_IOS
+                    return iOSLink;
+                #else
+                    return string.Empty;
+                #endif
+            }
+        }
+
+        [Header("Resources")]
+        public string PanelPath;
+    }
+}

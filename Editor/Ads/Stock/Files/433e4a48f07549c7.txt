@@ -1,0 +1,25 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal abstract class AppOpenAdUnit : AdUnit
+    {
+        protected string placementName;
+        protected bool isAppOpenVisible;
+        protected bool showAppOpenOnLoad;
+
+        public override AdFormat AdType => AdFormat.AppOpen;
+
+        public abstract void LoadAppOpen();
+        public abstract void ShowAppOpen(string placementName);
+        public abstract bool HasAppOpen(bool doRequest);
+
+        public void ShowAppopenOnLoad(bool value)
+        {
+            showAppOpenOnLoad = value;
+        }
+    }
+}

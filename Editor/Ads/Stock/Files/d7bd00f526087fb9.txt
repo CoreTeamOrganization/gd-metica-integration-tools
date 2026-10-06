@@ -1,0 +1,30 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.RemoteConfig;
+using UnityEngine;
+
+namespace Monetization.Runtime.RemoteConfig
+{
+    public abstract class BaseRemoteConfigService
+    {
+        public abstract void Initialize();
+        public abstract void AddOrUpdateValue(string key, object value);
+        public abstract RemoteValue<T> GetRemoteValue<T>(string key);
+
+        [Obsolete("OnFetchComplete is Obsolete. Use OnFetchCompleteWithSuccess")]
+        public event Action OnFetchComplete;
+        public event Action<bool,string> OnFetchCompleteWithSuccess;
+
+        [Obsolete]
+        protected void InvokeOnFetchComplete()
+        {
+            OnFetchComplete?.Invoke();
+        }
+
+        protected void InvokeOnFetchCompleteWithhSuccess(bool success, string message)
+        {
+            OnFetchCompleteWithSuccess?.Invoke(success,message);
+        }
+    }
+}

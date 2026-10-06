@@ -1,0 +1,13 @@
+using UnityEngine;
+
+namespace Monetization.Runtime.Analytics
+{
+    [CreateAssetMenu(fileName = "SimulationJobAnalyticsSO", menuName = "GDMonetization/MeticaAnalytics/GenreSO/SimulationJob")]
+    public class SimulationJobAnalyticsSO : AnalyticsGenreSO
+    {
+        [SerializeField] private SimulationJobAnalytics _simulationJobAnalytics;
+
+        public override GameGenre Genre => GameGenre.SimulationJob;
+        public override GDMeticaAnalytics GetAnalytics() => _simulationJobAnalytics ??= new SimulationJobAnalytics();
+    }
+}

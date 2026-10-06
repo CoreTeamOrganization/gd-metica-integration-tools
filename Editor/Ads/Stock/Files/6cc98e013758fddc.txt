@@ -1,0 +1,46 @@
+using UnityEditor;
+using UnityEditor.Build;
+using UnityEngine;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Sdk;
+
+namespace GDMonetization.Editor
+{
+    [InitializeOnLoad]
+    static class MeticaDefineSymbolManager
+    {
+        private const string Symbol = "METICA_ANALYTICS";
+
+        static MeticaDefineSymbolManager()
+        {
+            EditorApplication.delayCall += Sync;
+        }
+
+
+        internal static void Sync()
+        {
+            var sdkConfig = Resources.Load<SDKConfiguration>(MonetizationConfigurationsPath.SDK);
+            if (sdkConfig == null) return;
+
+            foreach (var target in new[] { NamedBuildTarget.Android, NamedBuildTarget.iOS })
+            {
+                PlayerSettings.GetScriptingDefineSymbols(target, out string[] defines);
+                var list = new System.Collections.Generic.List<string>(defines);
+                bool has = list.Contains(Symbol);
+
+                if (sdkConfig.UseMeticaForAnalytics && !has)
+                {
+                    list.Add(Symbol);
+                    PlayerSettings.SetScriptingDefineSymbols(target, list.ToArray());
+                    Debug.Log($"[GDMonetization] Added {Symbol} for {target.TargetName}");
+                }
+                else if (!sdkConfig.UseMeticaForAnalytics && has)
+                {
+                    list.Remove(Symbol);
+                    PlayerSettings.SetScriptingDefineSymbols(target, list.ToArray());
+                    Debug.Log($"[GDMonetization] Removed {Symbol} for {target.TargetName}");
+                }
+            }
+        }
+    }
+}

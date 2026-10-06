@@ -1,0 +1,31 @@
+using Monetization.Runtime.Ads;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    [DisallowMultipleComponent]
+    sealed class AvoidAppOpen : MonoBehaviour
+    {
+        static bool flag = true;
+        float timer = 0;
+
+        void Start()
+        {
+            gameObject.SetActive(flag);
+        }
+
+        void Update()
+        {
+            timer += Time.unscaledDeltaTime;
+            if (timer > 1)
+            {
+                if (flag && Input.touchCount > 0)
+                {
+                    flag = false;
+                    gameObject.SetActive(false);
+                    AdsManager.ShowAppOpenOnLoad(false);
+                }
+            }
+        }
+    }
+}

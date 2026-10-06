@@ -1,0 +1,20 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Analytics;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class CreateAnalyticsStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.CreateAnalyticsComponent;
+        public override bool IsFixed => true;
+        protected override Task PerformStepAsync(CancellationToken cToken)
+        {
+            AnalyticsManager.Create();
+            return Task.CompletedTask;
+        }
+    }
+}

@@ -1,0 +1,231 @@
+using GoogleMobileAds.Api;
+using GoogleMobileAds.Ump.Api;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Consent;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Consent
+{
+    public class NewAdmobConsent : IAdvanceUMPService
+    {
+        private ConsentConfiguration m_ConsentSettings;
+        private Action<UMPResult> m_OnComplete;
+        bool m_ConsentLoaded = false;
+
+        public bool PrivacyOptionsRequired => ConsentInformation.PrivacyOptionsRequirementStatus ==
+                                              PrivacyOptionsRequirementStatus.Required;
+
+        public void Initialize(ConsentConfiguration settings, Action<string> onComplete)
+        {
+            //throw new NotImplementedException();
+        }
+
+        #region GatherConsent
+
+        public void Initialize(ConsentConfiguration settings, Action<UMPResult> onComplete)
+        {
+            m_ConsentSettings = settings;
+            m_OnComplete = onComplete;
+
+            if (MonetizationPreferences.HasUserConsent_UMP.Get())
+            {
+                m_OnComplete.Invoke(new(UMPStatus.HasConsent, "OK"));
+            }
+            else
+            {
+                DelayedActionManager.Add(() =>
+                {
+                    if (!m_ConsentLoaded)
+                    {
+                        InvokeCompletion(new(UMPStatus.Timeout, "OK"));
+                    }
+                    else
+                    {
+                        Message.LogWarning(Tag.UMP,
+                            "Skipping consent timeout because form is already loaded, showed or accepted");
+                    }
+                }, settings.UMPLoadingTimeout, "UMP Timeout");
+            }
+
+            bool debugConsent = m_ConsentSettings.Geography != ConsentConfiguration.DebugGeography.Disabled;
+            ConsentInformation.Update(GetRequestParameters(debugConsent), (FormError updateError) =>
+            {
+                Message.Log(Tag.UMP, "Updating consent form");
+
+                if (updateError != null)
+                {
+                    InvokeCompletion(new(UMPStatus.UpdateError, updateError.Message));
+                    return;
+                }
+
+                if (ConsentInformation.CanRequestAds())
+                {
+                    InvokeCompletion(new(UMPStatus.CanRequestAds, "OK"));
+                    return;
+                }
+
+                Message.Log(Tag.UMP, "Loading consent form");
+
+                ConsentForm.Load((loadedForm, loadError) =>
+                {
+                    if (loadError != null)
+                    {
+                        InvokeCompletion(new(UMPStatus.LoadError, loadError.Message));
+                        return;
+                    }
+
+                    m_ConsentLoaded = true;
+                    loadedForm.Show((showError) =>
+                    {
+                        if (showError != null)
+                        {
+                            InvokeCompletion(new(UMPStatus.ShowError, showError.Message));
+                        }
+                        else // Success
+                        {
+                            ThreadDispatcher.Enqueue(UpdateAdServingMode);
+                            InvokeCompletion(new(UMPStatus.ShowSuccess, "OK"));
+                        }
+                    });
+                });
+            });
+        }
+
+        void InvokeCompletion(UMPResult result)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                MonetizationPreferences.HasUserConsent_UMP.Set(true);
+                m_OnComplete.Invoke(result);
+            });
+        }
+
+        #endregion
+
+        #region ConsentRequestParameters
+
+        ConsentRequestParameters GetRequestParameters(bool debugConsent)
+        {
+            if (debugConsent)
+            {
+                return new ConsentRequestParameters
+                {
+                    TagForUnderAgeOfConsent = false,
+                    ConsentDebugSettings = new ConsentDebugSettings
+                    {
+                        DebugGeography = GetDebugGeography(m_ConsentSettings.Geography),
+                        TestDeviceHashedIds = m_ConsentSettings.DeviceIds.ToList()
+                    }
+                };
+            }
+
+            return new ConsentRequestParameters();
+        }
+
+        DebugGeography GetDebugGeography(ConsentConfiguration.DebugGeography geography)
+        {
+            switch (geography)
+            {
+                case ConsentConfiguration.DebugGeography.GDPR: return DebugGeography.EEA;
+                case ConsentConfiguration.DebugGeography.Other: return DebugGeography.Other;
+                default: return DebugGeography.Disabled;
+            }
+        }
+
+        #endregion
+
+        #region PurposeConsents
+
+        //https://developers.google.com/admob/android/privacy/ad-serving-modes
+        void UpdateAdServingMode()
+        {
+            string purposeConsents = ApplicationPreferences.GetString("IABTCF_PurposeConsents");
+            int gdprApplies = ApplicationPreferences.GetInt("IABTCF_gdprApplies");
+
+            Message.Log(Logger.Tag.UMP, $"PurposeConsents = {purposeConsents}, gdprApplies = {gdprApplies}");
+
+            MonetizationPreferences.ConsentEuropeanArea.Set(gdprApplies.Equals(1));
+
+            if (!string.IsNullOrEmpty(purposeConsents) && purposeConsents.Length >= 10)
+            {
+                char[] aquiredPurpose = new char[7]
+                {
+                    purposeConsents[0], purposeConsents[1], purposeConsents[2], purposeConsents[3], purposeConsents[6],
+                    purposeConsents[8], purposeConsents[9]
+                };
+                string targetPurpose = "1111111"; // Requirement of Personalization
+                bool personalized = CompareStringWithChars(targetPurpose, aquiredPurpose);
+                MonetizationPreferences.PersonalizedAds.Set(personalized);
+            }
+            else
+                MonetizationPreferences.PersonalizedAds.Set(false);
+        }
+
+        bool CompareStringWithChars(string consent, char[] aquired)
+        {
+            if (!consent.Length.Equals(aquired.Length)) return false;
+
+            for (int i = 0; i < consent.Length; i++)
+            {
+                if (!consent[i].Equals(aquired[i]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region ConsentPrivacyForm
+
+        public void ShowPrivacyOptionsForm(Action<string> onComplete)
+        {
+            ConsentForm.ShowPrivacyOptionsForm((FormError showError) =>
+            {
+                ThreadDispatcher.Enqueue(() =>
+                {
+                    if (showError != null)
+                        onComplete(showError.Message);
+                    else // Success
+                    {
+                        UpdateAdServingMode();
+                        onComplete(null);
+                    }
+                });
+            });
+        }
+
+        #endregion
+
+        // private void FreezeTimeScaleOnConsentShow(bool hasFocus)
+        // {
+        //     if (tryingToLoadAndShowConsent && !hasFocus)
+        //     {
+        //         tryingToLoadAndShowConsent = false;
+        //         lastTimeScale = Time.timeScale;
+        //         Time.timeScale = consentSettings.PauseTimeScale ? 0 : lastTimeScale;
+        //         AudioListener.pause = consentSettings.MuteAudioListener ? true : false;
+        //
+        //         Message.Log(Logger.Tag.AppCycle, $"TimeScale : 0");
+        //         AdsManager.ShowAppOpenOnLoad(false);
+        //         AdsManager.ExtendAppOpenTime();
+        //
+        //         m_OnComplete += delegate
+        //         {
+        //             Time.timeScale = lastTimeScale;
+        //             AudioListener.pause = false;
+        //             Message.Log(Logger.Tag.AppCycle, $"TimeScale : {lastTimeScale}");
+        //         };
+        //     }
+        // }
+    }
+}

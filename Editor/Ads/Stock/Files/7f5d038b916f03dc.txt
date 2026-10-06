@@ -1,0 +1,41 @@
+using System;
+using System.Threading.Tasks;
+using Monetization.Runtime.Logger;
+using UnityEngine;
+
+#if UNITY_IOS
+using Unity.Advertisement.IosSupport;
+#endif
+
+namespace Monetization.Runtime.Consent
+{
+    public static class iOSAppTrackingTransparency
+    {
+#if UNITY_IOS
+
+        private static ATTrackingStatusBinding.AuthorizationTrackingStatus trackingStatus =>
+            ATTrackingStatusBinding.GetAuthorizationTrackingStatus();
+
+        public static async Task<bool> RequestTrackingPermissionAsync()
+        {
+            bool requested = false;
+            Message.Log(Tag.ATT, $"Requesting tracking permission...");
+            while (trackingStatus == ATTrackingStatusBinding.AuthorizationTrackingStatus.NOT_DETERMINED)
+            {
+                if (!requested)
+                {
+                    requested = true;
+                    SkAdNetworkBinding.SkAdNetworkUpdateConversionValue(0);
+                    SkAdNetworkBinding.SkAdNetworkRegisterAppForNetworkAttribution();
+                    ATTrackingStatusBinding.RequestAuthorizationTracking();
+                }
+
+                await Task.Delay(250);
+            }
+
+            Message.Log(Tag.ATT, $"Tracking status '{trackingStatus}'");
+            return trackingStatus == ATTrackingStatusBinding.AuthorizationTrackingStatus.AUTHORIZED;
+        }
+#endif
+    }
+}

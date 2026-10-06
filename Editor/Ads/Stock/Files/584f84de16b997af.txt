@@ -1,0 +1,36 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using GDMonetization.Runtime.Scripts.Bootstrap.Events;
+using GDMonetization.Runtime.Scripts.EventBusSystem;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.Sdk;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class AutoInitializeStep : DependentStep
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.AutomaticallyInitialize;
+        public override bool IsFixed => true;
+        protected override async Task PerformStepAsync(CancellationToken cToken)
+        {
+            foreach (var step in dependentSteps)
+            {
+                var result = await step.ExecuteAsync(cToken);
+                EventBus.Raise(new LoadingStepExecutedEvent(result));
+            }
+        }
+
+        private SDKConfiguration _config;
+
+        public override bool ShouldExecute()
+        {
+            if (!_config)
+                _config = Resources.Load<SDKConfiguration>(MonetizationConfigurationsPath.SDK);
+            return _config && _config.AutoInitialize;
+        }
+    }
+}

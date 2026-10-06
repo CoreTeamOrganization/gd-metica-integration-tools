@@ -19,10 +19,13 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         private const string Prefix = "GameDistrict.MeticaIntegrationTools.Reviewed";
         private const string SkipPrefix = "GameDistrict.MeticaIntegrationTools.Skipped";
+        private const string CommitPrefix = "GameDistrict.MeticaIntegrationTools.Committed";
 
         private static string Key(string stepId) => $"{Prefix}.{ProjectId}.{stepId}";
 
         private static string SkipKey(string stepId) => $"{SkipPrefix}.{ProjectId}.{stepId}";
+
+        private static string CommitKey(string stepId) => $"{CommitPrefix}.{ProjectId}.{stepId}";
 
         private static string ProjectId => Application.dataPath.GetHashCode().ToString("X8");
 
@@ -43,12 +46,28 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public static void ClearSkipped(string stepId) => EditorPrefs.DeleteKey(SkipKey(stepId));
 
+        /// <summary>
+        /// The commit a step's changes went into, from the window's commit section; null if
+        /// none. Once set the section is not offered again for that step. Not cleared when the
+        /// step stops verifying — the commit still exists.
+        /// </summary>
+        public static string CommittedAs(string stepId)
+        {
+            var sha = EditorPrefs.GetString(CommitKey(stepId), string.Empty);
+            return sha.Length == 0 ? null : sha;
+        }
+
+        public static void MarkCommitted(string stepId, string sha) => EditorPrefs.SetString(CommitKey(stepId), sha);
+
+        public static void ClearCommitted(string stepId) => EditorPrefs.DeleteKey(CommitKey(stepId));
+
         public static void ClearAll(params string[] stepIds)
         {
             foreach (var stepId in stepIds)
             {
                 ClearReviewed(stepId);
                 ClearSkipped(stepId);
+                ClearCommitted(stepId);
             }
         }
     }

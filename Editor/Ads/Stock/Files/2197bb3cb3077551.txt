@@ -1,0 +1,21 @@
+namespace Monetization.Runtime.Analytics
+{
+    /// <summary>
+    /// Metica analytics interface for the Puzzle (Success) genre.
+    /// Retrieve via <c>AnalyticsManager.Game</c> using this interface as the type parameter.
+    /// </summary>
+    public interface IPuzzleSuccessAnalytics : IGDMeticaAnalytics
+    {
+        /// <summary>Logs a levelStarted event when the player enters a puzzle level.</summary>
+        void LevelStarted(PuzzleSuccessLevelStarted data);
+
+        /// <summary>Logs a levelFinished event when a puzzle level ends (win or fail).</summary>
+        void LevelFinished(PuzzleSuccessLevelFinished data);
+
+        /// <summary>Logs an earnAsset event when the player receives an in-game asset.</summary>
+        void EarnAsset(PuzzleSuccessEarnAsset data);
+
+        /// <summary>Logs a spendAsset event when the player spends an in-game asset.</summary>
+        void SpendAsset(PuzzleSuccessSpendAsset data);
+    }
+}

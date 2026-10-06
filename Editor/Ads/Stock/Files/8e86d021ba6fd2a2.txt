@@ -1,0 +1,47 @@
+#if UNITY_ANDROID
+
+using System;
+using UnityEngine;
+
+namespace Monetization.Runtime.Utilities
+{
+    public class AndroidToastService : IToastService
+    {
+        public void Show(string message, bool isLong)
+        {
+            var activity = GetUnityActivity();
+            if (activity == null)
+                return;
+
+            activity.Call("runOnUiThread", new AndroidJavaRunnable(() =>
+            {
+                try
+                {
+                    using (var toastClass = new AndroidJavaClass("android.widget.Toast"))
+                    {
+                        var toast = toastClass.CallStatic<AndroidJavaObject>(
+                            "makeText",
+                            activity,
+                            message,
+                            toastClass.GetStatic<int>(isLong ? "LENGTH_LONG" : "LENGTH_SHORT")
+                        );
+                        toast.Call("show");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e);
+                }
+            }));
+        }
+
+        private AndroidJavaObject GetUnityActivity()
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            {
+                return unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+            }
+        }
+    }
+}
+#endif

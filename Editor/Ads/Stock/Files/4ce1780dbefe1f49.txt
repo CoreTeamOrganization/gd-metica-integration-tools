@@ -1,0 +1,102 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+using UnityEngine;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class ApplovinAppopen : AppOpenAdUnit
+    {
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (!IsAdUnitEmpty)
+            {
+                ListenEvents();
+                LoadAppOpen();
+            }
+        }
+
+        void ListenEvents()
+        {
+            MaxSdkCallbacks.AppOpen.OnAdLoadedEvent += AppOpen_OnAdLoadedEvent;
+            MaxSdkCallbacks.AppOpen.OnAdHiddenEvent += AppOpen_OnAdHiddenEvent;
+            MaxSdkCallbacks.AppOpen.OnAdDisplayedEvent += AppOpen_OnAdDisplayedEvent;
+            MaxSdkCallbacks.AppOpen.OnAdRevenuePaidEvent += AppOpen_OnAdRevenuePaidEvent;
+        }
+
+        public override bool HasAppOpen(bool doRequest)
+        {
+            if (IsAdUnitEmpty || isAppOpenVisible)
+                return false;
+
+            bool isReady = MaxSdk.IsAppOpenAdReady(adUnitId);
+            if (!isReady && doRequest)
+                LoadAppOpen();
+
+            return isReady;
+        }
+
+        public override void ShowAppOpen(string placementName)
+        {
+            this.placementName = placementName;
+            AdsManager.HideAllBanners();
+            MaxSdk.ShowAppOpenAd(adUnitId, placementName);
+
+            Message.Log(Tag.Applovin, $"Appopen Showed: {placementName}");
+        }
+
+        public override void LoadAppOpen()
+        {
+            if (IsAdUnitEmpty || isAppOpenVisible)
+                return;
+
+            MaxSdk.LoadAppOpenAd(adUnitId);
+        }
+
+        #region Callbacks
+
+        void AppOpen_OnAdLoadedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                if (showAppOpenOnLoad)
+                {
+                    AdsManager.ShowAppOpenOnLoad(false);
+                    AdsManager.ExtendAppOpenTime();
+                    ShowAppOpen("on_first_load");
+                }
+            });
+        }
+
+        void AppOpen_OnAdDisplayedEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            isAppOpenVisible = true;
+        }
+
+        void AppOpen_OnAdHiddenEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                Message.Log(Tag.Applovin, $"Appopen Closed");
+                AdsManager.ResumeAllBanners();
+                isAppOpenVisible = false;
+                LoadAppOpen();
+            });
+        }
+
+        void AppOpen_OnAdRevenuePaidEvent(string arg1, MaxSdkBase.AdInfo arg2)
+        {
+            AdRevenueInfo revInfo = new AdRevenueInfo(AdFormat.AppOpen, AdPlatforms.APPLOVIN, arg2.NetworkName,
+                arg2.AdUnitIdentifier, "USD", arg2.Revenue, placementName);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        #endregion
+    }
+}

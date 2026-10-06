@@ -1,0 +1,25 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using Monetization.Runtime.Configurations;
+using Monetization.Runtime.RemoteConfig;
+using Monetization.Runtime.Sdk;
+using UnityEditor;
+using UnityEngine;
+
+namespace GDMonetization.Editor.MenuItems
+{
+    static class ConfigurationsMenu
+    {
+        [MenuItem("GameDistrict/Monetization/Configurations...", false, 10)]
+        public static void SelectConfigurations()
+        {
+            var objects = Resources.LoadAll<ScriptableObject>("Configurations");
+            if (objects != null && objects.Length > 0)
+            {
+                Selection.activeObject = objects[0];
+            }
+        }
+    }
+}

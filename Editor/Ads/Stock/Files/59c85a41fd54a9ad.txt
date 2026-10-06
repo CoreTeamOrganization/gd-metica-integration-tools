@@ -1,0 +1,43 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Sdk;
+using Monetization.Runtime.Consent;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+public class DummySplashLoading : MonoBehaviour
+{
+    [SerializeField] Image fillImage;
+    [SerializeField] float loadingDuration;
+
+    private void OnEnable()
+    {
+        PrivacyPolicyPanel.OnPolicyAcceptedEvent += LoadSplash;
+    }
+
+    private void OnDisable()
+    {
+        PrivacyPolicyPanel.OnPolicyAcceptedEvent -= LoadSplash;
+    }
+
+
+    void LoadSplash()
+    {
+        StartCoroutine(LoadingRoutine());
+    }
+
+    IEnumerator LoadingRoutine()
+    {
+        float timer = 0;
+        while (timer < 1)
+        {
+            timer += Time.deltaTime / loadingDuration;
+            fillImage.fillAmount = timer;
+            yield return null;
+        }
+
+        SceneManager.LoadScene(1);
+    }
+}

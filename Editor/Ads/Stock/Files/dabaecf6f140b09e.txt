@@ -1,0 +1,109 @@
+namespace Monetization.Runtime.Analytics
+{
+    public class MiniGamesLevelStarted
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level        { get; }
+        public string Game         { get; }
+        public string GameType     { get; }
+        public string GameCategory { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public int?   LevelId     { get; set; }
+        public string StartSource { get; set; }
+
+        public MiniGamesLevelStarted(int level, string game, string gameType, string gameCategory)
+        {
+            Level        = level;
+            Game         = game;
+            GameType     = gameType;
+            GameCategory = gameCategory;
+        }
+    }
+
+    public class MiniGamesLevelFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public int    Level        { get; }
+        public string Game         { get; }
+        public string GameType     { get; }
+        public string GameCategory { get; }
+        public string LevelStatus  { get; }
+        public string Reason       { get; }
+        public float  PlayTime     { get; }
+        public int    AttemptCount { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public int?   LevelId      { get; set; }
+        public float? CurrentScore { get; set; }
+        public float? HighScore    { get; set; }
+        public string StartSource  { get; set; }
+
+        public MiniGamesLevelFinished(int level, string game, string gameType, string gameCategory,
+            string levelStatus, string reason, float playTime, int attemptCount)
+        {
+            Level        = level;
+            Game         = game;
+            GameType     = gameType;
+            GameCategory = gameCategory;
+            LevelStatus  = levelStatus;
+            Reason       = reason;
+            PlayTime     = playTime;
+            AttemptCount = attemptCount;
+        }
+    }
+
+    public class MiniGamesGameStarted
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public string Game         { get; }
+        public string GameType     { get; }
+        public string GameCategory { get; }
+        public int    OrderId      { get; }
+        public string BadgeType    { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public string StartSource { get; set; }
+        public bool?  AdBreak     { get; set; }
+        public bool?  Banner      { get; set; }
+
+        public MiniGamesGameStarted(string game, string gameType, string gameCategory,
+            int orderId, string badgeType)
+        {
+            Game         = game;
+            GameType     = gameType;
+            GameCategory = gameCategory;
+            OrderId      = orderId;
+            BadgeType    = badgeType;
+        }
+    }
+
+    public class MiniGamesGameFinished
+    {
+        // ── Required ──────────────────────────────────────────────────────────
+        public string Game         { get; }
+        public string GameType     { get; }
+        public string GameCategory { get; }
+        public int    OrderId      { get; }
+        public string BadgeType    { get; }
+        public string Status       { get; }
+        public float  PlayTime     { get; }
+
+        // ── Optional — null/no value means not set, will not appear in payload ─
+        public string StartSource { get; set; }
+        public bool?  AdBreak     { get; set; }
+        public bool?  Banner      { get; set; }
+
+        public MiniGamesGameFinished(string game, string gameType, string gameCategory,
+            int orderId, string badgeType, string status, float playTime)
+        {
+            Game         = game;
+            GameType     = gameType;
+            GameCategory = gameCategory;
+            OrderId      = orderId;
+            BadgeType    = badgeType;
+            Status       = status;
+            PlayTime     = playTime;
+        }
+    }
+}

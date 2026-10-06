@@ -1,0 +1,21 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using Monetization.Runtime.Ads;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class AdsSetupStep : LoadingStepBase
+    {
+        public override BootstrapStepName StepName => BootstrapStepName.SetupAdvertisement;
+        public override bool IsFixed => true;
+
+        protected override Task PerformStepAsync(CancellationToken cToken)
+        {
+            AdsManager.Initialize();
+            return Task.CompletedTask;
+        }
+    }
+}

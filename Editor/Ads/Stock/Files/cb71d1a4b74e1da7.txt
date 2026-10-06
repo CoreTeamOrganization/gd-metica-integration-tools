@@ -1,0 +1,16 @@
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.Ads;
+using Monetization.Runtime.InAppPurchasing;
+using UnityEngine;
+
+[CreateAssetMenu(fileName = "RemoveAds", menuName = "GDMonetization/InApps/RemoveAds")]
+public class InAppProduct_RemoveAds : InAppProductSO
+{
+    public override void OnPurchaseSuccess()
+    {
+        MonetizationPreferences.AdsRemoved.Set(true);
+        AdsManager.HideBanner();
+        AdsManager.HideMRec();
+    }
+}

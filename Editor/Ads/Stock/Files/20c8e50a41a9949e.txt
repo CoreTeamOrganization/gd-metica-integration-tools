@@ -1,0 +1,21 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using GDMonetization.Runtime.Scripts.Bootstrap.Core;
+using UnityEngine;
+
+namespace GDMonetization.Runtime.Scripts.Bootstrap.LoadingSteps
+{
+    [Serializable]
+    public class WaitStep : LoadingStepBase
+    {
+        [Tooltip("Delay in Seconds")]
+        [Min(0)]
+        public int delay;
+
+        protected override async Task PerformStepAsync(CancellationToken cToken)
+        {
+            await Task.Delay(delay * 1000, cToken);
+        }
+    }
+}

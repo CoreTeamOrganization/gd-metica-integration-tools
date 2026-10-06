@@ -1,0 +1,16 @@
+using System.Collections;
+using System.Collections.Generic;
+using Monetization.Runtime.InAppPurchasing;
+using UnityEngine;
+using UnityEngine.Serialization;
+
+namespace Monetization.Runtime.Configurations
+{
+    [CreateAssetMenu(fileName = "InAppPurchasing", menuName = "GDMonetization/InAppsConfig")]
+    public sealed class InAppsConfiguration : ScriptableObject
+    {
+        public bool AdjustPurchaseVerification = false;
+        public string AdjustInAppToken;
+        public InAppProductSO[] AllProducts;
+    }
+}
