@@ -1,0 +1,24 @@
+// GD SDK 5.0.0 - 5.2.0 version, generated from the 5.3.0+ template by
+// Tools~/MakePre530Templates.py: skips until Metica is initialized.
+using Metica;
+using Monetization.Runtime.Logger;
+
+namespace Monetization.Runtime.Consent
+{
+    public class MeticaConsentSettings : IConsentSettingsService
+    {
+        public void ApplySettings(ConsentInfo consentInfo)
+        {
+            // In 5.0's fixed consent list this runs at startup too - before Metica is up.
+            // AdNetworkMetica applies the consent itself once it is.
+            if (!Monetization.Runtime.Ads.MeticaInitializer.IsInitialized) return;
+
+            bool personalized = consentInfo.IsPersonalized;
+            MeticaSdk.Ads.SetDoNotSell(!personalized);
+            MeticaSdk.Ads.SetHasUserConsent(personalized);
+
+            Message.Log(Tag.Metica, $"DoNotSell : {!personalized}");
+            Message.Log(Tag.Metica, $"HasUserConsent : {personalized}");
+        }
+    }
+}

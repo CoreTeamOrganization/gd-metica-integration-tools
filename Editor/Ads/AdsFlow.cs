@@ -21,6 +21,7 @@ namespace GameDistrict.MeticaIntegrationTools
         // Android libraries is part of the SDK steps themselves, not a step of its own.
         private static readonly MeticaStep[] GDSdkSteps =
         {
+            new CompareSdkStep(),
             new AppLovinMaxStep(),
             new MeticaV1CodeStep(),
             new ImportMeticaSdkStep(),

@@ -26,8 +26,9 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Why =>
             "Additions only: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
             "AdRevenueInfo payload, the AdUnits Metica section, the UseMetica preference and remote flag, " +
-            "the AdsManager network switch, and a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
-            "(\"applovin_max_sdk\" — without it Adjust drops Metica revenue). OnAdRevenuePaidEvent stays " +
+            "the AdsManager network switch, a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
+            "(\"applovin_max_sdk\" — without it Adjust drops Metica revenue), and on GD SDK 5.0–5.2 " +
+            "MeticaConsentSettings in ConsentManager's fixed consent list. OnAdRevenuePaidEvent stays " +
             "invoked directly — an older " +
             "ThreadDispatcher wrap around it is undone. AdNetworkController, AdNetworkAdmob and " +
             "AdNetworkAppLovin are not touched. Originals are " +
@@ -57,6 +58,15 @@ namespace GameDistrict.MeticaIntegrationTools
         private const string MeticaAdSource = "AdPlatforms.METICA => \"applovin_max_sdk\",";
         private const string AdSourceAnchor = "AdPlatforms.APPLOVIN =>";
 
+        /// <summary>GD SDK 5.0–5.2 only: its consent services are a fixed list, with no way to add one.</summary>
+        private const string MarkerConsent = "new MeticaConsentSettings()";
+        private const string ConsentAnchor = "new AdjustConsentSettings(),";
+
+        /// <summary>Before 5.3.0 ConsentManager has no AddAndUpdateConsentService.</summary>
+        private static bool ConsentListIsFixed =>
+            SourcePatcher.Exists(MeticaPaths.ConsentManager)
+            && !SourcePatcher.Contains(MeticaPaths.ConsentManager, "AddAndUpdateConsentService");
+
         /// <summary>
         /// AdPlatforms.METICA mapped to a string, in a switch expression (METICA => "…") or a
         /// switch statement (case METICA: return "…";). Any non-empty string counts — a game may
@@ -81,7 +91,8 @@ namespace GameDistrict.MeticaIntegrationTools
             MeticaPaths.RemoteConfigManager,
             MeticaPaths.AdsManager,
             MeticaPaths.AnalyticsManager,
-            MeticaPaths.AdjustAnalyticsNetwork
+            MeticaPaths.AdjustAnalyticsNetwork,
+            MeticaPaths.ConsentManager
         };
 
         public override string ReviewHint =>
@@ -121,6 +132,9 @@ namespace GameDistrict.MeticaIntegrationTools
             if (RevenueDispatchWrapped())
                 missing.Add("OnAdRevenuePaidEvent is inside ThreadDispatcher — it has to be invoked directly");
 
+            if (ConsentListIsFixed && !SourcePatcher.Contains(MeticaPaths.ConsentManager, MarkerConsent))
+                missing.Add("ConsentManager's consent list has no MeticaConsentSettings");
+
             if (!AdjustKnowsMetica())
                 missing.Add("AdPlatforms.METICA case in AdjustAnalyticsNetwork.GetAdSource — Adjust drops Metica revenue without it");
 
@@ -132,7 +146,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             // One count up front; the list itself goes under "Why?" as the extra problems.
             // The direct-invoke rule and the Adjust ad source count as patches too.
-            result.Problem($"{missing.Count} of {checks.Length + 2} patches missing.");
+            result.Problem($"{missing.Count} of {checks.Length + 2 + (ConsentListIsFixed ? 1 : 0)} patches missing.");
             foreach (var what in missing)
                 result.Problem($"Missing: {what}");
 
@@ -180,6 +194,16 @@ namespace GameDistrict.MeticaIntegrationTools
             PatchAdsManager(log);
             PatchAnalyticsManager(log);
             PatchAdjustAnalyticsNetwork(log);
+
+            // GD SDK 5.0–5.2: consent changes reach only the services in ConsentManager's fixed
+            // list. The Pre530 AdNetworkMetica applies consent once Metica is up; this keeps it
+            // updated when the player changes it later.
+            if (ConsentListIsFixed)
+                Run(log, "ConsentManager Metica consent",
+                    SourcePatcher.InsertAfterLine(MeticaPaths.ConsentManager, MarkerConsent, ConsentAnchor,
+                        "            new MeticaConsentSettings(),"),
+                    MeticaPaths.ConsentManager,
+                    "add new MeticaConsentSettings(), to the ConsentServices list");
 
             return log;
         }

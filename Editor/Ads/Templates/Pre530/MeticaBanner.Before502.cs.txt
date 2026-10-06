@@ -1,0 +1,180 @@
+// GD SDK 5.0.0 - 5.0.1 version: a hand port of that SDK's own ApplovinBanner to Metica, not
+// generated (see Tools~/MakePre530Templates.py). Banners there work another way: a per-unit
+// bannerStatus, priorities and AdsManager.HideAllBannersExcept; AdsManager.BannerStatus is
+// private. The Metica calls are the ones the 5.3.0+ MeticaBanner uses.
+using Metica;
+using Metica.Ads;
+using Monetization.Runtime.Analytics;
+using Monetization.Runtime.Logger;
+using Monetization.Runtime.Utilities;
+
+namespace Monetization.Runtime.Ads
+{
+    internal sealed class MeticaBanner : BannerAdUnit
+    {
+        private bool isCreated;
+
+        public override void Initialize(string adUnitId)
+        {
+            this.adUnitId = adUnitId;
+            if (IsAdUnitEmpty)
+            {
+                Message.LogError(Tag.Metica, "Initialize: Banner ad unit is empty");
+                return;
+            }
+
+            // As ApplovinBanner: Metica takes AppLovin's place in the network list.
+            bannerPriority = 1;
+            ListenEvents();
+            LoadBanner();
+        }
+
+        private void ListenEvents()
+        {
+            MeticaAdsCallbacks.Banner.OnAdLoadSuccess += OnBannerLoadedEvent;
+            MeticaAdsCallbacks.Banner.OnAdLoadFailed += OnBannerLoadFailedEvent;
+            MeticaAdsCallbacks.Banner.OnAdRevenuePaid += OnBannerRevenuePaidEvent;
+            MeticaAdsCallbacks.Banner.OnAdClicked += OnBannerClickedEvent;
+        }
+
+        public override bool HasBanner()
+        {
+            if (IsAdUnitEmpty)
+                return false;
+
+            bannerStatus = true;
+            if (!isCreated)
+            {
+                LoadBanner();
+                return false;
+            }
+
+            return isLoaded;
+        }
+
+        public override void ShowBanner()
+        {
+            bannerStatus = true;
+            Message.Log(Tag.Metica, "Banner is showing");
+            MeticaSdk.Ads.ShowBanner(adUnitId);
+        }
+
+        public override void HideBanner()
+        {
+            bannerStatus = false;
+            if (isCreated)
+            {
+                Message.Log(Tag.Metica, "Banner is hidden");
+                MeticaSdk.Ads.HideBanner(adUnitId);
+            }
+        }
+
+        public override void DestroyBanner()
+        {
+            // Metica has no banner destroy; hiding is what the 5.3.0+ MeticaBanner does too.
+            // The banner stays created, so a later LoadBanner does not create a second one.
+            if (isCreated)
+            {
+                Message.Log(Tag.Metica, "Banner is destroyed");
+                MeticaSdk.Ads.HideBanner(adUnitId);
+            }
+
+            bannerStatus = false;
+        }
+
+        protected override void LoadBanner()
+        {
+            if (IsAdUnitEmpty || isCreated)
+                return;
+
+            // Creating the banner loads it, as MaxSdk.CreateBanner does for ApplovinBanner.
+            MeticaSdk.Ads.CreateBanner(adUnitId, new MeticaAdViewConfiguration(ConvertToMeticaBannerPos()));
+            MeticaSdk.Ads.SetBannerWidth(adUnitId, 320);
+            MeticaSdk.Ads.StartBannerAutoRefresh(adUnitId);
+            Message.Log(Tag.Metica, $"Banner is creating with size {bannerInfo.bannerSize} at {bannerInfo.BannerPosition}");
+            isCreated = true;
+        }
+
+        private MeticaAdViewPosition ConvertToMeticaBannerPos()
+        {
+            switch (bannerInfo.BannerPosition)
+            {
+                case BannerPosition.Top:
+                    return MeticaAdViewPosition.TopCenter;
+                case BannerPosition.TopLeft:
+                    return MeticaAdViewPosition.TopLeft;
+                case BannerPosition.TopRight:
+                    return MeticaAdViewPosition.TopRight;
+                case BannerPosition.Center:
+                    return MeticaAdViewPosition.Centered;
+                case BannerPosition.Bottom:
+                    return MeticaAdViewPosition.BottomCenter;
+                case BannerPosition.BottomLeft:
+                    return MeticaAdViewPosition.BottomLeft;
+                case BannerPosition.BottomRight:
+                    return MeticaAdViewPosition.BottomRight;
+                default:
+                    return MeticaAdViewPosition.BottomCenter;
+            }
+        }
+
+        #region Callbacks
+
+        private void OnBannerLoadedEvent(MeticaAd meticaAd)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoaded = true;
+                Message.Log(Tag.Metica, "Banner loaded");
+
+                if (!bannerStatus)
+                {
+                    HideBanner();
+                    return;
+                }
+
+                if (IsTopPriority)
+                {
+                    ShowBanner();
+                    AdsManager.HideAllBannersExcept(this);
+                }
+            });
+        }
+
+        private void OnBannerLoadFailedEvent(MeticaAdError meticaAdError)
+        {
+            ThreadDispatcher.Enqueue(() =>
+            {
+                isLoaded = false;
+                Message.LogError(Tag.Metica, "Banner failed to load");
+
+                // As ApplovinBanner: still wanted, so let AdsManager try the next network.
+                if (!bannerStatus) HideBanner();
+                else AdsManager.ShowBanner();
+            });
+        }
+
+        private void OnBannerRevenuePaidEvent(MeticaAd meticaAd)
+        {
+            double revenue = meticaAd.revenue ?? 0.0;
+            string networkName = meticaAd.networkName ?? "Unknown";
+            string adUnitIdentifier = meticaAd.adUnitId;
+
+            Message.Log(Tag.Metica,
+                $"Banner revenue paid - AdUnit: {adUnitIdentifier}, Revenue: {revenue}, Network: {networkName}");
+
+            AdRevenueInfo revInfo = new(AdFormat.Banner, AdPlatforms.METICA, networkName,
+                adUnitIdentifier, "USD", revenue, bannerInfo.bannerSize.ToString(), AdNetworkMetica.RevenuePayload);
+
+            AnalyticsManager.ReportAdRevenue(revInfo);
+        }
+
+        private void OnBannerClickedEvent(MeticaAd meticaAd)
+        {
+            AdsManager.ExtendAppOpenTime();
+            Message.Log(Tag.Metica, "Banner clicked");
+        }
+
+        #endregion
+    }
+}

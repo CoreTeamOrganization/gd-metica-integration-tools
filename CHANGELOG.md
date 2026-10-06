@@ -258,3 +258,12 @@
     and what replaces it; passes when none are left. It never edits code. Detection uses names
     that exist in v1 and nowhere in Metica 2.45.2 (checked against its source: 0 false hits
     in 68 files), ignoring comments and strings (`MeticaV1Code`).
+- GD SDK 5.0.0 – 5.2.0 supported (minimum lowered from 5.3.0). The wrapper step picks, per file,
+  a version that fits the project's own ad-unit classes: `Templates/Pre530/` (generated from the
+  5.3.0+ templates by `Tools~/MakePre530Templates.py`; banner for 5.0.0 – 5.0.1 hand-ported from
+  that SDK's ApplovinBanner). New patch on 5.0 – 5.2: `MeticaConsentSettings` added to
+  `ConsentManager`'s fixed consent list (it skips until Metica is initialized; AdNetworkMetica
+  applies consent right after init). Patch tests pass on all 15 v5 releases; the Unity compile
+  of 5.0 – 5.2 was still running at push time.
+- New optional first step "Compare with original GD SDK" (GD SDK flow): counts what the project
+  changed, opens the Compare window, skip or sign off in one click.

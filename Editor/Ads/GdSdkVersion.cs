@@ -6,14 +6,14 @@ namespace GameDistrict.MeticaIntegrationTools
     /// <summary>
     /// The GD Monetization SDK version this project has, and whether the tool supports it.
     ///
-    /// <para>5.3.0 is the floor. Before it, the ad-unit base classes the Metica wrapper files
-    /// build on are different (no interstitial close callback, no banner reposition, no
-    /// MRecPosition), so the wrappers do not compile — checked by compiling each v5 release
-    /// with the tool's changes in Unity.</para>
+    /// <para>5.0.0 is the floor. 5.0.0 – 5.2.0 have different ad-unit base classes (no
+    /// interstitial close callback, no banner / MREC reposition, no MRecPosition, no
+    /// AddAndUpdateConsentService), so the wrapper step writes the Templates/Pre530 versions
+    /// there — see WrapperFilesStep.TemplateFiles.</para>
     /// </summary>
     internal static class GdSdkVersion
     {
-        public static readonly Version Minimum = new Version(5, 3, 0);
+        public static readonly Version Minimum = new Version(5, 0, 0);
 
         // \b: v6.2.x declares BaseVersion = "5.5.0" first, which is not the version.
         private static readonly Regex Declared = new Regex("\\bVersion\\s*=\\s*\"([^\"]+)\"");
