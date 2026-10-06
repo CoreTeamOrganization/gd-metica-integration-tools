@@ -28,10 +28,10 @@ picked up immediately without cutting a release:
 "com.gamedistrict.metica-integration-tools": "file:../../gd-metica-integration-tools"
 ```
 
-**Shipping game** — pin a released tag once one exists:
+**Shipping game** — pin a released tag (latest: `v0.1.0`):
 
 ```json
-"com.gamedistrict.metica-integration-tools": "https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git#v1.0.0"
+"com.gamedistrict.metica-integration-tools": "https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git#v0.1.0"
 ```
 
 ## Why a package, not an Assets folder
