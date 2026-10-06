@@ -28,7 +28,8 @@ namespace GameDistrict.MeticaIntegrationTools
     ///
     /// <para>The names were checked against the Metica 2.45.2 source: none of them appears
     /// there. MeticaAds, MeticaAdsCallbacks and MeticaSdk exist in both versions, so they only
-    /// count in a file that also uses a v1 namespace. Comments are ignored. Metica's own SDK
+    /// count in a file that also uses v1 — a v1 namespace or any v1-only name. Comments and
+    /// strings are ignored. Metica's own SDK
     /// folder and this tool's standalone runtime are never scanned.</para>
     /// </summary>
     internal static class MeticaV1Code
@@ -95,7 +96,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var lines = text.Replace("\r\n", "\n").Split('\n');
             var code = WithoutComments(lines);
-            var v1File = code.Any(l => V1Namespace.IsMatch(l));
+            // A v1 file: one using a v1 namespace, or any v1-only name — a game may have
+            // commented its v1 usings out and left the calls.
+            var v1File = code.Any(l => V1Namespace.IsMatch(l) || Markers.Any(m => m.pattern.IsMatch(l)));
 
             for (var i = 0; i < code.Length; i++)
             {
