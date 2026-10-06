@@ -38,6 +38,15 @@ namespace MeticaIntegration
         public string IosBanner;
         public string IosMRec;
 
+        [Header("Ad positions")]
+        [Tooltip("Where the banner appears when it is created. Bottom by default. " +
+                 "MeticaAdsManager.RepositionBanner moves it at runtime.")]
+        public BannerPosition BannerPosition = BannerPosition.Bottom;
+
+        [Tooltip("Where the MREC appears when it is created. Center by default. " +
+                 "MeticaAdsManager.RepositionMRec moves it at runtime.")]
+        public MRecPosition MRecPosition = MRecPosition.Center;
+
         [Header("Remote switch")]
         [Tooltip("Gate Metica on a value from your own remote config. On (the default): Metica stays " +
                  "off until the backend turns it on through MeticaRemoteConfig.Apply(true). Unticked: " +

@@ -94,12 +94,14 @@ namespace MeticaIntegration
                 if (!string.IsNullOrEmpty(_config.Banner))
                 {
                     _banner = new MeticaBanner();
+                    _banner.SetStartPosition(_config.BannerPosition);
                     _banner.Initialize(_config.Banner);
                 }
 
                 if (!string.IsNullOrEmpty(_config.MRec))
                 {
                     _mrec = new MeticaMRec();
+                    _mrec.SetStartPosition(_config.MRecPosition);
                     _mrec.Initialize(_config.MRec);
                 }
 

@@ -44,6 +44,9 @@ namespace MeticaIntegration
         protected bool isLoading;
         protected bool _isBannerActive;
 
+        /// <summary>The position the banner is created at. Call before <see cref="AdUnitBase.Initialize"/>.</summary>
+        public void SetStartPosition(BannerPosition position) => bannerInfo.BannerPosition = position;
+
         public abstract bool HasBanner();
         public abstract void LoadBanner();
         public abstract bool IsBannerActive();
@@ -59,6 +62,9 @@ namespace MeticaIntegration
 
         protected bool hasMrec;
         protected bool isLoading;
+
+        /// <summary>The position the MREC is created at. Call before <see cref="AdUnitBase.Initialize"/>.</summary>
+        public void SetStartPosition(MRecPosition position) => bannerInfo.MrecPosition = position;
 
         public abstract bool HasMRec();
         public abstract void LoadMRec();

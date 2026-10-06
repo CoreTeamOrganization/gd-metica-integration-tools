@@ -268,3 +268,8 @@
   5.3.0 and 5.5.0.
 - New optional first step "Compare with original GD SDK" (GD SDK flow): counts what the project
   changed, opens the Compare window, skip or sign off in one click.
+- Standalone: banner and MREC start positions are now in MeticaAdsConfig ("Ad positions":
+  Banner position, default Bottom; MREC position, default Center — the previous hard-coded
+  values, so nothing moves until someone changes them). Applied when the units are created;
+  RepositionBanner / RepositionMRec still move them at runtime. Checked by compiling the whole
+  standalone runtime with the Metica 2.45.2 and MAX sources.

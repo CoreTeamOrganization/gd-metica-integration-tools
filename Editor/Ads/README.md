@@ -84,6 +84,9 @@ MeticaAdsHooks.HasUserConsent = () => MyConsent.PersonalizedAdsAllowed;
 
 Both are optional — leave them unset and ads still serve.
 
+Banner and MREC start where `MeticaAdsConfig` says (**Ad positions**: banner Bottom, MREC
+Center by default); `MeticaAdsManager.RepositionBanner` / `RepositionMRec` move them at runtime.
+
 **Metica is off by default.** `MeticaRemoteConfig` is the remote on/off switch: the config
 asset is created with **Use Remote Switch** on and **Default Use Metica** off, so Metica
 stays off until the game calls `MeticaRemoteConfig.Apply(true)`. Feed it from whatever remote
