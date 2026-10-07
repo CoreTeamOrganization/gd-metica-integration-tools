@@ -277,3 +277,26 @@
   chooses. Optional: the runtime already loads at start, after each close and after a failed
   load. They do nothing before Metica is ready, without an ad unit id, or when an ad is
   already loaded (so a ready ad is never replaced).
+- Fixed: "Reviewed — next step" (and Re-check, Skip) sometimes did nothing until the window
+  was reopened. A re-check queued just before a script reload left a private "refresh queued"
+  flag set — Unity keeps private fields across a reload, but not the update tick that clears
+  the flag. The flag (and `_busy`) are now `[NonSerialized]` and reset in `OnEnable`, and
+  "Reviewed — next step" shows the next step at once.
+- Metica v1 code step: each file is now a row with its name and v1 line count, and its folder
+  faded underneath. Hover a file to **Comment** out or **Remove** all its v1 statements, or open
+  it and hover a single line. The whole statement is taken (multi-line calls and lambda
+  subscriptions included); lines that steer code (`if` / `else` / `return` …), fields and
+  members, and block headers are left for a hand edit and say so. Remove on a whole file asks
+  first. The file's pre-tool copy is kept in the backup folder.
+- Standalone: `MeticaAdsHooks.OnAdRevenue` is now called straight from Metica's callback, no
+  longer through `ThreadDispatcher`. Interstitial and rewarded revenue arrive on Metica's
+  native thread (`RevenueCallbackDelivery.NativeThread`) while the ad has Unity paused; the
+  dispatcher held them until the ad closed, so a kill mid-ad lost the event — the reason for
+  the native thread in the first place. Handlers keep SDK calls inline and send Unity work
+  (PlayerPrefs, MonoBehaviours) through `ThreadDispatcher.Enqueue`. Documented on the hook.
+- Standalone: custom MREC position — `MeticaAdsConfig.MRecOffset` shifts the MREC from its
+  position by x/y dp (points on iOS), and `MeticaAdsManager.RepositionMRec(position, offset)`
+  does it at runtime. The anchor is worked out from the screen size in dp (Android's exact
+  density; a dpi estimate elsewhere) and placed with Metica's x/y API, the same way games
+  already place a MAX MREC (FrustratingPuzzle: bottom, 140 dp up). No size option: an MREC is
+  always 300 × 250 and Metica 2.45.2 cannot resize one.

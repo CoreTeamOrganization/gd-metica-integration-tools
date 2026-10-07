@@ -17,8 +17,19 @@ namespace MeticaIntegration
     public static class MeticaAdsHooks
     {
         /// <summary>
-        /// Called for every ad impression that earns revenue, on the Unity main thread.
-        /// Forward it to whatever ad-revenue reporting you already have.
+        /// Called for every ad impression that earns revenue. Forward it to whatever ad-revenue
+        /// reporting you already have.
+        ///
+        /// <para><b>Not always on the Unity main thread.</b> Interstitial and rewarded revenue
+        /// arrive on Metica's native thread the moment the ad pays — while the ad still has Unity
+        /// paused — so the event is sent even if the app is killed before the ad closes. Banner
+        /// and MREC revenue arrive on the main thread.</para>
+        ///
+        /// <para>So in this handler: analytics SDK calls are fine (Firebase LogEvent, Adjust,
+        /// AppMetrica — they go straight to native code). Anything that touches Unity —
+        /// PlayerPrefs, MonoBehaviours, GameObjects, Time — goes through
+        /// <c>ThreadDispatcher.Enqueue(() => …)</c>, which runs it on the main thread once
+        /// Unity resumes.</para>
         /// </summary>
         public static Action<AdRevenueInfo> OnAdRevenue;
 
@@ -49,7 +60,12 @@ namespace MeticaIntegration
         //  private static void WireMeticaAds()
         //  {
         //      MeticaAdsHooks.OnAdRevenue = info =>
+        //      {
+        //          // Native thread for interstitial / rewarded: SDK calls only here…
         //          MyAnalytics.LogAdRevenue(info.NetworkName, info.Revenue, info.Currency);
+        //          // …and Unity work on the main thread.
+        //          ThreadDispatcher.Enqueue(() => MyRevenueCounter.Add(info.Revenue));
+        //      };
         //
         //      MeticaAdsHooks.HasUserConsent = () => MyConsent.PersonalizedAdsAllowed;
         //

@@ -10,8 +10,9 @@ namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
     /// Lists every line of game code that still uses the Metica v1 API, and passes once there
-    /// are none. It never edits the game's code — the developer does, with the list and what
-    /// replaces each call.
+    /// are none. Single statements can be commented out or removed from the list, a file at a
+    /// time or a line at a time; anything that steers code (if / else / return, declarations)
+    /// is left for the developer, with what replaces each call.
     ///
     /// <para>Before the Metica SDK step on purpose: v1's API is gone in 2.x, so this code stops
     /// compiling the moment v1 is removed. Taking it out first, while v1 is still installed,
@@ -33,14 +34,16 @@ namespace GameDistrict.MeticaIntegrationTools
               "compiling once v1 is removed. In a GD SDK project v1 lives in the AppLovin scripts: " +
               "Compare with original GD SDK shows exactly what v1 changed there. Put those parts back " +
               "to the original, keeping the game's own changes; the later steps add Metica the 2.x way. " +
-              "The tool lists the lines; it does not edit them."
+              "Hover a file or a line to Comment it out or Remove it; lines that steer code (if / else / " +
+              "return, declarations) are left for a hand edit."
             : "Metica v1 is in this project. Its API is gone in Metica 2.x (Metica.ADS → Metica.Ads, no " +
               "per-user IsMeticaAdsEnabled, no NotifyAd* calls), so the code below stops compiling once " +
               "v1 is removed. Take the v1 calls out and keep the game's own MAX path — the game then runs " +
               "on MAX alone. After the Metica SDK, runtime and config steps, call MeticaAdsManager where " +
               "the old Metica branches were: Initialize() at boot, IsEnabled to choose Metica or MAX, " +
               "HasInterstitial / ShowInterstitial, HasRewarded / ShowRewarded, ShowBanner / ShowMRec, and " +
-              "MeticaAdsHooks.OnAdRevenue for revenue. The tool lists the lines; it does not edit them.";
+              "MeticaAdsHooks.OnAdRevenue for revenue. Hover a file or a line to Comment it out or Remove " +
+              "it; lines that steer code (if / else / return, declarations) are left for a hand edit.";
 
         // Nothing to run: the developer edits the code, and Re-check re-scans.
         public override string ActionLabel => null;
@@ -87,24 +90,68 @@ namespace GameDistrict.MeticaIntegrationTools
 
             foreach (var file in MeticaV1Code.ScanProject().GroupBy(r => r.Path))
             {
+                var path = file.Key;
                 var lines = file.ToList();
+                var reasons = MeticaV1Code.HandEditReasons(path, lines.Select(r => r.Line));
+                var editable = lines.Where(r => reasons[r.Line] == null).Select(r => r.Line).ToList();
+
                 var actions = lines.Take(LinesShownPerFile)
-                    .Select(r => (StepControl)new StepButton($"Line {r.Line}: {Shorten(r.Text)} — {r.Hint}",
-                        () => OpenAt(r.Path, r.Line)))
+                    .Select(r => (StepControl)new StepLine(r.Line, r.Text,
+                        reasons[r.Line] == null ? r.Hint : $"{r.Hint} · {reasons[r.Line]}",
+                        () => OpenAt(path, r.Line),
+                        reasons[r.Line] == null
+                            ? new[]
+                            {
+                                new StepButton("Comment", () => EditLines(path, new[] { r.Line }, false)),
+                                new StepButton("Remove", () => EditLines(path, new[] { r.Line }, true))
+                            }
+                            : null))
                     .ToList();
                 if (lines.Count > LinesShownPerFile)
                     actions.Add(new StepButton($"Open the file ({lines.Count - LinesShownPerFile} more lines)",
-                        () => OpenAt(file.Key, lines[LinesShownPerFile].Line), icon: StepIcon.File));
+                        () => OpenAt(path, lines[LinesShownPerFile].Line), icon: StepIcon.File));
 
-                yield return new StepItem(file.Key, false,
-                    $"{lines.Count} Metica v1 line{(lines.Count == 1 ? "" : "s")}", actions);
+                var count = $"{lines.Count} v1 line{(lines.Count == 1 ? "" : "s")}";
+                if (editable.Count < lines.Count) count += $" · {lines.Count - editable.Count} by hand";
+
+                var hover = editable.Count == 0
+                    ? null
+                    : new[]
+                    {
+                        new StepButton("Comment", () => EditLines(path, editable, false)),
+                        new StepButton("Remove", () =>
+                        {
+                            if (EditorUtility.DisplayDialog("Remove Metica v1 lines",
+                                    $"Remove {editable.Count} Metica v1 statement{(editable.Count == 1 ? "" : "s")} " +
+                                    $"from {Path.GetFileName(path)}?\n\nA copy of the file from before the tool's " +
+                                    "first edit is kept in the backup folder, and git has the rest.",
+                                    "Remove", "Cancel"))
+                                EditLines(path, editable, true);
+                        })
+                    };
+
+                yield return new StepItem(Path.GetFileName(path), false, count, actions,
+                    Path.GetDirectoryName(path)?.Replace('\\', '/'), hover);
             }
         }
 
         private static void OpenAt(string path, int line) =>
             InternalEditorUtility.OpenFileAtLineExternal(MeticaPaths.ToAbsolute(path), line);
 
-        private static string Shorten(string text) => text.Length <= 60 ? text : text.Substring(0, 57) + "…";
+        /// <summary>Comments out or removes v1 statements in one file, then lets Unity recompile.</summary>
+        private void EditLines(string path, IReadOnlyCollection<int> lines, bool remove)
+        {
+            var changed = MeticaV1Code.Edit(path, lines, remove, out var skipped);
+
+            var log = new List<string>
+            {
+                $"{(remove ? "Removed" : "Commented out")} {changed} Metica v1 statement{(changed == 1 ? "" : "s")} in {path}"
+            };
+            if (skipped > 0) log.Add($"Left {skipped} line{(skipped == 1 ? "" : "s")} for a hand edit");
+            MeticaIntegrationLog.Record(Title, log);
+
+            if (changed > 0) AssetDatabase.ImportAsset(path);
+        }
 
         // ── Files v1 was found in, kept per project ────────────────────────────
 

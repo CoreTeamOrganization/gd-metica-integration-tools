@@ -47,6 +47,11 @@ namespace MeticaIntegration
                  "MeticaAdsManager.RepositionMRec moves it at runtime.")]
         public MRecPosition MRecPosition = MRecPosition.Center;
 
+        [Tooltip("Shift the MREC from MRec Position, in dp (points on iOS): x right, y down. " +
+                 "Bottom with (0, -140) puts it 140 dp above the bottom edge. (0, 0): no shift. " +
+                 "An MREC is always 300 × 250 — Metica cannot resize it.")]
+        public Vector2 MRecOffset;
+
         [Header("Remote switch")]
         [Tooltip("Gate Metica on a value from your own remote config. On (the default): Metica stays " +
                  "off until the backend turns it on through MeticaRemoteConfig.Apply(true). Unticked: " +

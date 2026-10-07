@@ -1,5 +1,6 @@
 using Metica;
 using Metica.Ads;
+using UnityEngine;
 
 namespace MeticaIntegration
 {
@@ -27,7 +28,9 @@ namespace MeticaIntegration
 
         public void CreateMRec()
         {
-            MeticaSdk.Ads.CreateMrec(adUnitId, new MeticaAdViewConfiguration(ConvertToMeticaMRecPos()));
+            MeticaSdk.Ads.CreateMrec(adUnitId, HasOffset
+                ? new MeticaAdViewConfiguration(OffsetX(), OffsetY())
+                : new MeticaAdViewConfiguration(ConvertToMeticaMRecPos()));
             SetMRecAutoRefreshStatus(AutoRefresh.Enabled);
             MeticaAdsLog.Log("MRec IS CREATED & LOADING");
             isLoading = true;
@@ -75,13 +78,122 @@ namespace MeticaIntegration
             HideMRec();
         }
 
-        public override void RepositionMRec(MRecPosition newPosition)
+        public override void RepositionMRec(MRecPosition newPosition, Vector2 offset = default)
         {
             bannerInfo.MrecPosition = newPosition;
-            if (!IsAdUnitEmpty)
+            bannerInfo.MrecOffset = offset;
+            if (IsAdUnitEmpty) return;
+
+            if (HasOffset)
+            {
+                MeticaAdsLog.Log($"MRec is repositioned to {newPosition} shifted by {offset} dp");
+                MeticaSdk.Ads.UpdateMrecPositionCoordinates(adUnitId, OffsetX(), OffsetY());
+            }
+            else
             {
                 MeticaAdsLog.Log($"MRec is repositioned to {newPosition}");
                 MeticaSdk.Ads.UpdateMrecPosition(adUnitId, ConvertToMeticaMRecPos());
+            }
+        }
+
+        // ── Custom position: an anchor shifted by an offset ────────────────────
+        //
+        // Metica places an MREC either at one of nine anchors or at x/y — dp on Android,
+        // points on iOS, from the top-left. An offset needs x/y, so the anchor is worked out
+        // here from the screen size in dp and the MREC's size. An MREC is always 300 × 250:
+        // neither Metica nor MAX can resize one.
+
+        private const float Width = 300f;
+        private const float Height = 250f;
+
+        private bool HasOffset => bannerInfo.MrecOffset != Vector2.zero;
+
+        private double OffsetX()
+        {
+            var screen = Screen.width / Density;
+            var x = ColumnOf(bannerInfo.MrecPosition) * (screen - Width) / 2f + bannerInfo.MrecOffset.x;
+            return Mathf.Clamp(x, 0f, Mathf.Max(0f, screen - Width));
+        }
+
+        private double OffsetY()
+        {
+            var screen = Screen.height / Density;
+            var y = RowOf(bannerInfo.MrecPosition) * (screen - Height) / 2f + bannerInfo.MrecOffset.y;
+            return Mathf.Clamp(y, 0f, Mathf.Max(0f, screen - Height));
+        }
+
+        /// <summary>0 left, 1 center, 2 right.</summary>
+        private static int ColumnOf(MRecPosition position)
+        {
+            switch (position)
+            {
+                case MRecPosition.TopLeft:
+                case MRecPosition.CenterLeft:
+                case MRecPosition.BottomLeft:
+                    return 0;
+                case MRecPosition.TopRight:
+                case MRecPosition.CenterRight:
+                case MRecPosition.BottomRight:
+                    return 2;
+                default:
+                    return 1;
+            }
+        }
+
+        /// <summary>0 top, 1 center, 2 bottom.</summary>
+        private static int RowOf(MRecPosition position)
+        {
+            switch (position)
+            {
+                case MRecPosition.Top:
+                case MRecPosition.TopLeft:
+                case MRecPosition.TopRight:
+                    return 0;
+                case MRecPosition.Bottom:
+                case MRecPosition.BottomLeft:
+                case MRecPosition.BottomRight:
+                    return 2;
+                default:
+                    return 1;
+            }
+        }
+
+        private static float _density;
+
+        /// <summary>Screen pixels per dp (per point on iOS).</summary>
+        private static float Density
+        {
+            get
+            {
+                if (_density > 0f) return _density;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+                // The exact value Android lays the MREC out with.
+                try
+                {
+                    using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                    using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                    using (var resources = activity.Call<AndroidJavaObject>("getResources"))
+                    using (var metrics = resources.Call<AndroidJavaObject>("getDisplayMetrics"))
+                        _density = metrics.Get<float>("density");
+                }
+                catch (System.Exception e)
+                {
+                    MeticaAdsLog.LogWarning($"MRec: could not read the screen density ({e.Message}) — estimating it");
+                }
+#endif
+                if (_density <= 0f)
+                {
+                    // An estimate: 160 dpi is 1 dp per pixel on Android, 163 is 1 point on iOS.
+                    var dpi = Screen.dpi > 0f ? Screen.dpi : 160f;
+#if UNITY_IOS
+                    _density = dpi / 163f;
+#else
+                    _density = dpi / 160f;
+#endif
+                }
+
+                return _density;
             }
         }
 
@@ -164,7 +276,10 @@ namespace MeticaIntegration
             MeticaAdsLog.Log(
                 $"MRec revenue paid - AdUnit: {adUnitIdentifier}, Revenue: {revenue}, Network: {networkName}");
 
-            ThreadDispatcher.Enqueue(() => MeticaAdsHooks.ReportRevenue(revInfo));
+            // Straight through, not via ThreadDispatcher: interstitial and rewarded revenue arrive on
+            // Metica's native thread (MeticaInitializer), so the event goes out even while the ad has
+            // Unity paused. See MeticaAdsHooks.OnAdRevenue.
+            MeticaAdsHooks.ReportRevenue(revInfo);
         }
 
         private void MRec_OnAdClickedEvent(MeticaAd meticaAd)

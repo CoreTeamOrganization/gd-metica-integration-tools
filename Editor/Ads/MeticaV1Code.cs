@@ -125,6 +125,136 @@ namespace GameDistrict.MeticaIntegrationTools
             return found;
         }
 
+        // ── Comment out / remove ───────────────────────────────────────────────
+
+        private static readonly Regex SteersCode =
+            new Regex(@"^\s*(if|else|while|for|foreach|switch|case|return|try|catch|finally)\b");
+
+        private static readonly Regex Declares =
+            new Regex(@"^\s*(\[|(public|private|protected|internal|static|readonly|const|event|override|virtual|abstract|async)\b)");
+
+        /// <summary>
+        /// The lines (0-based, inclusive) one v1 reference covers — its whole statement — or
+        /// null with a reason when it should be edited by hand. A line that steers code (if,
+        /// else, return, a method or block header) is never touched: taking it out would
+        /// change what runs, or break the braces.
+        /// </summary>
+        internal static (int first, int last)? Span(string[] code, int line, out string reason)
+        {
+            reason = null;
+            var first = line - 1;
+            if (first < 0 || first >= code.Length) { reason = "line not found"; return null; }
+
+            if (SteersCode.IsMatch(code[first]))
+            {
+                reason = "steers code (if / else / return…) — edit by hand";
+                return null;
+            }
+
+            if (Declares.IsMatch(code[first]))
+            {
+                reason = "a field or member other code may use — edit by hand";
+                return null;
+            }
+
+            // Grow down until the brackets close and the statement ends. A lambda or delegate
+            // body ("+= ad => { … };") is part of its statement.
+            var last = first;
+            var parens = 0;
+            var braces = 0;
+            var lambda = false;
+            while (true)
+            {
+                foreach (var c in code[last])
+                {
+                    if (c == '(') parens++;
+                    else if (c == ')') parens--;
+                    else if (c == '{') braces++;
+                    else if (c == '}') braces--;
+                }
+
+                lambda |= code[last].Contains("=>") || Regex.IsMatch(code[last], @"\bdelegate\b");
+                var end = code[last].TrimEnd();
+                var continues = parens > 0 || (lambda && braces > 0)
+                                || end.EndsWith(",") || end.EndsWith("=") || end.EndsWith("=>") || end.EndsWith("+")
+                                || end.EndsWith("&&") || end.EndsWith("||") || end.EndsWith("?") || end.EndsWith(":");
+                if (!continues || last + 1 >= code.Length || last - first >= 40) break;
+                last++;
+            }
+
+            var next = last + 1;
+            while (next < code.Length && code[next].Trim().Length == 0) next++;
+            var opensBlock = code[last].TrimEnd().EndsWith("{") || (next < code.Length && code[next].TrimStart().StartsWith("{"));
+
+            if (parens != 0 || braces != 0 || opensBlock || (lambda && !code[last].TrimEnd().EndsWith(";")))
+            {
+                reason = "a declaration or block, not a single statement — edit by hand";
+                return null;
+            }
+
+            return (first, last);
+        }
+
+        /// <summary>
+        /// Comments out (<c>// </c>) or removes the v1 statements at <paramref name="lines"/>
+        /// (1-based) in one file. Lines that need a hand edit (see <see cref="Span"/>) are
+        /// left alone and counted in <paramref name="skipped"/>. Returns how many statements
+        /// were changed. A copy of the file before the tool's first edit is kept in the backup
+        /// folder.
+        /// </summary>
+        internal static int Edit(string path, IEnumerable<int> lines, bool remove, out int skipped)
+        {
+            skipped = 0;
+            var text = SourcePatcher.ReadAll(path);
+            var newline = text.Contains("\r\n") ? "\r\n" : "\n";
+            var all = text.Replace("\r\n", "\n").Split('\n').ToList();
+            var code = WithoutComments(all.ToArray());
+
+            var spans = new List<(int first, int last)>();
+            foreach (var line in lines.Distinct())
+            {
+                var span = Span(code, line, out _);
+                if (span == null) { skipped++; continue; }
+                if (!spans.Any(s => s.first <= span.Value.last && span.Value.first <= s.last)) spans.Add(span.Value);
+            }
+
+            // Bottom up, so earlier line numbers stay valid.
+            foreach (var (first, last) in spans.OrderByDescending(s => s.first))
+            {
+                if (remove)
+                {
+                    all.RemoveRange(first, last - first + 1);
+                    continue;
+                }
+
+                for (var i = first; i <= last; i++)
+                {
+                    if (all[i].Trim().Length == 0) continue;
+                    var indent = all[i].Length - all[i].TrimStart().Length;
+                    all[i] = all[i].Substring(0, indent) + "// " + all[i].Substring(indent);
+                }
+            }
+
+            if (spans.Count > 0) SourcePatcher.WriteWithBackup(path, string.Join(newline, all));
+            return spans.Count;
+        }
+
+        /// <summary>
+        /// For each of <paramref name="lines"/> (1-based) in one file: why it must be edited by
+        /// hand, or null when Comment / Remove can take it.
+        /// </summary>
+        internal static Dictionary<int, string> HandEditReasons(string path, IEnumerable<int> lines)
+        {
+            var code = WithoutComments(SourcePatcher.ReadAll(path).Replace("\r\n", "\n").Split('\n'));
+            var reasons = new Dictionary<int, string>();
+            foreach (var line in lines)
+            {
+                Span(code, line, out var reason);
+                reasons[line] = reason;
+            }
+            return reasons;
+        }
+
         /// <summary>
         /// The lines with // and /* */ comments removed and string contents blanked; line count
         /// unchanged.

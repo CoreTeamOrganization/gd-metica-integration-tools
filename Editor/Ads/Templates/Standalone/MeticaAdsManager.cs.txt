@@ -101,7 +101,7 @@ namespace MeticaIntegration
                 if (!string.IsNullOrEmpty(_config.MRec))
                 {
                     _mrec = new MeticaMRec();
-                    _mrec.SetStartPosition(_config.MRecPosition);
+                    _mrec.SetStartPosition(_config.MRecPosition, _config.MRecOffset);
                     _mrec.Initialize(_config.MRec);
                 }
 
@@ -221,6 +221,12 @@ namespace MeticaIntegration
             _mrec?.HideMRec();
         }
 
-        public static void RepositionMRec(MRecPosition position) => _mrec?.RepositionMRec(position);
+        /// <summary>
+        /// Moves the MREC to <paramref name="position"/>, shifted by <paramref name="offset"/> in
+        /// dp (points on iOS): x right, y down. <c>RepositionMRec(MRecPosition.Bottom, new
+        /// Vector2(0, -140))</c> puts it 140 dp above the bottom edge.
+        /// </summary>
+        public static void RepositionMRec(MRecPosition position, UnityEngine.Vector2 offset = default) =>
+            _mrec?.RepositionMRec(position, offset);
     }
 }

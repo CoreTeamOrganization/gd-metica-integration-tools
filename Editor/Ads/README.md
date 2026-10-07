@@ -84,8 +84,17 @@ MeticaAdsHooks.HasUserConsent = () => MyConsent.PersonalizedAdsAllowed;
 
 Both are optional — leave them unset and ads still serve.
 
+`OnAdRevenue` is **not always on the main thread**: interstitial and rewarded revenue arrive
+on Metica's native thread as the ad pays (Unity is paused then), so the event is sent even if
+the app dies before the ad closes. Analytics SDK calls (Firebase, Adjust, AppMetrica) are
+fine there; anything touching Unity (PlayerPrefs, MonoBehaviours) goes through
+`ThreadDispatcher.Enqueue(() => …)`.
+
 Banner and MREC start where `MeticaAdsConfig` says (**Ad positions**: banner Bottom, MREC
 Center by default); `MeticaAdsManager.RepositionBanner` / `RepositionMRec` move them at runtime.
+**MRec Offset** shifts the MREC from its position in dp (points on iOS), x right, y down —
+Bottom with (0, -140) puts it 140 dp above the bottom edge, and `RepositionMRec(position, offset)`
+does the same at runtime. An MREC is always 300 × 250: Metica 2.45.2 has no MREC size API.
 
 **Metica is off by default.** `MeticaRemoteConfig` is the remote on/off switch: the config
 asset is created with **Use Remote Switch** on and **Default Use Metica** off, so Metica
@@ -113,7 +122,7 @@ integration by hand.
 | # | Step | What it does |
 |---|---|---|
 | – | AppLovin MAX version | **Only while MAX is missing or below 8.1.0**, which Metica needs; mandatory. Installs the MAX version set in `MeticaTargetVersion.asset` (**8.1.0** by default): AppLovin's own Unity plugin package from their GitHub releases. The old MAX is removed first, like the Metica SDK, keeping `Mediation/` (your adapters) and `AppLovinSettings.asset` (SDK key). Integration Manager as a fallback |
-| – | Metica v1 code | **Only in a project that has or had Metica v1.** Lists every line of game code that still uses the v1 API — by names that exist in v1 and nowhere in Metica 2.x (`Metica.ADS`, `using Metica.SDK`, `IsMeticaAdsEnabled`, `InitializeWithResultAsync`, `NotifyAd*`, `ToMeticaAd` / `ToAdInfo`, `MeticaSdk.CurrentUserId`; `MeticaAds` / `MeticaAdsCallbacks` / `MeticaSdk` only in a file that uses a v1 namespace), ignoring comments and strings — with what replaces each. Passes when none are left. Never edits code: the developer takes the calls out while v1 is still installed, so the project compiles at every point. Also warns about v1's `MeticaSdk` scene object. GD SDK projects get a link to Compare with original GD SDK |
+| – | Metica v1 code | **Only in a project that has or had Metica v1.** Lists every line of game code that still uses the v1 API — by names that exist in v1 and nowhere in Metica 2.x (`Metica.ADS`, `using Metica.SDK`, `IsMeticaAdsEnabled`, `InitializeWithResultAsync`, `NotifyAd*`, `ToMeticaAd` / `ToAdInfo`, `MeticaSdk.CurrentUserId`; `MeticaAds` / `MeticaAdsCallbacks` / `MeticaSdk` only in a file that uses a v1 namespace), ignoring comments and strings — with what replaces each. Passes when none are left. Each file is a row (name, count, folder); hover it, or one of its lines, to **Comment** out or **Remove** the v1 statements — the whole statement, multi-line calls and `+= … => { … };` subscriptions included. Lines that steer code (`if` / `else` / `return` …), fields and members, and block headers are left for a hand edit. Done while v1 is still installed, so compile errors point straight at anything left. Also warns about v1's `MeticaSdk` scene object. GD SDK projects get a link to Compare with original GD SDK |
 | 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. Any other Metica is removed first, wherever it is: another version in Assets, Metica v1 or 2.x from the Package Manager (`com.metica.unity` / `com.metica.sdk.unity`, also embedded), v1's `Assets/Metica/Data/MeticaSdkConfiguration.asset` — one dialog lists it all. `com.metica.analytics.abstractions` and this tool are never touched. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
 | 2 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
 | 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` preference and remote flag, the `AdsManager` network switch; plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |

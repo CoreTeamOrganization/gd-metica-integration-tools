@@ -51,6 +51,9 @@ namespace MeticaIntegration
     {
         public BannerPosition BannerPosition = BannerPosition.Bottom;
         public MRecPosition MrecPosition = MRecPosition.Center;
+
+        /// <summary>Shift from <see cref="MrecPosition"/>, in dp (points on iOS); x right, y down. Zero: none.</summary>
+        public UnityEngine.Vector2 MrecOffset;
         public BannerSize bannerSize = BannerSize.Banner;
     }
 

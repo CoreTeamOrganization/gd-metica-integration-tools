@@ -150,6 +150,29 @@
 .mi-item__status { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 .mi-item__chevron { color: var(--text-2); margin-left: 8px; }
 .mi-item__body { padding: 0 12px 12px 38px; }
+.mi-item__title-row { flex-direction: row; align-items: center; }
+.mi-item__title-row > .mi-item__title { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-item__count { font-size: 11px; color: var(--text-2); margin-left: 8px; flex-shrink: 0; }
+.mi-item__detail { font-size: 11px; color: var(--text-3); opacity: 0.7; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Small buttons that show while the pointer is over their row. */
+.mi-hover { flex-direction: row; align-items: center; display: none; }
+.mi-root .mi-hover > .mi-btn { margin-left: 6px; }
+.mi-item__head-row { position: relative; }
+.mi-item__hover { position: absolute; right: 34px; top: 0; bottom: 0; padding-left: 8px; background-color: var(--surface-2); }
+.mi-item__head-row:hover > .mi-item__hover { display: flex; }
+
+/* A line of code in a checklist row. */
+.mi-root .mi-controls > .mi-line { margin-bottom: 2px; }
+.mi-line { flex-direction: row; align-items: center; border-radius: 6px; }
+.mi-line:hover { background-color: var(--surface-2); }
+.mi-root .mi-line__open { flex-grow: 1; flex-shrink: 1; flex-direction: column; align-items: stretch; padding: 5px 8px; margin: 0; background-color: rgba(0, 0, 0, 0); border-width: 0; -unity-text-align: upper-left; cursor: link; }
+.mi-line__top { flex-direction: row; align-items: center; }
+.mi-line__number { font-size: 11px; color: var(--text-3); width: 56px; flex-shrink: 0; }
+.mi-line__code { font-size: 12px; color: var(--text); flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-line__hint { font-size: 11px; color: var(--text-3); margin-top: 2px; margin-left: 56px; white-space: normal; }
+.mi-line__hover { flex-shrink: 0; padding-right: 6px; }
+.mi-line:hover > .mi-line__hover { display: flex; }
 
 .mi-field { flex-direction: row; align-items: center; }
 .mi-field__label { width: 110px; flex-shrink: 0; font-size: 13px; color: var(--text-2); }

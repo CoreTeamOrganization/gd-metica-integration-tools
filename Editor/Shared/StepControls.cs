@@ -91,12 +91,49 @@ namespace GameDistrict.MeticaIntegrationTools
         public readonly string Status;
         public readonly IReadOnlyList<StepControl> Actions;
 
-        public StepItem(string title, bool done, string status, IReadOnlyList<StepControl> actions)
+        /// <summary>
+        /// Optional faded line under the title, such as a file's folder. With one, the status
+        /// sits next to the title, smaller.
+        /// </summary>
+        public readonly string Detail;
+
+        /// <summary>Optional small buttons shown while the pointer is over the row.</summary>
+        public readonly IReadOnlyList<StepButton> HoverActions;
+
+        /// <summary>What keeps the row open across rebuilds: unique even when titles repeat.</summary>
+        public string Key => Detail == null ? Title : Detail + "/" + Title;
+
+        public StepItem(string title, bool done, string status, IReadOnlyList<StepControl> actions,
+            string detail = null, IReadOnlyList<StepButton> hoverActions = null)
         {
             Title = title;
             Done = done;
             Status = status;
             Actions = actions;
+            Detail = detail;
+            HoverActions = hoverActions ?? Array.Empty<StepButton>();
+        }
+    }
+
+    /// <summary>
+    /// One line of code in a list: its number, the code, and a hint under it. Click to open the
+    /// file there; <see cref="HoverActions"/> show while the pointer is over it.
+    /// </summary>
+    internal sealed class StepLine : StepControl
+    {
+        public readonly int Line;
+        public readonly string Code;
+        public readonly string Hint;
+        public readonly Action OnOpen;
+        public readonly IReadOnlyList<StepButton> HoverActions;
+
+        public StepLine(int line, string code, string hint, Action onOpen, IReadOnlyList<StepButton> hoverActions = null)
+        {
+            Line = line;
+            Code = code;
+            Hint = hint;
+            OnOpen = onOpen;
+            HoverActions = hoverActions ?? Array.Empty<StepButton>();
         }
     }
 

@@ -49,8 +49,12 @@ namespace GameDistrict.MeticaIntegrationTools
         private readonly Dictionary<string, string> _commitSummary = new Dictionary<string, string>();
         private readonly Dictionary<string, string> _commitBody = new Dictionary<string, string>();
 
-        private bool _busy;
-        private bool _refreshQueued;
+        // NonSerialized: Unity keeps private fields across a script reload, but not the
+        // EditorApplication.update tick that clears these. A refresh queued just before a
+        // reload (compilationFinished fires first) left _refreshQueued stuck true, and every
+        // "Reviewed — next step", Re-check and Skip after it did nothing until reopen.
+        [NonSerialized] private bool _busy;
+        [NonSerialized] private bool _refreshQueued;
         private string _renderedKey;
 
         private VisualElement _root;
@@ -90,6 +94,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
             _ads = AdsFlow.Create();
             _genre = GenreFlow.Create();
+
+            // Any tick queued before a reload is gone with it.
+            _busy = false;
+            _refreshQueued = false;
 
             AssemblyReloadEvents.afterAssemblyReload += QueueRefresh;
 
@@ -667,6 +675,8 @@ namespace GameDistrict.MeticaIntegrationTools
             {
                 flow.MarkReviewed(index);
                 _viewedStepId = null;
+                // Show the next step now; the re-check follows on the next tick.
+                Rebuild();
                 QueueRefresh();
             }, "mi-btn--primary"));
             panel.Add(buttons);
@@ -922,6 +932,11 @@ namespace GameDistrict.MeticaIntegrationTools
                         block.Add(ItemRow(item));
                         break;
 
+                    case StepLine line:
+                        buttons = null;
+                        block.Add(LineRow(line));
+                        break;
+
                     case StepChoice choice:
                         buttons = null;
                         block.Add(Choice(choice));
@@ -940,22 +955,40 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         private VisualElement ItemRow(StepItem item)
         {
-            var open = _openItems.Contains(item.Title);
+            var open = _openItems.Contains(item.Key);
             var row = El("mi-item", item.Done ? "mi-item--done" : "mi-item--todo");
 
             var head = new Button(() =>
             {
-                if (!_openItems.Remove(item.Title)) _openItems.Add(item.Title);
+                if (!_openItems.Remove(item.Key)) _openItems.Add(item.Key);
                 Rebuild();
             }).With("mi-item__head");
             head.Add(new MiIcon(item.Done ? MiIcon.Kind.Check : MiIcon.Kind.Error, 2f, "mi-icon--16").With("mi-item__mark"));
 
             var text = El("mi-item__text");
-            text.Add(Text(item.Title, "mi-item__title"));
-            if (!string.IsNullOrEmpty(item.Status)) text.Add(Text(item.Status, "mi-item__status"));
+            if (item.Detail == null)
+            {
+                text.Add(Text(item.Title, "mi-item__title"));
+                if (!string.IsNullOrEmpty(item.Status)) text.Add(Text(item.Status, "mi-item__status"));
+            }
+            else
+            {
+                // Name and count on one line, where it lives faded underneath.
+                var titleRow = El("mi-item__title-row");
+                titleRow.Add(Text(item.Title, "mi-item__title"));
+                if (!string.IsNullOrEmpty(item.Status)) titleRow.Add(Text(item.Status, "mi-item__count"));
+                text.Add(titleRow);
+                text.Add(Text(item.Detail, "mi-item__detail"));
+            }
             head.Add(text);
             head.Add(new MiIcon(open ? MiIcon.Kind.ChevronDown : MiIcon.Kind.ChevronRight, 2f).With("mi-item__chevron"));
-            row.Add(head);
+
+            // The hover buttons sit beside the head, not inside it: a button in a button
+            // would also toggle the row.
+            var headRow = El("mi-item__head-row");
+            headRow.Add(head);
+            if (item.HoverActions.Count > 0) headRow.Add(HoverButtons(item.HoverActions, "mi-item__hover"));
+            row.Add(headRow);
 
             if (!open) return row;
 
@@ -964,6 +997,40 @@ namespace GameDistrict.MeticaIntegrationTools
             else body.Add(Text(item.Done ? "Nothing to do here." : item.Status, "mi-caption"));
             row.Add(body);
             return row;
+        }
+
+        /// <summary>A line of code: click to open it; its buttons show on hover.</summary>
+        private VisualElement LineRow(StepLine line)
+        {
+            var row = El("mi-line");
+
+            var open = new Button(() => RunControl(line.OnOpen)).With("mi-line__open");
+            open.tooltip = "Open the file at this line";
+            var top = El("mi-line__top");
+            top.Add(Text($"Line {line.Line}", "mi-line__number"));
+            var code = Text(line.Code, "mi-line__code");
+            code.enableRichText = false;
+            Mono(code);
+            top.Add(code);
+            open.Add(top);
+            if (!string.IsNullOrEmpty(line.Hint)) open.Add(Text(line.Hint, "mi-line__hint"));
+            row.Add(open);
+
+            if (line.HoverActions.Count > 0) row.Add(HoverButtons(line.HoverActions, "mi-line__hover"));
+            return row;
+        }
+
+        private VisualElement HoverButtons(IEnumerable<StepButton> buttons, string className)
+        {
+            var group = El("mi-hover", className);
+            foreach (var button in buttons)
+            {
+                var element = new Button(() => RunControl(button.OnClick)) { text = button.Label }
+                    .With("mi-btn", "mi-btn--small", "mi-btn--secondary");
+                element.SetEnabled(button.Enabled && !_busy);
+                group.Add(element);
+            }
+            return group;
         }
 
         private Button Switch(StepToggle toggle)

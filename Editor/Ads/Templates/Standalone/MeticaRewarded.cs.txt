@@ -108,7 +108,10 @@ namespace MeticaIntegration
             AdRevenueInfo revInfo = new(AdFormat.Rewarded, AdNetworkMetica.Platform, networkName,
                 adUnitIdentifier, "USD", revenue, placement, AdNetworkMetica.RevenuePayload);
 
-            ThreadDispatcher.Enqueue(() => MeticaAdsHooks.ReportRevenue(revInfo));
+            // Straight through, not via ThreadDispatcher: interstitial and rewarded revenue arrive on
+            // Metica's native thread (MeticaInitializer), so the event goes out even while the ad has
+            // Unity paused. See MeticaAdsHooks.OnAdRevenue.
+            MeticaAdsHooks.ReportRevenue(revInfo);
         }
 
         #endregion

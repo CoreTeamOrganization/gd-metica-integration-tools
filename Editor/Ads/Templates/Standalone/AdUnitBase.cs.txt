@@ -63,14 +63,21 @@ namespace MeticaIntegration
         protected bool hasMrec;
         protected bool isLoading;
 
-        /// <summary>The position the MREC is created at. Call before <see cref="AdUnitBase.Initialize"/>.</summary>
-        public void SetStartPosition(MRecPosition position) => bannerInfo.MrecPosition = position;
+        /// <summary>
+        /// The position the MREC is created at, and an optional shift from it in dp (points on
+        /// iOS). Call before <see cref="AdUnitBase.Initialize"/>.
+        /// </summary>
+        public void SetStartPosition(MRecPosition position, UnityEngine.Vector2 offset = default)
+        {
+            bannerInfo.MrecPosition = position;
+            bannerInfo.MrecOffset = offset;
+        }
 
         public abstract bool HasMRec();
         public abstract void LoadMRec();
         public abstract void ShowMRec();
         public abstract void HideMRec();
         public abstract void DestroyMRec();
-        public abstract void RepositionMRec(MRecPosition newPosition);
+        public abstract void RepositionMRec(MRecPosition newPosition, UnityEngine.Vector2 offset = default);
     }
 }
