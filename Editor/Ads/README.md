@@ -86,7 +86,8 @@ Both are optional — leave them unset and ads still serve.
 
 `OnAdRevenue` is **not always on the main thread**: interstitial and rewarded revenue arrive
 on Metica's native thread as the ad pays (Unity is paused then), so the event is sent even if
-the app dies before the ad closes. Analytics SDK calls (Firebase, Adjust, AppMetrica) are
+the app dies before the ad closes. Banner and MREC revenue (on the game screen) comes on the
+main thread, through `ThreadDispatcher`. Analytics SDK calls (Firebase, Adjust, AppMetrica) are
 fine there; anything touching Unity (PlayerPrefs, MonoBehaviours) goes through
 `ThreadDispatcher.Enqueue(() => …)`.
 

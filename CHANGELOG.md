@@ -288,8 +288,9 @@
   subscriptions included); lines that steer code (`if` / `else` / `return` …), fields and
   members, and block headers are left for a hand edit and say so. Remove on a whole file asks
   first. The file's pre-tool copy is kept in the backup folder.
-- Standalone: `MeticaAdsHooks.OnAdRevenue` is now called straight from Metica's callback, no
-  longer through `ThreadDispatcher`. Interstitial and rewarded revenue arrive on Metica's
+- Standalone: interstitial and rewarded revenue now reach `MeticaAdsHooks.OnAdRevenue` straight
+  from Metica's callback, no longer through `ThreadDispatcher` (banner and MREC, on the game
+  screen, still go through it). Interstitial and rewarded revenue arrive on Metica's
   native thread (`RevenueCallbackDelivery.NativeThread`) while the ad has Unity paused; the
   dispatcher held them until the ad closed, so a kill mid-ad lost the event — the reason for
   the native thread in the first place. Handlers keep SDK calls inline and send Unity work
