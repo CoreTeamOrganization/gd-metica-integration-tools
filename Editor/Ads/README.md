@@ -247,9 +247,7 @@ an ads-only integration it has to stay off.
 
 That matters because the Metica SDK's own analytics code is gated on `METICA_ANALYTICS` and
 needs the `MeticaAnalyticsAbstractions` assembly, which an ads-only install does not have.
-Turning the define on there stops the Metica SDK compiling. Genre Creator's
-`MeticaSymbolInstaller` (same package) therefore only adds it when **both** `Metica.SDK` and
-`MeticaAnalyticsAbstractions` are present.
+Turning the define on there stops the Metica SDK compiling, so this tool never adds it.
 
 **Metica analytics** needs the `AnalyticsNetworkSO`, Genre and Bootstrap architectures
 introduced in `v6.1`/`v6.2`, which a v5 project does not have — a full upgrade, not a port.
@@ -298,9 +296,6 @@ menu. It removes the package through Package Manager and deletes
 `Assets/MeticaIntegrationToolsSettings/`. Everything the Ads flow wrote stays in the
 project and needs nothing from the package at runtime.
 
-It refuses while `Assets/MeticaGenres/` has genres: generated genre code inherits from the
-package's `Runtime/` classes, so removing the package would break it.
-
 ## Layout
 
 ```
@@ -315,7 +310,7 @@ Templates/                   wrapper sources, .cs.txt so they never compile from
 ```
 
 The window (`Editor/UI/`), the flow engine, `MeticaStep`, `MeticaPaths`, `SourcePatcher`,
-`TemplateWriter` and the log live in the shared folders, since Genre Creator uses them too.
+`TemplateWriter` and the log live in `Editor/Shared/` and `Editor/UI/`.
 
 `Templates/AdNetworkMetica.cs.txt` and `Templates/MeticaInitializer.cs.txt` are the two
 templates that differ from `v6.2.4`. That release predates Metica's callback-based init and

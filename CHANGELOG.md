@@ -301,3 +301,10 @@
   density; a dpi estimate elsewhere) and placed with Metica's x/y API, the same way games
   already place a MAX MREC (FrustratingPuzzle: bottom, 140 dp up). No size option: an MREC is
   always 300 × 250 and Metica 2.45.2 cannot resize one.
+- **Removed the Genre Creator**: `Editor/Genre/` (the Genre flow, `GenreCreatorWindow` and its
+  codegen, `PerformanceTrackerStep`, `GenreDefinitionStep`, `MeticaSymbolInstaller`) and
+  `Runtime/` (`GDMeticaAnalytics`, `AnalyticsEventData`, their asmdef). The window is Ads
+  Integration only; Remove Integration Tools no longer checks for genres. Breaking for games
+  with generated genres (`Assets/MeticaGenres`): they lose their base classes and the
+  `METICA_ANALYTICS` define installer, so they must stay on `#v0.1.0`. The shared Gradle
+  steps stay (Troubleshooting uses them).

@@ -9,8 +9,8 @@ using UnityEngine.UIElements;
 namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
-    /// The one Metica Integration window: Home picks a flow (Ads Integration or Genre
-    /// Creator), then the flow runs one step per screen. Built with UI Toolkit against
+    /// The one Metica Integration window: Home opens the Ads Integration flow, which runs one
+    /// step per screen. Built with UI Toolkit against
     /// Editor/UI/MeticaTheme.uss; the flows themselves (<see cref="MeticaFlow"/>) hold no UI.
     ///
     /// <para>The whole screen is rebuilt on every refresh — on focus, after a recompile, and
@@ -19,7 +19,7 @@ namespace GameDistrict.MeticaIntegrationTools
     /// </summary>
     public sealed class MeticaIntegrationWindow : EditorWindow, IHasCustomMenu
     {
-        private enum Page { Home, Ads, Genre }
+        private enum Page { Home, Ads }
 
         [SerializeField] private Page _page = Page.Home;
 
@@ -36,7 +36,6 @@ namespace GameDistrict.MeticaIntegrationTools
         [SerializeField] private List<string> _commitFilesOpen = new List<string>();
 
         private MeticaFlow _ads;
-        private MeticaFlow _genre;
 
         /// <summary>Count-only GD SDK comparison for the Home line; refreshed on every re-check of Home.</summary>
         private SdkCompareResult _sdkSummary;
@@ -74,7 +73,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         private static readonly bool ShowDiffCommand = false;
 
-        private MeticaFlow Flow => _page == Page.Ads ? _ads : _page == Page.Genre ? _genre : null;
+        private MeticaFlow Flow => _page == Page.Ads ? _ads : null;
 
         [MenuItem("GameDistrict/Metica/Metica Integration...", false, 10)]
         public static void Open()
@@ -93,7 +92,6 @@ namespace GameDistrict.MeticaIntegrationTools
             minSize = new Vector2(520, 480);
 
             _ads = AdsFlow.Create();
-            _genre = GenreFlow.Create();
 
             // Any tick queued before a reload is gone with it.
             _busy = false;
@@ -191,7 +189,6 @@ namespace GameDistrict.MeticaIntegrationTools
                 MeticaPaths.ForgetCache();
                 _commitChanges.Clear();
                 _ads.Refresh();
-                _genre.Refresh();
                 _sdkSummary = _page == Page.Home && MeticaPaths.HasGDSdk ? SdkCompare.Run(false) : null;
             }
             catch (Exception e)
@@ -372,8 +369,8 @@ namespace GameDistrict.MeticaIntegrationTools
         private void BuildHome()
         {
             var intro = El();
-            intro.Add(Text("What do you want to set up?", "mi-home-title"));
-            intro.Add(Text("Two separate jobs. Pick one — you can come back to the other.", "mi-home-sub"));
+            intro.Add(Text("Set up Metica ads", "mi-home-title"));
+            intro.Add(Text("Standalone, or wired into the GD Monetization SDK.", "mi-home-sub"));
             _content.Add(intro);
 
             var adsCount = _ads.Steps.Length;
@@ -393,14 +390,6 @@ namespace GameDistrict.MeticaIntegrationTools
                 catch (Exception e) { Debug.LogException(e); }
             }
             if (_sdkSummary != null) _content.Add(CompareLine(_sdkSummary));
-
-            var meticaInstalled = AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "Metica.SDK");
-            _content.Add(FlowCard(_genre, MiIcon.Kind.Chart,
-                "Set up the Android toolchain and create genre analytics files.",
-                meticaInstalled
-                    ? "Needs the Metica SDK — installed"
-                    : "Needs the Metica SDK — install it in Ads Integration first",
-                meticaInstalled, () => ShowPage(Page.Genre)));
         }
 
         /// <summary>How the project's GD SDK differs from the original it declares, and a way to look.</summary>
@@ -1193,7 +1182,7 @@ namespace GameDistrict.MeticaIntegrationTools
                     return;
 
                 if (flow != null) flow.ResetSignOffs();
-                else { _ads.ResetSignOffs(); _genre.ResetSignOffs(); }
+                else _ads.ResetSignOffs();
                 QueueRefresh();
             }));
             _footer.Add(row);

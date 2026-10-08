@@ -6,13 +6,10 @@ namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
     /// Removes this package from the project. Reached from GameDistrict/Metica and from the ⋮
-    /// menu of either wizard window — one action, not a step at the end of one flow.
+    /// menu of the window — one action, not a step at the end of the flow.
     ///
-    /// <para>Refused while the project has generated genres: they inherit from
-    /// GDMeticaAnalytics, which ships in this package's Runtime, so removing the package would
-    /// take their base class with it. Ads Integration writes everything it produces into the
-    /// project itself and needs nothing from the package at runtime, so an ads-only project can
-    /// remove it freely.</para>
+    /// <para>Ads Integration writes everything it produces into the project itself and needs
+    /// nothing from the package at runtime, so the package can be removed freely.</para>
     /// </summary>
     public static class ToolRemover
     {
@@ -24,15 +21,6 @@ namespace GameDistrict.MeticaIntegrationTools
         [MenuItem("GameDistrict/Metica/Remove Integration Tools...", false, 100)]
         public static void Remove()
         {
-            if (GenreDefinitionStep.CountGenres() > 0)
-            {
-                EditorUtility.DisplayDialog("Can't remove Metica Integration Tools",
-                    $"This project has genres in {MeticaPaths.GenresRoot}, and they need this package " +
-                    "at runtime — so it has to stay.",
-                    "OK");
-                return;
-            }
-
             var paths = new List<string> { $"The package {PackageName} (Packages/manifest.json entry)" };
             if (AssetDatabase.IsValidFolder(SettingsFolder)) paths.Add($"{SettingsFolder}/");
 

@@ -43,8 +43,8 @@ namespace GameDistrict.MeticaIntegrationTools
     ///
     /// <para>Only the SDK itself counts: the packages <see cref="SdkPackageNames"/> name (v1
     /// shipped as com.metica.unity, v2 as com.metica.sdk.unity) and v1's configuration asset.
-    /// Packages that merely contain "metica" — com.metica.analytics.abstractions, which Genre
-    /// analytics uses, and this tool, com.gamedistrict.metica-integration-tools — are not
+    /// Packages that merely contain "metica" — com.metica.analytics.abstractions (Metica
+    /// analytics) and this tool, com.gamedistrict.metica-integration-tools — are not
     /// Metica SDK installs and are never touched.</para>
     /// </summary>
     internal static class MeticaInstalls

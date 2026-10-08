@@ -10,8 +10,8 @@ namespace GameDistrict.MeticaIntegrationTools
     /// base Gradle template. Each row shows whether it is set, and opens to the controls that
     /// set it. Nothing here blocks the run — plenty of projects build without these.
     ///
-    /// <para>The rows reuse the Gradle, JDK and template logic the Genre Creator flow also runs
-    /// as steps, so there is one implementation of each, not two.</para>
+    /// <para>The rows reuse the Gradle, JDK and template logic in Editor/Shared/Gradle, so
+    /// there is one implementation of each.</para>
     /// </summary>
     public sealed class TroubleshootingStep : MeticaStep
     {

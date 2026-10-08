@@ -24,7 +24,7 @@ namespace GameDistrict.MeticaIntegrationTools
     }
 
     /// <summary>
-    /// One wizard run — Ads Integration or Genre Creator: its steps, what the project says
+    /// One wizard run — Ads Integration: its steps, what the project says
     /// about each, and the sign-offs. No UI; the window draws it.
     ///
     /// <para>Stored progress is never trusted: <see cref="Refresh"/> re-verifies every step
