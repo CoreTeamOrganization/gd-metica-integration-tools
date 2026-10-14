@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a96fda1af8e44451a2ae6a8f47c41ffd, type: 3}
   m_Name: MeticaTargetVersion
   m_EditorClassIdentifier:
-  version: 2.45.2
-  maxVersion: 8.1.0
+  version: 2.45.6
+  maxVersion: 8.0.1

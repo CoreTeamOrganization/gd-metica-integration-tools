@@ -7,7 +7,7 @@ namespace GameDistrict.MeticaIntegrationTools
     /// The Gradle property AppLovin MAX writes into gradle.properties at build time
     /// (AppLovinPostProcessAndroid.PropertyDexingArtifactTransform). Gradle 8 removed
     /// <c>android.enableDexingArtifactTransform</c>; the replacement is
-    /// <c>android.useFullClasspathForDexingTransform</c>. MAX switched in 8.2.1, so 8.1.0 and
+    /// <c>android.useFullClasspathForDexingTransform</c>. MAX switched in 8.2.1, so 8.0.1 –
     /// 8.2.0 still write the old one and fail a Gradle 8 build.
     ///
     /// <para>This edits a file inside the MAX plugin, so re-importing MAX can undo it — the

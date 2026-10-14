@@ -32,14 +32,25 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public readonly Func<bool> ShowWhen;
 
+        /// <summary>
+        /// When set, the button is only enabled while this is true — re-checked, like
+        /// <see cref="ShowWhen"/>, as the step's text fields change.
+        /// </summary>
+        public readonly Func<bool> EnabledWhen;
+
+        /// <summary>Drawn as the screen's yellow action button.</summary>
+        public readonly bool Primary;
+
         public StepButton(string label, Action onClick, bool enabled = true, StepIcon icon = StepIcon.None,
-            Func<bool> showWhen = null)
+            Func<bool> showWhen = null, Func<bool> enabledWhen = null, bool primary = false)
         {
             Label = label;
             OnClick = onClick;
             Enabled = enabled;
             Icon = icon;
             ShowWhen = showWhen;
+            EnabledWhen = enabledWhen;
+            Primary = primary;
         }
     }
 
@@ -71,12 +82,17 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Masked until the eye button is pressed — for API keys.</summary>
         public readonly bool Secret;
 
-        public StepText(string label, string value, Action<string> onChanged, bool secret = false)
+        /// <summary>The value's problem, shown under the field as it is typed; null when fine.</summary>
+        public readonly Func<string, string> Validate;
+
+        public StepText(string label, string value, Action<string> onChanged, bool secret = false,
+            Func<string, string> validate = null)
         {
             Label = label;
             Value = value;
             OnChanged = onChanged;
             Secret = secret;
+            Validate = validate;
         }
     }
 

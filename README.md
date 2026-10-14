@@ -1,8 +1,14 @@
 # GameDistrict Metica Integration Tools
 
 Editor tooling for Metica, as a Unity package. One window, **GameDistrict → Metica →
-Metica Integration…**, runs the **Ads Integration** flow: it gets Metica ads into a project,
-standalone or wired into the GD Monetization SDK. See [Editor/Ads/README.md](Editor/Ads/README.md).
+Metica Integration…**, whose Home screen picks one of two flows:
+
+- **Ads Integration** — gets Metica ads into a project, standalone or wired into the GD
+  Monetization SDK. See [Editor/Ads/README.md](Editor/Ads/README.md).
+- **Analytics Integration** — for GD SDK below 6.2.0 or a custom SDK: installs the Metica
+  SDK, analytics abstractions and the genre creator, makes the genre files from the game name
+  and Excel schema, ties Adjust to Metica, and the required Android build setup. See
+  [Editor/Analytics/README.md](Editor/Analytics/README.md).
 
 A flow runs one step per screen: a stepper shows every step's state, a step unlocks once the
 one before it verifies and is signed off, and done or skipped steps can be revisited. The
@@ -14,8 +20,8 @@ The Gradle/Kotlin/AGP logic lives in `Editor/Shared/Gradle/`, the one place that
 **Remove Integration Tools…** (same menu, the window's ⋮ menu, and its tab menu) removes the
 package.
 
-The Genre Creator (and its `Runtime/` classes, `GDMeticaAnalytics` / `AnalyticsEventData`)
-was removed after `v0.1.0`. A game that has generated genres must stay on `#v0.1.0`.
+The Genre Creator that used to be bundled here (with its `Runtime/` classes) was removed after
+`v0.1.0`; Analytics Integration now installs the standalone genre creator package instead.
 
 ## Installing
 
@@ -52,13 +58,15 @@ Editor/
   Shared/
     MeticaFlow               one run's engine, no UI: verify, sign off, skip, current step
     MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress stores
-    StepCommit               commits one step's changed files to the game's git repo
+    StepCommit               commits one step's changed files to the game's git repo, and pushes on request
     LineDiff                 line diff (Myers) and hunks, for the compare window
     ToolRemover              removes the package (menu item + ⋮ menu)
     PackageRequests          waits on Package Manager requests without blocking the editor
     Gradle/                GradleVersionStep, KotlinTemplateStep, GradleTemplateEditor,
-                            GradleJdkStep — used by the Troubleshooting step; one place owns
-                            baseProjectTemplate.gradle and gradleTemplate.properties
+                            GradleJdkStep, AndroidBuildRows — the Troubleshooting step and the
+                            Analytics build setup; one place owns baseProjectTemplate.gradle and
+                            gradleTemplate.properties
   Ads/                     AdsFlow (its two step lists) + steps, templates, stock GD SDK copies
+  Analytics/               AnalyticsFlow + steps, the abstractions and genre creator packages
 ```
 

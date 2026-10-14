@@ -24,7 +24,7 @@ namespace GameDistrict.MeticaIntegrationTools
     }
 
     /// <summary>
-    /// One wizard run — Ads Integration: its steps, what the project says
+    /// One wizard run — Ads or Analytics Integration: its steps, what the project says
     /// about each, and the sign-offs. No UI; the window draws it.
     ///
     /// <para>Stored progress is never trusted: <see cref="Refresh"/> re-verifies every step
@@ -45,14 +45,19 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <param name="allStepIds">
         /// Every step id any of its lists can show, so Reset sign-offs clears them all.
         /// </param>
-        public MeticaFlow(string name, Func<MeticaStep[]> steps, Func<IEnumerable<string>> allStepIds)
+        /// <param name="finishedNote">What the finished screen says is left to do; null for the default.</param>
+        public MeticaFlow(string name, Func<MeticaStep[]> steps, Func<IEnumerable<string>> allStepIds,
+            string finishedNote = null)
         {
             Name = name;
             _steps = steps;
             _allStepIds = allStepIds;
+            FinishedNote = finishedNote;
         }
 
         public string Name { get; }
+
+        public string FinishedNote { get; }
 
         public MeticaStep[] Steps { get; private set; } = Array.Empty<MeticaStep>();
 

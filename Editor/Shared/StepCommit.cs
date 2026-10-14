@@ -14,7 +14,8 @@ namespace GameDistrict.MeticaIntegrationTools
     /// <para>A step's files are its <see cref="MeticaStep.TouchedPaths"/> (a folder means
     /// everything under it) plus their .meta files. Only the ones git reports as changed are
     /// committed, with <c>git commit --only</c>, so anything else the developer has staged
-    /// stays staged and out of the commit. Never pushes, never skips hooks.</para>
+    /// stays staged and out of the commit. Never skips hooks; pushes only when asked
+    /// ("Commit and push", or "Push"), the current branch only, never forced.</para>
     ///
     /// <para>The Unity project may sit in a subfolder of the repository, so every path is
     /// passed to git relative to the repository root.</para>
@@ -152,6 +153,47 @@ namespace GameDistrict.MeticaIntegrationTools
                 TryDelete(pathFile);
                 TryDelete(messageFile);
             }
+        }
+
+        // ── Push ───────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Commits on the current branch that its upstream does not have yet; -1 when there is
+        /// no upstream (never pushed) or git cannot tell.
+        /// </summary>
+        public static int Unpushed()
+        {
+            if (!TryRepo(out var top, out _, out _)) return -1;
+            var count = Git(top, "rev-list --count @{u}..HEAD", StatusTimeoutMs);
+            return count.exit == 0 && int.TryParse(count.output.Trim(), out var n) ? n : -1;
+        }
+
+        /// <summary>
+        /// Pushes the current branch — to its upstream, or to origin (setting it as upstream)
+        /// when it has none. Only ever the current branch, never forced. Returns a one-line
+        /// summary, or null with <paramref name="error"/> set.
+        /// </summary>
+        public static string Push(out string error)
+        {
+            error = null;
+            if (!TryRepo(out var top, out _, out error)) return null;
+
+            var branch = Git(top, "rev-parse --abbrev-ref HEAD", StatusTimeoutMs).output.Trim();
+            if (string.IsNullOrEmpty(branch) || branch == "HEAD")
+            {
+                error = "Not on a branch (detached HEAD) — check out a branch first.";
+                return null;
+            }
+
+            var hasUpstream = Git(top, "rev-parse --abbrev-ref --symbolic-full-name @{u}", StatusTimeoutMs).exit == 0;
+            var push = Git(top, hasUpstream ? "push" : $"push -u origin {Quote(branch)}", CommitTimeoutMs);
+            if (push.exit != 0)
+            {
+                error = "git push failed:\n" + Shorten(string.IsNullOrWhiteSpace(push.error) ? push.output : push.error);
+                return null;
+            }
+
+            return $"Pushed {branch}";
         }
 
         // ── Repository ─────────────────────────────────────────────────────────

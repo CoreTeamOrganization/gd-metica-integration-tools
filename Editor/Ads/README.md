@@ -26,10 +26,12 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
 - **Each step can be its own commit.** Under **Reviewed — next step** the review panel has a
   commit section: the files git reports as changed under the step's paths (and their
   `.meta` files), a prefilled summary (`<flow>: <step title>`) and description, and a
-  **Commit** button. Only those files go into the commit (`git commit --only`) — anything
-  else you have staged stays staged. The tool never pushes and never skips hooks. A done step
-  you revisit still offers its commit; once a step is committed through the tool the section
-  is not shown for it again (the commit hash is kept in `EditorPrefs`, cleared by **Reset
+  **Commit** / **Commit and push** buttons. Only those files go into the commit
+  (`git commit --only`) — anything else you have staged stays staged. Hooks always run. Push
+  only happens when asked: the current branch, to its upstream (or origin, set as upstream the
+  first time), never forced. A done step you revisit still offers its commit; once a step is
+  committed through the tool it shows a **Push** button instead while the branch has unpushed
+  commits, and nothing once it is pushed (the commit hash is kept in `EditorPrefs`, cleared by **Reset
   sign-offs**). Nothing to commit, no git, or no repository: the panel says so in one line.
 - **Everything is idempotent.** Each source edit is guarded by a marker, so running a step
   twice changes nothing.
@@ -45,7 +47,7 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
 
 The tool looks for the GD Monetization SDK and picks a run from what it finds.
 
-**With the GD SDK** — nine steps, below (ten while AppLovin MAX is below 8.1.0). Metica is
+**With the GD SDK** — nine steps, below (ten while AppLovin MAX is below 8.0.1). Metica is
 wired into the ads layer that is already there.
 
 **Without it** — four steps (five with the MAX step). There is nothing to patch, no remote flag
@@ -54,7 +56,7 @@ ads runtime to `Assets/MeticaAds/`:
 
 | # | Step | What it does |
 |---|---|---|
-| – | AppLovin MAX version | as below — only while MAX is below 8.1.0 |
+| – | AppLovin MAX version | as below — only while MAX is below 8.0.1 |
 | – | Metica v1 code | as below — only in a project that has or had Metica v1 |
 | 1 | Metica SDK | as below, including resolving its Android libraries |
 | 2 | Metica ads runtime | Writes fourteen files to `Assets/MeticaAds/` and waits for them to compile |
@@ -122,7 +124,7 @@ integration by hand.
 
 | # | Step | What it does |
 |---|---|---|
-| – | AppLovin MAX version | **Only while MAX is missing or below 8.1.0**, which Metica needs; mandatory. Installs the MAX version set in `MeticaTargetVersion.asset` (**8.1.0** by default): AppLovin's own Unity plugin package from their GitHub releases. The old MAX is removed first, like the Metica SDK, keeping `Mediation/` (your adapters) and `AppLovinSettings.asset` (SDK key). Integration Manager as a fallback |
+| – | AppLovin MAX version | **Only while MAX is missing or below 8.0.1**, which Metica 2.45.5+ needs; mandatory. Installs the MAX version set in `MeticaTargetVersion.asset` (**8.0.1** by default): AppLovin's own Unity plugin package from their GitHub releases. The old MAX is removed first, like the Metica SDK, keeping `Mediation/` (your adapters) and `AppLovinSettings.asset` (SDK key). Integration Manager as a fallback |
 | – | Metica v1 code | **Only in a project that has or had Metica v1.** Lists every line of game code that still uses the v1 API — by names that exist in v1 and nowhere in Metica 2.x (`Metica.ADS`, `using Metica.SDK`, `IsMeticaAdsEnabled`, `InitializeWithResultAsync`, `NotifyAd*`, `ToMeticaAd` / `ToAdInfo`, `MeticaSdk.CurrentUserId`; `MeticaAds` / `MeticaAdsCallbacks` / `MeticaSdk` only in a file that uses a v1 namespace), ignoring comments and strings — with what replaces each. Passes when none are left. Each file is a row (name, count, folder); hover it, or one of its lines, to **Comment** out or **Remove** the v1 statements — the whole statement, multi-line calls and `+= … => { … };` subscriptions included. Lines that steer code (`if` / `else` / `return` …), fields and members, and block headers are left for a hand edit. Done while v1 is still installed, so compile errors point straight at anything left. Also warns about v1's `MeticaSdk` scene object. GD SDK projects get a link to Compare with original GD SDK |
 | 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. Any other Metica is removed first, wherever it is: another version in Assets, Metica v1 or 2.x from the Package Manager (`com.metica.unity` / `com.metica.sdk.unity`, also embedded), v1's `Assets/Metica/Data/MeticaSdkConfiguration.asset` — one dialog lists it all. `com.metica.analytics.abstractions` and this tool are never touched. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
 | 2 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
@@ -143,7 +145,7 @@ without them.
 | Row | Shows | Fix |
 |---|---|---|
 | Moloco | only if the project has Moloco | Fix Android / iOS adapter → 4.3.1.0 (rewrites `Dependencies.xml`; Resolve libraries fetches it) |
-| Gradle 8.6 | always | **Download Gradle 8.6…**: pick a folder, the tool downloads `gradle-8.6-all.zip`, unzips it and points Unity at it with "Gradle installed with Unity" off. Or choose an existing folder. On Gradle 8+, also **Fix dexing property**: MAX 8.1.0 / 8.2.0 write `android.enableDexingArtifactTransform`, which Gradle 8 removed; it becomes `android.useFullClasspathForDexingTransform` (MAX 8.2.1+ already has it) |
+| Gradle 8.6 | always | **Download Gradle 8.6…**: pick a folder, the tool downloads `gradle-8.6-all.zip`, unzips it and points Unity at it with "Gradle installed with Unity" off. Or choose an existing folder. On Gradle 8+, also **Fix dexing property**: MAX 8.0.1 – 8.2.0 write `android.enableDexingArtifactTransform`, which Gradle 8 removed; it becomes `android.useFullClasspathForDexingTransform` (MAX 8.2.1+ already has it) |
 | JDK 17 | always | Choose a JDK folder — `org.gradle.java.home` in `gradleTemplate.properties` |
 | Kotlin | always | Add the Kotlin plugin and a matching AGP classpath to `baseProjectTemplate.gradle`, turning on Custom Base Gradle Template if needed |
 | AGP 8.4.0 | always | Bump `com.android.application` / `library` to 8.4.0 (and an existing buildscript classpath with them) |

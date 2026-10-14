@@ -433,11 +433,23 @@ namespace GameDistrict.MeticaIntegrationTools
 
                 Directory.CreateDirectory(Path.GetDirectoryName(target) ?? MeticaPaths.BackupRoot);
                 File.Copy(MeticaPaths.ToAbsolute(projectRelativePath), target);
+                IgnoreBackupsInGit();
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[Metica Integration] Could not back up {projectRelativePath}: {e.Message}");
             }
+        }
+
+        /// <summary>
+        /// The backups are this machine's undo copies, not project files: a .gitignore of "*"
+        /// inside the folder keeps git from ever listing them (itself included), without
+        /// touching the game's own .gitignore.
+        /// </summary>
+        internal static void IgnoreBackupsInGit()
+        {
+            var ignore = Path.Combine(MeticaPaths.BackupRoot, ".gitignore");
+            if (!File.Exists(ignore)) File.WriteAllText(ignore, "# Metica Integration Tools backups — local only\n*\n");
         }
 
         private static string DetectNewline(string text) => text.Contains("\r\n") ? "\r\n" : "\n";

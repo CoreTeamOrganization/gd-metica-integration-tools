@@ -308,3 +308,37 @@
   with generated genres (`Assets/MeticaGenres`): they lose their base classes and the
   `METICA_ANALYTICS` define installer, so they must stay on `#v0.1.0`. The shared Gradle
   steps stay (Troubleshooting uses them).
+- **Analytics Integration** flow (GD SDK below 6.2.0, or a custom SDK), on Home next to Ads —
+  one step per change, each reviewed and committed on its own:
+  1. Add Metica v2.45.2 — the Ads flow's install, Android libraries resolved.
+  2. Add Metica Analytics Abstractions — .tgz downloaded into `Packages/`, `file:` entry in
+     manifest.json; or pick a local .tgz.
+  3. Add Genre Creator v2.0.0.
+  4. Create genre files — game name + Excel schema (sheet dropdown only with several sheets), plus
+     optional App Id / Api Key / App Token; the genre creator's own code writes the files
+     (called by name — it has no public API); the step verifies the scripts, the compile and
+     `<Game>Analytics.asset`, writes the filled fields to it and turns Enable Metica Logs on.
+     The Create button stays disabled until the name and Excel file are valid; the name error
+     shows under the field as it is typed.
+  5. Connect Adjust to Metica — `muid` / external device id before `Adjust.InitSdk`, Adjust ID
+     handed to the genre asset after it. GD SDK `AdjustAnalyticsNetwork.cs`, or the custom
+     SDK's file.
+  6. Start Metica analytics — a startup script in Assets/MeticaGenres: Initialize, install (first
+     launch), sessionStart; skipped when the game's own code already does it.
+  7. Set up the Android build — Gradle 8.6, JDK 17, Kotlin, AGP 8.4.0, required.
+  Add Genre Creator also commits ProjectSettings.asset (it adds METICA_ANALYTICS there).
+  The Troubleshooting rows moved to `AndroidBuildRows`, shared by both flows.
+- Step commits: **Commit and push** next to Commit, and a **Push** button on a committed step
+  while its branch has unpushed commits. Pushes the current branch only (sets origin as
+  upstream the first time), never forced.
+- Backups (`MeticaIntegrationBackups/`) now carry their own `.gitignore` (`*`), so the undo
+  copies never show up as uncommitted changes. Existing backup folders get it on the next re-check.
+- Metica SDK target is now **2.45.6** (was 2.45.2). Since 2.45.5 its minimum AppLovin MAX is 8.0.1, so the
+  AppLovin MAX step now only shows below **8.0.1** (was 8.1.0) and installs 8.0.1 there. Games
+  already on MAX 8.0.1+ keep their MAX. A project's own MeticaTargetVersion override still wins.
+- Metica banner templates (GD SDK 5.3+, 5.0.2–5.2, standalone): banner auto-refresh is now
+  turned on **after** `MeticaSdk.Ads.CreateBanner`. Before, it was started for a banner that did
+  not exist yet (Metica logs `startAutoRefresh called but BANNER not found`) and, the status
+  being cached, never started again. The 5.0.0–5.0.1 banner already had the right order.
+  Projects that already have the wrapper files keep the old ones until they are rewritten
+  (Overwrite existing files) or edited by hand.

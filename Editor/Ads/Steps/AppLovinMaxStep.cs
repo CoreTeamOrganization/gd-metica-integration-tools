@@ -11,9 +11,9 @@ namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
     /// Gets AppLovin MAX to the version Metica needs. Only part of the run when MAX is missing
-    /// or below <see cref="Minimum"/> — a project already on 8.1.0+ never sees it.
+    /// or below <see cref="Minimum"/> — a project already on 8.0.1+ never sees it.
     ///
-    /// <para>Installs the version pinned in MeticaTargetVersion.asset (8.1.0 by default, the
+    /// <para>Installs the version pinned in MeticaTargetVersion.asset (8.0.1 by default, the
     /// closest to the MAX an old project has): AppLovin's own Unity plugin package from their
     /// GitHub releases, the same package the Integration Manager imports.</para>
     ///
@@ -25,7 +25,7 @@ namespace GameDistrict.MeticaIntegrationTools
     public sealed class AppLovinMaxStep : MeticaStep
     {
         /// <summary>What Metica needs. The version installed comes from the target-version asset.</summary>
-        public static readonly Version Minimum = new Version(8, 1, 0);
+        public static readonly Version Minimum = new Version(8, 0, 1);
 
         private const string MaxRoot = "Assets/MaxSdk";
         private const string KeptAdapters = "Mediation";
@@ -53,7 +53,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>
         /// While MAX is below the floor — and, once this step has started replacing it, until
         /// the end, so the resolve after the import still happens here instead of the step
-        /// vanishing the moment MAX reaches 8.1.0.
+        /// vanishing the moment MAX reaches 8.0.1.
         /// </summary>
         internal override bool Applies
         {

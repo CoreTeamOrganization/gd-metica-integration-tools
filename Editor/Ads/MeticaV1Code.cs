@@ -259,7 +259,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// The lines with // and /* */ comments removed and string contents blanked; line count
         /// unchanged.
         /// </summary>
-        private static string[] WithoutComments(string[] lines)
+        internal static string[] WithoutComments(string[] lines)
         {
             var result = new string[lines.Length];
             var inBlock = false;

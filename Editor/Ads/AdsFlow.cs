@@ -9,7 +9,7 @@ namespace GameDistrict.MeticaIntegrationTools
     /// Metica ads runtime is written instead). Which one runs is decided on every refresh, so
     /// dropping the SDK in or taking it out switches the run on the next check.
     ///
-    /// <para>In both, AppLovin MAX comes first (only when it is below 8.1.0 — Metica needs
+    /// <para>In both, AppLovin MAX comes first (only when it is below 8.0.1 — Metica needs
     /// it), then the integration, and the optional Android build fixes last, in one
     /// checklist: none of them can be judged until there is a build to judge.</para>
     /// </summary>
@@ -17,7 +17,7 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public const string Name = "Ads Integration";
 
-        // AppLovinMaxStep only shows while MAX is below 8.1.0 (MeticaStep.Applies). Resolving
+        // AppLovinMaxStep only shows while MAX is below 8.0.1 (MeticaStep.Applies). Resolving
         // Android libraries is part of the SDK steps themselves, not a step of its own.
         private static readonly MeticaStep[] GDSdkSteps =
         {

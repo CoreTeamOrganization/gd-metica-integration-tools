@@ -9,8 +9,8 @@ using UnityEngine.UIElements;
 namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
-    /// The one Metica Integration window: Home opens the Ads Integration flow, which runs one
-    /// step per screen. Built with UI Toolkit against
+    /// The one Metica Integration window: Home picks a flow (Ads or Analytics Integration),
+    /// then the flow runs one step per screen. Built with UI Toolkit against
     /// Editor/UI/MeticaTheme.uss; the flows themselves (<see cref="MeticaFlow"/>) hold no UI.
     ///
     /// <para>The whole screen is rebuilt on every refresh — on focus, after a recompile, and
@@ -19,7 +19,7 @@ namespace GameDistrict.MeticaIntegrationTools
     /// </summary>
     public sealed class MeticaIntegrationWindow : EditorWindow, IHasCustomMenu
     {
-        private enum Page { Home, Ads }
+        private enum Page { Home, Ads, Analytics }
 
         [SerializeField] private Page _page = Page.Home;
 
@@ -36,6 +36,7 @@ namespace GameDistrict.MeticaIntegrationTools
         [SerializeField] private List<string> _commitFilesOpen = new List<string>();
 
         private MeticaFlow _ads;
+        private MeticaFlow _analytics;
 
         /// <summary>Count-only GD SDK comparison for the Home line; refreshed on every re-check of Home.</summary>
         private SdkCompareResult _sdkSummary;
@@ -43,6 +44,9 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Each shown step's uncommitted changes, from git; emptied on every re-check.</summary>
         private readonly Dictionary<string, (List<StepCommit.Change> changes, string unavailable)> _commitChanges =
             new Dictionary<string, (List<StepCommit.Change>, string)>();
+
+        /// <summary>Commits the current branch's remote lacks; null until asked, -1 when unknown. Emptied on every re-check.</summary>
+        private int? _unpushed;
 
         /// <summary>The commit summary and description as typed, by step id, so a rebuild keeps them.</summary>
         private readonly Dictionary<string, string> _commitSummary = new Dictionary<string, string>();
@@ -73,7 +77,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         private static readonly bool ShowDiffCommand = false;
 
-        private MeticaFlow Flow => _page == Page.Ads ? _ads : null;
+        private MeticaFlow Flow => _page == Page.Ads ? _ads : _page == Page.Analytics ? _analytics : null;
 
         [MenuItem("GameDistrict/Metica/Metica Integration...", false, 10)]
         public static void Open()
@@ -92,6 +96,7 @@ namespace GameDistrict.MeticaIntegrationTools
             minSize = new Vector2(520, 480);
 
             _ads = AdsFlow.Create();
+            _analytics = AnalyticsFlow.Create();
 
             // Any tick queued before a reload is gone with it.
             _busy = false;
@@ -188,7 +193,12 @@ namespace GameDistrict.MeticaIntegrationTools
             {
                 MeticaPaths.ForgetCache();
                 _commitChanges.Clear();
+                _unpushed = null;
+
+                // Backups made before the self-ignore existed get it too.
+                if (Directory.Exists(MeticaPaths.BackupRoot)) SourcePatcher.IgnoreBackupsInGit();
                 _ads.Refresh();
+                _analytics.Refresh();
                 _sdkSummary = _page == Page.Home && MeticaPaths.HasGDSdk ? SdkCompare.Run(false) : null;
             }
             catch (Exception e)
@@ -369,8 +379,8 @@ namespace GameDistrict.MeticaIntegrationTools
         private void BuildHome()
         {
             var intro = El();
-            intro.Add(Text("Set up Metica ads", "mi-home-title"));
-            intro.Add(Text("Standalone, or wired into the GD Monetization SDK.", "mi-home-sub"));
+            intro.Add(Text("What do you want to set up?", "mi-home-title"));
+            intro.Add(Text("Two separate jobs. Pick one — you can come back to the other.", "mi-home-sub"));
             _content.Add(intro);
 
             var adsCount = _ads.Steps.Length;
@@ -390,6 +400,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 catch (Exception e) { Debug.LogException(e); }
             }
             if (_sdkSummary != null) _content.Add(CompareLine(_sdkSummary));
+
+            var notCovered = AnalyticsFlow.NotCovered;
+            _content.Add(FlowCard(_analytics, MiIcon.Kind.Chart,
+                "Add Metica analytics: genre files from the game's Excel schema, Adjust tied to Metica, and the Android build setup.",
+                notCovered ?? (MeticaPaths.HasGDSdk
+                    ? $"GD Monetization SDK {GdSdkVersion.Reported()} — {_analytics.Steps.Length} steps"
+                    : $"Custom SDK — {_analytics.Steps.Length} steps"),
+                notCovered == null, () => ShowPage(Page.Analytics)));
         }
 
         /// <summary>How the project's GD SDK differs from the original it declares, and a way to look.</summary>
@@ -409,7 +427,8 @@ namespace GameDistrict.MeticaIntegrationTools
             Action open)
         {
             var card = new Button(open).With("mi-card");
-            card.SetEnabled(!_busy);
+            // A flow with nothing to run here (Analytics on GD SDK 6.2+) stays shut.
+            card.SetEnabled(!_busy && flow.Steps.Length > 0);
 
             var tile = El("mi-card__tile");
             tile.Add(new MiIcon(icon, 1.75f, "mi-icon--24"));
@@ -687,7 +706,8 @@ namespace GameDistrict.MeticaIntegrationTools
         private VisualElement CommitSection(MeticaFlow flow, int index, bool inReview)
         {
             var step = flow.Steps[index];
-            if (MeticaIntegrationProgress.CommittedAs(step.Id) != null) return null;
+            var committed = MeticaIntegrationProgress.CommittedAs(step.Id);
+            if (committed != null) return PushSection(committed);
 
             if (!_commitChanges.TryGetValue(step.Id, out var pending))
             {
@@ -749,13 +769,84 @@ namespace GameDistrict.MeticaIntegrationTools
             section.Add(CommitField("Description", step.Id, _commitBody, true));
 
             var buttons = El("mi-row");
-            var commit = IconTextButton(MiIcon.Kind.Check, $"Commit {changes.Count} file{(changes.Count == 1 ? "" : "s")}",
-                () => CommitStep(step, changes), "mi-btn--secondary");
+            var label = $"Commit {changes.Count} file{(changes.Count == 1 ? "" : "s")}";
+            var commit = IconTextButton(MiIcon.Kind.Check, label, () => CommitStep(step, changes, false), "mi-btn--secondary");
             commit.SetEnabled(!_busy);
             buttons.Add(commit);
+            var commitAndPush = IconTextButton(MiIcon.Kind.Check, label + " and push",
+                () => CommitStep(step, changes, true), "mi-btn--secondary");
+            commitAndPush.SetEnabled(!_busy);
+            buttons.Add(commitAndPush);
             section.Add(buttons);
 
             return section;
+        }
+
+        /// <summary>
+        /// A committed step whose branch has commits its remote does not: one Push button. Null
+        /// once everything is pushed, or when git cannot tell.
+        /// </summary>
+        private VisualElement PushSection(string sha)
+        {
+            if (_unpushed == null) _unpushed = StepCommit.Unpushed();
+            if (_unpushed == 0) return null;
+
+            var section = El("mi-commit");
+            section.Add(Text(_unpushed > 0
+                ? $"Committed ({sha}) — {_unpushed} commit{(_unpushed == 1 ? "" : "s")} not pushed yet."
+                : $"Committed ({sha}) — this branch hasn't been pushed yet.", "mi-caption"));
+
+            var buttons = El("mi-row");
+            var push = IconTextButton(MiIcon.Kind.Check, "Push", PushBranch, "mi-btn--secondary");
+            push.SetEnabled(!_busy);
+            buttons.Add(push);
+            section.Add(buttons);
+            return section;
+        }
+
+        private void PushBranch()
+        {
+            if (_busy) return;
+            _busy = true;
+            Rebuild();
+
+            NextTick(() =>
+            {
+                try
+                {
+                    Push(null);
+                }
+                finally
+                {
+                    _busy = false;
+                    if (this != null) RefreshNow();
+                }
+            });
+        }
+
+        /// <summary>Pushes the current branch, logging under <paramref name="title"/> when given.</summary>
+        private void Push(string title)
+        {
+            EditorUtility.DisplayProgressBar("Metica Integration", "Pushing…", 0.5f);
+            string result, error;
+            try
+            {
+                result = StepCommit.Push(out error);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+
+            if (result == null)
+            {
+                if (title != null) MeticaIntegrationLog.Record(title, "Push failed: " + error);
+                EditorUtility.DisplayDialog("Push failed", error, "OK");
+                return;
+            }
+
+            if (title != null) MeticaIntegrationLog.Record(title, result);
+            ShowNotification(new GUIContent(result));
         }
 
         private VisualElement CommitField(string label, string stepId, Dictionary<string, string> store, bool multiline)
@@ -794,7 +885,7 @@ namespace GameDistrict.MeticaIntegrationTools
             return null;
         }
 
-        private void CommitStep(MeticaStep step, List<StepCommit.Change> changes)
+        private void CommitStep(MeticaStep step, List<StepCommit.Change> changes, bool push)
         {
             if (_busy) return;
             _busy = true;
@@ -828,6 +919,8 @@ namespace GameDistrict.MeticaIntegrationTools
                     MeticaIntegrationProgress.MarkCommitted(step.Id, sha);
                     MeticaIntegrationLog.Record(step.Title, $"Committed {changes.Count} files as {sha}");
                     ShowNotification(new GUIContent($"Committed {sha}"));
+
+                    if (push) Push(step.Title);
                 }
                 finally
                 {
@@ -883,12 +976,16 @@ namespace GameDistrict.MeticaIntegrationTools
             var block = El("mi-controls");
             VisualElement buttons = null;
 
-            // Buttons that only show under a condition, re-checked whenever a text field changes.
+            // Buttons that only show, or are only enabled, under a condition — re-checked
+            // whenever a text field changes.
             var conditional = new List<(VisualElement element, Func<bool> showWhen)>();
+            var gated = new List<(VisualElement element, Func<bool> enabledWhen)>();
             void UpdateConditional()
             {
                 foreach (var (element, showWhen) in conditional)
                     element.style.display = showWhen() ? DisplayStyle.Flex : DisplayStyle.None;
+                foreach (var (element, enabledWhen) in gated)
+                    element.SetEnabled(!_busy && enabledWhen());
             }
 
             foreach (var control in controls)
@@ -897,12 +994,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 {
                     case StepButton button:
                         if (buttons == null) block.Add(buttons = El("mi-row"));
+                        var style = button.Primary ? "mi-btn--primary" : "mi-btn--secondary";
                         var element = button.Icon == StepIcon.None
-                            ? new Button(() => RunControl(button.OnClick)) { text = button.Label }.With("mi-btn", "mi-btn--secondary")
+                            ? new Button(() => RunControl(button.OnClick)) { text = button.Label }.With("mi-btn", style)
                             : IconTextButton(button.Icon == StepIcon.Folder ? MiIcon.Kind.Folder : MiIcon.Kind.File,
-                                button.Label, () => RunControl(button.OnClick), "mi-btn--secondary");
+                                button.Label, () => RunControl(button.OnClick), style);
                         element.SetEnabled(button.Enabled && !_busy);
                         if (button.ShowWhen != null) conditional.Add((element, button.ShowWhen));
+                        if (button.EnabledWhen != null) gated.Add((element, button.EnabledWhen));
                         buttons.Add(element);
                         break;
 
@@ -1045,9 +1144,26 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var field = new TextField { value = text.Value ?? string.Empty };
             field.AddToClassList("mi-text");
+
+            // The field's own problem, under it, kept current as it is typed.
+            Label error = null;
+            void ShowError(string message)
+            {
+                if (error == null) return;
+                error.text = message ?? string.Empty;
+                error.style.display = string.IsNullOrEmpty(message) ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            if (text.Validate != null)
+            {
+                error = Text(string.Empty, "mi-field__error");
+                ShowError(text.Validate(field.value));
+            }
+
             field.RegisterValueChangedCallback(change =>
             {
                 text.OnChanged(change.newValue);
+                if (text.Validate != null) ShowError(text.Validate(change.newValue));
                 afterChange();
             });
             field.SetEnabled(!_busy);
@@ -1069,7 +1185,12 @@ namespace GameDistrict.MeticaIntegrationTools
                 row.Add(reveal);
             }
 
-            return row;
+            if (error == null) return row;
+
+            var block = El();
+            block.Add(row);
+            block.Add(error);
+            return block;
         }
 
         private VisualElement Choice(StepChoice choice)
@@ -1125,7 +1246,7 @@ namespace GameDistrict.MeticaIntegrationTools
             badge.Add(new MiIcon(MiIcon.Kind.Check, 2.5f, "mi-icon--24"));
             card.Add(badge);
             card.Add(Text("All done.", "mi-title"));
-            var summary = Text("Build to a device and check the Metica logs.", "mi-summary");
+            var summary = Text(flow.FinishedNote ?? "Build to a device and check the Metica logs.", "mi-summary");
             summary.style.marginBottom = 16;
             card.Add(summary);
 
@@ -1182,7 +1303,7 @@ namespace GameDistrict.MeticaIntegrationTools
                     return;
 
                 if (flow != null) flow.ResetSignOffs();
-                else _ads.ResetSignOffs();
+                else { _ads.ResetSignOffs(); _analytics.ResetSignOffs(); }
                 QueueRefresh();
             }));
             _footer.Add(row);

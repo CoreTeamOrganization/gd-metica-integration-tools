@@ -17,6 +17,8 @@ cover all of the list below.
       the real error).
 - [ ] Per-step commit: the Commit button commits only that step's files (and their .meta),
       with the prefilled summary and description; nothing is pushed.
+- [ ] Commit and push pushes the current branch (sets upstream the first time); Push shows on
+      a committed step while there are unpushed commits, and disappears once pushed.
 
 ### Compare
 
@@ -34,7 +36,7 @@ cover all of the list below.
       "by hand" lines have no buttons; Unity recompiles after, and any leftover shows as a
       compile error.
 - [ ] Metica SDK step removes old Metica from both Package Manager (`com.metica.unity`) and
-      Assets, then adds 2.45.2, and the project compiles.
+      Assets, then adds 2.45.6, and the project compiles.
 - [ ] MeticaSdk scene object warning shows, and clears once the object is deleted.
 
 ### GD SDK 5.0 – 5.2 (device)
@@ -48,6 +50,8 @@ cover all of the list below.
 ### Standalone (device)
 
 - [ ] Banner and MREC start at the positions set in MeticaAdsConfig.
+- [ ] Metica banner auto-refreshes (no `startAutoRefresh … BANNER not found` in logcat), GD SDK
+      and standalone.
 - [ ] `MeticaAdsManager.LoadInterstitial()` / `LoadRewarded()` load an ad, and do nothing
       when one is already loaded.
 - [ ] MREC with MRec Offset (e.g. Bottom, (0, -140)) lands in the same place as the game's
@@ -59,6 +63,24 @@ cover all of the list below.
       still open (check logcat timestamps vs ad close), with no "can only be called from the
       main thread" errors.
 - [ ] Banner / MREC revenue still reported.
+
+### Analytics Integration (custom SDK game, and a GD SDK 5.x game)
+
+- [ ] Steps 1–3: Metica SDK (Android libraries resolved), abstractions (.tgz download →
+      Packages/ + manifest), genre creator #v2.0.0; the project compiles after each; each
+      commits on its own.
+- [ ] "Pick .tgz instead…" works with a local copy.
+- [ ] Step 4: Create stays disabled until the name is valid and Excel chosen; name error under
+      the field while typing; files + `<Game>Analytics.asset` after the compile; App Id / Api
+      Key / App Token written to the asset; Enable Metica Logs on.
+- [ ] Step 6: startup script written (or skipped when the game does it); on device, install
+      once, sessionStart every launch.
+- [ ] Add Genre Creator's commit includes ProjectSettings.asset (METICA_ANALYTICS); no
+      MeticaIntegrationBackups file left uncommitted.
+- [ ] Step 5: GD SDK — AdjustAnalyticsNetwork.cs patched and compiles; custom SDK — the
+      Adjust.InitSdk file found / picked; .asmdef reference added when inside one.
+- [ ] On device: Adjust callbacks carry `muid`; the genre asset gets the Adjust ID.
+- [ ] Step 7 passes only with Gradle 8.6, JDK 17, Kotlin and AGP 8.4.0 set.
 
 ## Known issues
 

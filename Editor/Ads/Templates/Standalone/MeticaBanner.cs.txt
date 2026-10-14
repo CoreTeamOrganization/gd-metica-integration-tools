@@ -28,9 +28,11 @@ namespace MeticaIntegration
         private void CreateBanner()
         {
             isLoading = true;
-            SetBannerAutoRefreshStatus(AutoRefresh.Enabled);
             MeticaSdk.Ads.CreateBanner(adUnitId, new MeticaAdViewConfiguration(ConvertToMeticaBannerPos()));
             MeticaSdk.Ads.SetBannerWidth(adUnitId, 320);
+            // After CreateBanner: Metica ignores auto-refresh for a banner it does not have yet
+            // ("startAutoRefresh called but BANNER not found"), and the status is remembered.
+            SetBannerAutoRefreshStatus(AutoRefresh.Enabled);
             MeticaAdsLog.Log(
                 $"Banner is creating with size {bannerInfo.bannerSize} at {bannerInfo.BannerPosition}");
         }
