@@ -1081,6 +1081,8 @@ namespace GameDistrict.MeticaIntegrationTools
             if (!open) return row;
 
             var body = El("mi-item__body");
+            if (!item.Done && !string.IsNullOrEmpty(item.Risk))
+                body.Add(Box("mi-warning", MiIcon.Kind.Error, "If not done: " + item.Risk).With("mi-item__risk"));
             if (item.Actions.Count > 0) body.Add(ControlsBlock(item.Actions));
             else body.Add(Text(item.Done ? "Nothing to do here." : item.Status, "mi-caption"));
             row.Add(body);

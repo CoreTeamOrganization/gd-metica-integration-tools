@@ -342,3 +342,9 @@
   being cached, never started again. The 5.0.0–5.0.1 banner already had the right order.
   Projects that already have the wrapper files keep the old ones until they are rewritten
   (Overwrite existing files) or edited by hand.
+- Dependencies & troubleshooting (and the Analytics build setup): an opened row that is not
+  done now says what can go wrong without it — Moloco (dependency resolution), Gradle 8.6 and
+  the MAX dexing property, JDK 17, Kotlin ("Metica SDK might not initialize without it"), AGP.
+- Install from `main`: `https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git`
+  (no branch suffix) now gets everything that was on `v1-migration`. Package version 0.2.0.
+  README: install, update (packages-lock.json) and version-override notes.

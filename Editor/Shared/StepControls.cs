@@ -119,8 +119,14 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>What keeps the row open across rebuilds: unique even when titles repeat.</summary>
         public string Key => Detail == null ? Title : Detail + "/" + Title;
 
+        /// <summary>
+        /// What can go wrong when the row is not done — shown at the top of the opened row while
+        /// it is still to do. Null when there is nothing to warn about.
+        /// </summary>
+        public readonly string Risk;
+
         public StepItem(string title, bool done, string status, IReadOnlyList<StepControl> actions,
-            string detail = null, IReadOnlyList<StepButton> hoverActions = null)
+            string detail = null, IReadOnlyList<StepButton> hoverActions = null, string risk = null)
         {
             Title = title;
             Done = done;
@@ -128,6 +134,7 @@ namespace GameDistrict.MeticaIntegrationTools
             Actions = actions;
             Detail = detail;
             HoverActions = hoverActions ?? Array.Empty<StepButton>();
+            Risk = risk;
         }
     }
 

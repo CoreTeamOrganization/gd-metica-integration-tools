@@ -49,7 +49,7 @@ namespace GameDistrict.MeticaIntegrationTools
                          (target == UnityEditor.BuildTarget.Android && iosOld ? " · iOS old, not the build target" : "") +
                          (target == UnityEditor.BuildTarget.iOS && androidOld ? " · Android old, not the build target" : "");
 
-            return new StepItem("Moloco", done, status, new StepControl[]
+            return new StepItem("Moloco", done, status, risk: MolocoRisk, actions: new StepControl[]
             {
                 new StepButton($"Fix Android Moloco → {MolocoVersions.Minimum}.0", MolocoVersions.FixAndroid, androidOld),
                 new StepButton($"Fix iOS Moloco → {MolocoVersions.Minimum}.0", MolocoVersions.FixIos, iosOld),
@@ -80,14 +80,15 @@ namespace GameDistrict.MeticaIntegrationTools
             actions.AddRange(_gradle.Controls(result));
             if (dexing) actions.Add(new StepButton("Fix dexing property", MaxDexingProperty.Fix));
 
-            return new StepItem($"Gradle {GradleVersionStep.DownloadVersion}", result.Ok && !dexing, status, actions);
+            return new StepItem($"Gradle {GradleVersionStep.DownloadVersion}", result.Ok && !dexing, status, actions,
+                risk: dexing ? GradleRisk + " " + DexingRisk : GradleRisk);
         }
 
         public StepItem Jdk()
         {
             var result = _jdk.Verify();
             var status = result.Problems.FirstOrDefault() ?? result.Notes.FirstOrDefault() ?? "";
-            return new StepItem("JDK 17", result.Ok, status, _jdk.Controls(result).ToList());
+            return new StepItem("JDK 17", result.Ok, status, _jdk.Controls(result).ToList(), risk: JdkRisk);
         }
 
         public StepItem Kotlin(GradleTemplateEditor.Report report)
@@ -101,7 +102,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 : !report.HasKotlinClasspath ? "Not added"
                 : "The buildscript block needs fixing";
 
-            return new StepItem("Kotlin", done, status, done
+            return new StepItem("Kotlin", done, status, risk: KotlinRisk, actions: done
                 ? new StepControl[0]
                 : new StepControl[] { new StepButton("Add Kotlin", () => EditTemplate(GradleTemplateEditor.AddKotlin)) });
         }
@@ -117,10 +118,30 @@ namespace GameDistrict.MeticaIntegrationTools
                 : report.AgpTooOldForTarget ? $"AGP {version} — Target API {GradleTemplateEditor.MinimumApiForAgp8}+ needs AGP 8"
                 : $"AGP {version}";
 
-            return new StepItem($"AGP {target}", done, status, done || (!report.FileMissing && version == null)
+            return new StepItem($"AGP {target}", done, status, risk: AgpRisk, actions: done || (!report.FileMissing && version == null)
                 ? new StepControl[0]
                 : new StepControl[] { new StepButton($"Bump AGP to {target}", () => EditTemplate(GradleTemplateEditor.BumpAgp)) });
         }
+
+        // ── What can go wrong without each row (shown when the row is opened) ──
+
+        private static readonly string MolocoRisk =
+            $"Moloco below {MolocoVersions.Minimum} can break Android dependency resolution next to Metica, so the build may fail.";
+
+        private static readonly string GradleRisk =
+            $"Metica's Android SDK needs Gradle {GradleVersionStep.DownloadVersion} or later — with an older Gradle the Android build can fail.";
+
+        private static readonly string DexingRisk =
+            "On Gradle 8, MAX's old dexing property (android.enableDexingArtifactTransform) fails the build.";
+
+        private const string JdkRisk =
+            "Gradle 8 and AGP 8 need JDK 17 — with an older JDK the Android build fails.";
+
+        private const string KotlinRisk = "Metica SDK might not initialize without it.";
+
+        private static readonly string AgpRisk =
+            $"Metica needs AGP {GradleTemplateEditor.RecommendedAgpVersion} — with an older AGP the Android build can fail " +
+            $"(Target API {GradleTemplateEditor.MinimumApiForAgp8}+ needs AGP 8).";
 
         /// <summary>Turns on Custom Base Gradle Template if needed, then runs the edit.</summary>
         private void EditTemplate(System.Func<List<string>> edit)

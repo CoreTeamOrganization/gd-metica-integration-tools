@@ -25,18 +25,37 @@ The Genre Creator that used to be bundled here (with its `Runtime/` classes) was
 
 ## Installing
 
-**Active development** (this project) — a local package reference, so edits here are
-picked up immediately without cutting a release:
+In Unity: **Window → Package Manager → + → Add package from git URL…**, and paste:
 
-```json
-"com.gamedistrict.metica-integration-tools": "file:../../gd-metica-integration-tools"
+```
+https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git
 ```
 
-**Shipping game** — pin a released tag (latest: `v0.1.0`):
+Or add the line to `Packages/manifest.json`:
 
 ```json
-"com.gamedistrict.metica-integration-tools": "https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git#v0.1.0"
+"com.gamedistrict.metica-integration-tools": "https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git",
 ```
+
+That is the `main` branch — always the latest tool. Unity needs git on the PATH and access to
+the CoreTeamOrganization GitHub org.
+
+**Updating.** Unity pins the commit it installed in `Packages/packages-lock.json`. To get the
+latest, delete the `com.gamedistrict.metica-integration-tools` entry there and return to Unity.
+
+**Version settings.** The Metica SDK and AppLovin MAX versions the tool installs come from the
+package's `Editor/Ads/MeticaTargetVersion.asset`. A game can override them with its own
+`Assets/MeticaIntegrationToolsSettings/MeticaTargetVersion.asset` (**Change target version…** in
+the Metica SDK step); delete that file to follow the tool's versions again.
+
+**Tool development** — a local package reference, so edits are picked up without pushing:
+
+```json
+"com.gamedistrict.metica-integration-tools": "file:C:/path/to/gd-metica-integration-tools",
+```
+
+`#v0.1.0` is the old tool (with the bundled Genre Creator); `#v1-migration` was the development
+branch and now matches `main`.
 
 ## Why a package, not an Assets folder
 

@@ -1,6 +1,6 @@
 {
   "name": "com.gamedistrict.metica-integration-tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "GameDistrict Metica Integration Tools",
   "description": "Editor wizard for integrating Metica ads: standalone, or wired into the GD Monetization SDK.",
   "unity": "2021.3",
