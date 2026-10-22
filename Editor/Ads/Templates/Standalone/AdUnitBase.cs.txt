@@ -31,8 +31,11 @@ namespace MeticaIntegration
     {
         protected Action onRewardComplete;
 
+        /// <summary>Runs once the shown ad is closed (or failed to show), reward or not.</summary>
+        protected Action onAdClosed;
+
         public abstract bool HasRewarded(bool doRequest);
-        public abstract void ShowRewarded(string placementName, Action onRewardedCallback);
+        public abstract void ShowRewarded(string placementName, Action onRewardedCallback, Action onClosed = null);
         public abstract void LoadRewarded();
     }
 

@@ -42,7 +42,15 @@ namespace GameDistrict.MeticaIntegrationTools
             new ImportMeticaSdkStep(),
             new StandaloneRuntimeStep(),
             new StandaloneConfigStep(),
-            new TroubleshootingStep()
+            new TroubleshootingStep(),
+
+            // Optional patches of the game's own ads code — last, so the steps before stay reachable.
+            new InitPatchStep(),
+            new InterstitialPatchStep(),
+            new RewardedPatchStep(),
+            new BannerPatchStep(),
+            new MRecPatchStep(),
+            new RevenueLoggingStep()
         };
 
         /// <summary>Every Ads step id, both lists — what Reset sign-offs clears.</summary>

@@ -165,18 +165,21 @@ namespace MeticaIntegration
 
         /// <summary>
         /// Shows a rewarded ad. <paramref name="onComplete"/> gets true only if the user
-        /// earned the reward — grant on true, never on false.
+        /// earned the reward — grant on true, never on false. <paramref name="onClosed"/> runs
+        /// once the ad is closed, reward or not — and straight away when there was no ad or it
+        /// failed to show, so a caller that pauses the game for the ad never stalls.
         /// </summary>
-        public static void ShowRewarded(string placement, Action<bool> onComplete)
+        public static void ShowRewarded(string placement, Action<bool> onComplete, Action onClosed = null)
         {
             if (!HasRewarded())
             {
                 MeticaAdsLog.Log($"No rewarded ad ready for '{placement}'");
                 onComplete?.Invoke(false);
+                onClosed?.Invoke();
                 return;
             }
 
-            _rewarded.ShowRewarded(placement, () => onComplete?.Invoke(true));
+            _rewarded.ShowRewarded(placement, () => onComplete?.Invoke(true), onClosed);
         }
 
         // ── Banner ─────────────────────────────────────────────────────────────

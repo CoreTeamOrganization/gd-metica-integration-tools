@@ -348,3 +348,14 @@
 - Install from `main`: `https://github.com/CoreTeamOrganization/gd-metica-integration-tools.git`
   (no branch suffix) now gets everything that was on `v1-migration`. Package version 0.2.0.
   README: install, update (packages-lock.json) and version-override notes.
+- Standalone (non-GD-SDK) Ads flow: six optional steps at the end that patch the game's own
+  ads code — **Patch: start Metica or MAX** (pick script + function; `UseMetica` from the remote
+  switch; MAX code → `<Function>_Max`, AdMob → `<Function>_AdMob`), **Patch: interstitial /
+  rewarded / banner / MREC calls** (call-level `if (UseMetica) { Metica } else { MAX }`, the
+  game's MAX close / reward handlers called from Metica's callbacks, "Max" dropped from patched
+  function names when safe) and **Patch: Metica ad revenue** (`MeticaAdsHooks.OnAdRevenue` →
+  an empty `OnMeticaAdRevenue(AdRevenueInfo)`). Backed up, reviewed and committed per step.
+  Anything it can't place safely (brace-less ifs, `#if`, shared locals, lambda handlers) is
+  reported for a hand edit instead of guessed.
+- Standalone runtime: `MeticaAdsManager.ShowRewarded(placement, onComplete, onClosed)` — the new
+  `onClosed` runs when the ad closes (or fails to show), reward or not.

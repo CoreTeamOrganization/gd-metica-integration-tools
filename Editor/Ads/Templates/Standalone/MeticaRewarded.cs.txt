@@ -42,10 +42,11 @@ namespace MeticaIntegration
             return isReady;
         }
 
-        public override void ShowRewarded(string placementName, Action onRewardedCallback)
+        public override void ShowRewarded(string placementName, Action onRewardedCallback, Action onClosed = null)
         {
             this.placementName = placementName;
             this.onRewardComplete = onRewardedCallback;
+            this.onAdClosed = onClosed;
             MeticaSdk.Ads.ShowRewarded(adUnitId, placementName);
         }
 
@@ -81,12 +82,24 @@ namespace MeticaIntegration
         private void OnRewardedShowFailedEvent(MeticaAd meticaAd, MeticaAdError meticaAdError)
         {
             ThreadDispatcher.Enqueue(LoadRewarded);
+
+            // Never shown, so it will never close: let the game carry on as if it had.
+            ThreadDispatcher.Enqueue(InvokeClosed);
         }
 
         private void OnRewardedHiddenEvent(MeticaAd meticaAd)
         {
             ThreadDispatcher.Enqueue(LoadRewarded);
+            ThreadDispatcher.Enqueue(InvokeClosed);
             MeticaAdsLog.Log("Rewarded_Ad hidden");
+        }
+
+        /// <summary>The game's close callback, once per show.</summary>
+        private void InvokeClosed()
+        {
+            var closed = onAdClosed;
+            onAdClosed = null;
+            closed?.Invoke();
         }
 
         private void OnRewardedRewardedEvent(MeticaAd meticaAd)

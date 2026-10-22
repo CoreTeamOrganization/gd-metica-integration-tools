@@ -57,6 +57,18 @@ cover all of the list below.
 - [ ] MREC with MRec Offset (e.g. Bottom, (0, -140)) lands in the same place as the game's
       MAX MREC, on Android and iOS; `RepositionMRec(position, offset)` moves it.
 
+### Standalone game-code patches (a custom-SDK game with MAX)
+
+- [ ] Init patch: pick script + function; UseMetica added; MAX → `_Max`, AdMob → `_AdMob`;
+      compiles; with the switch on, Metica starts and MAX doesn't; off, MAX + AdMob as before.
+- [ ] Interstitial / rewarded / banner / MREC patches: calls switch on UseMetica; the game's
+      close and reward handlers run after a Metica ad (reward granted once, game resumes).
+- [ ] Rename: ShowMax… → Show… with every caller; skipped and reported when wired in a scene.
+- [ ] `isMaxInitialized`-style warnings appear where they should.
+- [ ] Revenue step: subscription before Initialize, empty handler, warning while empty.
+- [ ] Runtime: `ShowRewarded` onClosed after close and after a failed show (not compiled
+      against the Metica SDK yet).
+
 ### Standalone revenue on the native thread
 
 - [ ] Interstitial / rewarded revenue reaches Firebase, Adjust and AppMetrica while the ad is
