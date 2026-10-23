@@ -362,3 +362,22 @@
 - Compare window: **Replace with original** puts the original GD SDK file back over a changed
   one, or in place of a missing one — one file at a time, after a confirm, with the current
   file copied to `MeticaIntegrationBackups/Replaced/<time>/` first.
+- Compare window: **Delete** for files the original GD SDK doesn't have (in place of Replace
+  with original) — after a confirm, with the file and its .meta copied to
+  `MeticaIntegrationBackups/Deleted/<time>/` first.
+- Compare window: a tick on every file, and a bar above the list (tick all, count, Replace,
+  Delete) to act on several at once with one confirm. An action is offered only when every
+  ticked file allows it — added files only delete, changed / missing ones only replace, so a
+  mix allows neither.
+- Metica SDK step: when the project fails to compile for want of the analytics abstractions
+  package (compile errors naming Metica's abstractions, or METICA_ANALYTICS in Player settings
+  without the package — seen on GD SDK v5 games), the step says so and offers **Add analytics
+  abstractions** (downloads com.metica.analytics.abstractions-1.0.0.tgz into Packages/ and adds
+  it to the manifest, like Add package from tarball), **Pick the .tgz…** and **Open download
+  folder**. The download tries a second Drive copy if the first fails.
+- Wrapper files step (GD SDK): finds members a game added by hand to the SDK's base classes
+  and interfaces (e.g. an abstract `RefershBanner()` on BannerAdUnit) that the wrapper, written
+  for the original SDK, lacks — the CS0534 / CS0535 that otherwise stops the build. Running the
+  step adds a compiling, do-nothing stub for each method (backed up first) and keeps warning
+  until it's filled in, naming the game's own implementation to copy from. Properties and
+  events are reported for a hand edit. Checked clean against every GD SDK release 5.0.0–6.2.5.

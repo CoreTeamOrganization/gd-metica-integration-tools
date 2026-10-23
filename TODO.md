@@ -20,6 +20,19 @@ cover all of the list below.
 - [ ] Commit and push pushes the current branch (sets upstream the first time); Push shows on
       a committed step while there are unpushed commits, and disappears once pushed.
 
+### Analytics abstractions in the Metica SDK step (GD SDK v5)
+
+- [ ] METICA_ANALYTICS in Player settings, no abstractions package: the step shows the problem
+      and "Add analytics abstractions"; it lands in Packages/ + manifest and Metica compiles.
+- [ ] Compile errors naming Metica.Analytics.Abstractions show as notes; they clear after it's added.
+- [ ] Pick the .tgz… and Open download folder work; GD SDK 6.2.2+ (own copy) never asks.
+
+### Wrapper files: members the game added to the SDK
+
+- [ ] A game with `public abstract void RefershBanner();` in BannerAdUnit: the step shows the
+      problem; running it adds the stub to MeticaBanner, it compiles, and the warning names the
+      game's own RefershBanner to copy from. Unmodified GD SDK: nothing reported.
+
 ### Compare
 
 - [ ] Optional "Compare with original GD SDK" step: opens the window, can be skipped in one
@@ -29,7 +42,13 @@ cover all of the list below.
       unreadable.
 - [ ] Replace with original: asks first; a changed file goes back to the original (line
       endings kept) with a copy in MeticaIntegrationBackups/Replaced/<time>/; a missing file is
-      added back; disabled for an added file; the list re-scans and the file is gone from it.
+      added back; the list re-scans and the file is gone from it.
+- [ ] Delete (added files only, in place of Replace): asks first; file and .meta copied to
+      MeticaIntegrationBackups/Deleted/<time>/, then deleted; the list re-scans.
+- [ ] Ticks: tick several files (and tick-all in the bar); ticking keeps the list's scroll and
+      the diff shown; Replace only when all ticked are changed/missing, Delete only when all
+      are added, both off for a mix (with the hint); one confirm for all; filter change drops
+      ticks that are no longer shown.
 
 ### Metica v1
 

@@ -12,8 +12,9 @@ namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
     /// Shows how the project's GD SDK code differs from the original release it declares:
-    /// changed, added and missing files, each with its diff. The only change made from here
-    /// is "Replace with original", one file at a time, after a confirm and with a backup.
+    /// changed, added and missing files, each with its diff. The only changes made from here
+    /// are "Replace with original" and "Delete" (added files), one file at a time, after a
+    /// confirm and with a backup.
     /// See <see cref="SdkCompare"/> for what is compared.
     /// </summary>
     public sealed class SdkCompareWindow : EditorWindow
@@ -22,6 +23,12 @@ namespace GameDistrict.MeticaIntegrationTools
 
         [SerializeField] private Filter _filter = Filter.Metica;
         [SerializeField] private string _selected;
+
+        // Ticked files, for one action on several — always a subset of what the filter shows.
+        [SerializeField] private List<string> _checked = new List<string>();
+        private readonly Dictionary<string, Button> _checks = new Dictionary<string, Button>();
+        private List<SdkFileChange> _shown = new List<SdkFileChange>();
+        private VisualElement _bar;
 
         private SdkCompareResult _result;
         private VisualElement _root;
@@ -97,7 +104,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
             BuildTop();
 
-            var shown = Shown().ToList();
+            var shown = _shown = Shown().ToList();
+            _checked.RemoveAll(path => shown.All(c => c.Path != path));
+            _checks.Clear();
+
             if (shown.Count == 0)
             {
                 _list.Add(Text(_result.Problem != null ? string.Empty
@@ -108,8 +118,71 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (_selected == null || shown.All(c => c.Path != _selected)) _selected = shown[0].Path;
 
+            _bar = El("mi-cmp__bar");
+            _list.Add(_bar);
             foreach (var change in shown) _list.Add(FileRow(change));
+            UpdateSelection();
             BuildDiff(shown.First(c => c.Path == _selected));
+        }
+
+        // ── Selection ──────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Ticks and the bar above the list, redrawn in place so the list keeps its scroll.
+        /// An action shows only when every ticked file allows it: added files can only be
+        /// deleted, changed and missing ones only replaced, so a mix allows neither.
+        /// </summary>
+        private void UpdateSelection()
+        {
+            foreach (var pair in _checks) SetTick(pair.Value, _checked.Contains(pair.Key));
+
+            _bar.Clear();
+            var all = _checked.Count == _shown.Count;
+            var tickAll = new Button(() =>
+            {
+                _checked.Clear();
+                if (!all) _checked.AddRange(_shown.Select(c => c.Path));
+                UpdateSelection();
+            }).With("mi-cmp__check");
+            tickAll.tooltip = all ? "Untick all" : "Tick all";
+            SetTick(tickAll, all, some: _checked.Count > 0);
+            _bar.Add(tickAll);
+            _bar.Add(Text(_checked.Count == 0 ? "Tick files to act on several" : $"{_checked.Count} ticked", "mi-cmp__bar-label"));
+
+            if (_checked.Count == 0) return;
+
+            var picked = _shown.Where(c => _checked.Contains(c.Path)).ToList();
+            var anyAdded = picked.Any(c => c.Kind == ChangeKind.Added);
+            var anyOther = picked.Any(c => c.Kind != ChangeKind.Added);
+
+            var actions = El("mi-row", "mi-cmp__bar-actions");
+            var replace = IconTextButton(MiIcon.Kind.Undo, "Replace", () => ReplaceWithOriginal(picked), "mi-btn--secondary");
+            replace.AddToClassList("mi-btn--small");
+            replace.SetEnabled(anyOther && !anyAdded);
+            actions.Add(replace);
+
+            var delete = IconTextButton(MiIcon.Kind.Trash, "Delete", () => DeleteAdded(picked), "mi-btn--secondary");
+            delete.AddToClassList("mi-btn--small");
+            delete.SetEnabled(anyAdded && !anyOther);
+            actions.Add(delete);
+            _bar.Add(actions);
+
+            if (anyAdded && anyOther)
+                _bar.Add(Text("Added files can only be deleted, the others only replaced — tick one kind.", "mi-cmp__bar-hint"));
+        }
+
+        private void ToggleTick(string path)
+        {
+            if (!_checked.Remove(path)) _checked.Add(path);
+            UpdateSelection();
+        }
+
+        private static void SetTick(Button box, bool on, bool some = false)
+        {
+            box.Clear();
+            box.EnableInClassList("mi-cmp__check--on", on || some);
+            if (on) box.Add(new MiIcon(MiIcon.Kind.Check, 2f, "mi-icon--12"));
+            else if (some) box.Add(El("mi-cmp__check-dash"));
         }
 
         private IEnumerable<SdkFileChange> Shown() =>
@@ -234,7 +307,14 @@ namespace GameDistrict.MeticaIntegrationTools
             if (change.Metica) meta.Add(Text("Metica", "mi-cmp__tag"));
             if (change.ByTool) meta.Add(Text("Tool", "mi-cmp__tag", "mi-cmp__tag--tool"));
             row.Add(meta);
-            return row;
+
+            // The tick sits beside the row, not in it, so ticking never changes the diff shown.
+            var line = El("mi-cmp__file-line");
+            var tick = new Button(() => ToggleTick(change.Path)).With("mi-cmp__check");
+            _checks[change.Path] = tick;
+            line.Add(tick);
+            line.Add(row);
+            return line;
         }
 
         private static string KindLabel(ChangeKind kind) =>
@@ -260,11 +340,11 @@ namespace GameDistrict.MeticaIntegrationTools
             openOriginal.SetEnabled(change.Kind != ChangeKind.Added);
             buttons.Add(openOriginal);
 
-            // An added file has no original to go back to.
-            var replace = IconTextButton(MiIcon.Kind.Undo, "Replace with original",
-                () => ReplaceWithOriginal(change), "mi-btn--secondary");
-            replace.SetEnabled(change.Kind != ChangeKind.Added);
-            buttons.Add(replace);
+            // An added file has no original to go back to — it can only go.
+            buttons.Add(change.Kind == ChangeKind.Added
+                ? IconTextButton(MiIcon.Kind.Trash, "Delete", () => DeleteAdded(new[] { change }), "mi-btn--secondary")
+                : IconTextButton(MiIcon.Kind.Undo, "Replace with original",
+                    () => ReplaceWithOriginal(new[] { change }), "mi-btn--secondary"));
             head.Add(buttons);
             _diff.Add(head);
 
@@ -329,54 +409,133 @@ namespace GameDistrict.MeticaIntegrationTools
             InternalEditorUtility.OpenFileAtLineExternal(target, 1);
         }
 
+        // ── Replace / delete ───────────────────────────────────────────────────
+
         /// <summary>
-        /// Puts the original release's file back — over a changed file, or in place of a
-        /// missing one. The current file is copied to MeticaIntegrationBackups/Replaced/&lt;time&gt;/
-        /// first: always this state, unlike the patch backups, which keep only the pre-tool one.
+        /// Puts the original release's files back — over changed files, or in place of missing
+        /// ones. Current files are copied to MeticaIntegrationBackups/Replaced/&lt;time&gt;/ first:
+        /// always this state, unlike the patch backups, which keep only the pre-tool one.
         /// </summary>
-        private void ReplaceWithOriginal(SdkFileChange change)
+        private void ReplaceWithOriginal(IReadOnlyList<SdkFileChange> changes)
         {
-            var text = StockFiles.Packaged?.Get(_result.Version, change.Path);
-            if (text == null) return;
+            var originals = changes
+                .Select(change => (change, text: StockFiles.Packaged?.Get(_result.Version, change.Path)))
+                .Where(item => item.text != null && item.change.Kind != ChangeKind.Added)
+                .ToList();
+            if (originals.Count == 0) return;
 
-            var absolute = MeticaPaths.ToAbsolute(change.ProjectPath);
-            var exists = File.Exists(absolute);
-            var backup = $"{MeticaPaths.BackupRoot}/Replaced/{DateTime.Now:yyyyMMdd-HHmmss}/{change.ProjectPath}";
-
-            var message = $"Replace {change.ProjectPath} with the original from GD SDK {_result.Version}?";
-            if (exists) message += $"\n\nThe current file is copied to MeticaIntegrationBackups/Replaced first.";
-            else message += "\n\nThe file is missing, so the original is added. Unity gives it a new .meta — " +
-                            "a scene or prefab that used the old one needs re-linking.";
-            if (change.Metica) message += "\n\nIts Metica changes go too — run the tool's step again to put them back.";
+            var missing = originals.Count(item => !File.Exists(MeticaPaths.ToAbsolute(item.change.ProjectPath)));
+            var message = $"Replace with the originals from GD SDK {_result.Version}:\n\n" +
+                          PathList(originals.Select(item => item.change.ProjectPath));
+            if (missing < originals.Count) message += "\n\nCurrent files are copied to MeticaIntegrationBackups/Replaced first.";
+            if (missing > 0)
+                message += "\n\nMissing files are added back. Unity gives them a new .meta — a scene or prefab " +
+                           "that used the old one needs re-linking.";
+            if (originals.Any(item => item.change.Metica))
+                message += "\n\nTheir Metica changes go too — run the tool's step again to put them back.";
 
             if (!EditorUtility.DisplayDialog("Replace with original", message, "Replace", "Cancel")) return;
 
-            try
+            var backupRoot = $"{MeticaPaths.BackupRoot}/Replaced/{DateTime.Now:yyyyMMdd-HHmmss}";
+            var failed = new List<string>();
+            foreach (var (change, original) in originals)
             {
-                if (exists)
+                var absolute = MeticaPaths.ToAbsolute(change.ProjectPath);
+                var text = original;
+                try
                 {
-                    // Keep the file's own line endings, so git shows only the real change.
-                    if (File.ReadAllText(absolute).Contains("\r\n")) text = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+                    if (File.Exists(absolute))
+                    {
+                        // Keep the file's own line endings, so git shows only the real change.
+                        if (File.ReadAllText(absolute).Contains("\r\n")) text = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(backup) ?? MeticaPaths.BackupRoot);
-                    File.Copy(absolute, backup, true);
-                    SourcePatcher.IgnoreBackupsInGit();
+                        var backup = $"{backupRoot}/{change.ProjectPath}";
+                        Directory.CreateDirectory(Path.GetDirectoryName(backup) ?? backupRoot);
+                        File.Copy(absolute, backup, true);
+                        SourcePatcher.IgnoreBackupsInGit();
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(absolute) ?? ".");
+                    File.WriteAllText(absolute, text);
                 }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(absolute) ?? ".");
-                File.WriteAllText(absolute, text);
-                Debug.Log($"[Metica Integration] Replaced {change.ProjectPath} with the GD SDK {_result.Version} original" +
-                          (exists ? $" (previous copy: {backup})" : string.Empty));
+                catch (Exception e)
+                {
+                    Debug.LogException(e);
+                    failed.Add($"{change.ProjectPath}: {e.Message}");
+                }
             }
-            catch (Exception e)
+
+            Debug.Log($"[Metica Integration] Replaced {originals.Count - failed.Count} file(s) with the GD SDK " +
+                      $"{_result.Version} originals (previous copies: {backupRoot})");
+            Finish("Replace with original", "Could not replace", failed);
+        }
+
+        /// <summary>
+        /// Deletes files the original release doesn't have, with their .meta. Both are copied to
+        /// MeticaIntegrationBackups/Deleted/&lt;time&gt;/ first; a file whose copy fails stays.
+        /// </summary>
+        private void DeleteAdded(IReadOnlyList<SdkFileChange> changes)
+        {
+            var added = changes
+                .Where(change => change.Kind == ChangeKind.Added && File.Exists(MeticaPaths.ToAbsolute(change.ProjectPath)))
+                .ToList();
+            if (added.Count == 0) return;
+
+            var message = "These will be deleted:\n\n" + PathList(added.Select(change => change.ProjectPath)) +
+                          "\n\nCopies go to MeticaIntegrationBackups/Deleted first. Code that uses them stops compiling.";
+            if (added.Any(change => change.Metica)) message += "\n\nSome mention Metica — they may be part of the integration.";
+
+            if (!EditorUtility.DisplayDialog("Delete added files", message, "Delete", "Cancel")) return;
+
+            var backupRoot = $"{MeticaPaths.BackupRoot}/Deleted/{DateTime.Now:yyyyMMdd-HHmmss}";
+            var failed = new List<string>();
+            var backedUp = new List<string>();
+            foreach (var change in added)
             {
-                Debug.LogException(e);
-                EditorUtility.DisplayDialog("Replace with original", $"Could not replace {change.ProjectPath}: {e.Message}", "OK");
-                return;
+                var absolute = MeticaPaths.ToAbsolute(change.ProjectPath);
+                var backup = $"{backupRoot}/{change.ProjectPath}";
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(backup) ?? backupRoot);
+                    File.Copy(absolute, backup, true);
+                    if (File.Exists(absolute + ".meta")) File.Copy(absolute + ".meta", backup + ".meta", true);
+                    SourcePatcher.IgnoreBackupsInGit();
+                    backedUp.Add(change.ProjectPath);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e);
+                    failed.Add($"{change.ProjectPath}: not backed up, so not deleted ({e.Message})");
+                }
             }
 
-            AssetDatabase.ImportAsset(change.ProjectPath);
+            var notDeleted = new List<string>();
+            if (backedUp.Count > 0) AssetDatabase.DeleteAssets(backedUp.ToArray(), notDeleted);
+            failed.AddRange(notDeleted.Select(path => $"{path}: Unity could not delete it"));
+
+            Debug.Log($"[Metica Integration] Deleted {backedUp.Count - notDeleted.Count} added file(s) (copies: {backupRoot})");
+            Finish("Delete added files", "Could not delete", failed);
+        }
+
+        /// <summary>After a replace or delete: re-import, report what didn't work, re-scan.</summary>
+        private void Finish(string title, string failedLead, List<string> failed)
+        {
+            AssetDatabase.Refresh();
+            if (failed.Count > 0)
+                EditorUtility.DisplayDialog(title, $"{failedLead}:\n\n{PathList(failed)}\n\nSee the Console.", "OK");
+
+            _checked.Clear();
             Rescan();
+        }
+
+        /// <summary>One per line, cut short so a long selection still fits in a dialog.</summary>
+        private static string PathList(IEnumerable<string> paths)
+        {
+            const int max = 15;
+            var list = paths.ToList();
+            var lines = list.Take(max).Select(path => "  • " + path);
+            if (list.Count > max) lines = lines.Append($"  … and {list.Count - max} more");
+            return string.Join("\n", lines);
         }
     }
 }

@@ -71,8 +71,15 @@ namespace GameDistrict.MeticaIntegrationTools
         public const string AssemblyName = "MeticaAnalyticsAbstractions";
         public const string FileName = "com.metica.analytics.abstractions-1.0.0.tgz";
 
-        public const string Url =
-            "https://drive.usercontent.google.com/u/0/uc?id=1H6WYJqsIjQBls3H3giZoEKnIdDje4-Lj&export=download";
+        // The same 1.0.0 .tgz in two Drive places, tried in order.
+        private static readonly string[] Urls =
+        {
+            "https://drive.usercontent.google.com/u/0/uc?id=1H6WYJqsIjQBls3H3giZoEKnIdDje4-Lj&export=download",
+            "https://drive.usercontent.google.com/u/0/uc?id=19ck0x0HWz79SthgR8ZY0fS48QUJ4xVij&export=download"
+        };
+
+        /// <summary>The Drive folder with the .tgz, for downloading it by hand.</summary>
+        public const string FolderUrl = "https://drive.google.com/drive/folders/1yWxZ03FbBNMoCovxQcoLqCKf-DwQiCNi";
 
         public static string ProjectFile => "Packages/" + FileName;
 
@@ -88,13 +95,22 @@ namespace GameDistrict.MeticaIntegrationTools
         public static void Install(string logTitle)
         {
             var temp = Path.Combine(Path.GetTempPath(), FileName);
-            if (!Downloads.TryDownload(Url, temp, "Downloading Metica analytics abstractions", out var error))
+            string error = null;
+            foreach (var url in Urls)
             {
-                MeticaIntegrationLog.Record(logTitle, $"Download failed: {error}");
-                return;
+                // A Drive link that stopped being shared serves a sign-in page, not the .tgz.
+                if (Downloads.TryDownload(url, temp, "Downloading Metica analytics abstractions", out error)
+                    && PackageNameIn(temp) == PackageName)
+                {
+                    InstallFrom(temp, logTitle);
+                    return;
+                }
+
+                error = error ?? "the download was not the package";
             }
 
-            InstallFrom(temp, logTitle);
+            MeticaIntegrationLog.Record(logTitle,
+                $"Download failed: {error}. Download it from {FolderUrl} and use Pick the .tgz.");
         }
 
         /// <summary>Same, from a .tgz the developer picked.</summary>

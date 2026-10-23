@@ -291,6 +291,18 @@
 .mi-root .mi-cmp__file:hover { background-color: var(--surface); }
 .mi-root .mi-cmp__file--selected { background-color: var(--surface-2); border-left-width: 3px; border-left-color: var(--yellow); }
 .mi-cmp__file-top { flex-direction: row; align-items: center; }
+
+.mi-cmp__file-line { flex-direction: row; align-items: stretch; border-bottom-width: 1px; border-color: var(--border); }
+.mi-root .mi-cmp__file-line > .mi-cmp__file { flex-grow: 1; flex-shrink: 1; border-bottom-width: 0; }
+.mi-root .mi-cmp__file-line > .mi-cmp__check { align-self: flex-start; margin: 10px 0 0 10px; }
+.mi-root .mi-cmp__check { width: 16px; height: 16px; min-width: 16px; padding: 0; border-width: 1px; border-radius: 4px; border-color: var(--border-strong); background-color: var(--surface-2); align-items: center; justify-content: center; flex-shrink: 0; cursor: link; }
+.mi-root .mi-cmp__check:hover { border-color: var(--yellow); }
+.mi-root .mi-cmp__check--on { background-color: var(--yellow); border-color: var(--yellow); color: var(--ink); }
+.mi-cmp__check-dash { width: 8px; height: 2px; background-color: var(--ink); }
+.mi-cmp__bar { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-bottom-width: 1px; border-color: var(--border); background-color: var(--surface); }
+.mi-cmp__bar-label { font-size: 11px; color: var(--text-2); margin-left: 8px; flex-grow: 1; }
+.mi-cmp__bar-actions { margin: 0; }
+.mi-cmp__bar-hint { width: 100%; font-size: 11px; color: var(--warn); margin-top: 6px; white-space: normal; }
 .mi-cmp__name { font-size: 13px; color: var(--text); -unity-font-style: bold; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mi-cmp__folder { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mi-cmp__file-meta { flex-direction: row; align-items: center; margin-top: 4px; }

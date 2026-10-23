@@ -159,6 +159,23 @@ namespace GameDistrict.MeticaIntegrationTools
             var skipped = InitializerSkipReason();
             if (skipped != null) result.Note(skipped);
 
+            // Members the game added to the SDK's base classes: missing ones stop the build,
+            // stubbed ones compile but do nothing until filled in.
+            var gaps = MissingMembers();
+            foreach (var (target, members) in gaps)
+            foreach (var member in members)
+                result.Problem(member.Stubbable
+                    ? $"{ClassOf(target)} lacks {member.Owner}.{member.Name}() — the game added it to its GD SDK. Run the step to add a stub."
+                    : $"{ClassOf(target)} lacks {member.Owner}.{member.Name} (a property or event the game added) — add it by hand.");
+            if (gaps.Count > 0) return result.Seal();
+
+            foreach (var (target, stub) in OpenStubs())
+            {
+                var example = BaseMemberStubs.ExampleOf(stub.Substring(stub.LastIndexOf('.') + 1), MeticaPaths.RuntimeScripts, target);
+                result.Warning($"{ClassOf(target)}: {stub}() is an empty stub — fill it in for Metica" +
+                               (example != null ? $" (the game's own version: {example})." : "."));
+            }
+
             // The tool's MeticaInitializer next to an async AdNetworkMetica: that one is the
             // SDK's (v6), it resolves "MeticaInitializer" to the tool's class in its own
             // namespace instead of Analytics.MeticaInitializer, and Metica never initializes.
@@ -195,6 +212,59 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var skipped = InitializerSkipReason();
             if (skipped != null) MeticaIntegrationLog.Record(Title, skipped);
+
+            AddStubs();
+        }
+
+        // ── Members the game added to the SDK's base classes ───────────────────
+
+        private static string ClassOf(string target) => System.IO.Path.GetFileNameWithoutExtension(target);
+
+        /// <summary>Each written wrapper file still missing members of its bases, with those members.</summary>
+        private static List<(string target, List<BaseMemberStubs.Member> members)> MissingMembers()
+        {
+            var bases = BaseMemberStubs.ScanBases(MeticaPaths.RuntimeScripts);
+            return Files()
+                .Where(file => MeticaPaths.FileExists(file.target))
+                .Select(file => (file.target, members: BaseMemberStubs.Find(SourcePatcher.ReadAll(file.target), ClassOf(file.target), bases)))
+                .Where(gap => gap.members.Count > 0)
+                .ToList();
+        }
+
+        /// <summary>"Base.Member" for every stub the tool added that still has its marker.</summary>
+        private static IEnumerable<(string target, string stub)> OpenStubs() =>
+            Files()
+                .Where(file => MeticaPaths.FileExists(file.target))
+                .SelectMany(file => BaseMemberStubs.OpenStubs(SourcePatcher.ReadAll(file.target)).Select(stub => (file.target, stub)));
+
+        /// <summary>
+        /// A compiling, do-nothing body for each member the game added to a base class — the
+        /// wrapper is written for the original SDK, so without one nothing compiles (CS0534).
+        /// </summary>
+        private void AddStubs()
+        {
+            var changed = false;
+            foreach (var (target, members) in MissingMembers())
+            {
+                var text = SourcePatcher.ReadAll(target);
+                var stubbed = BaseMemberStubs.AddStubs(text, ClassOf(target), members);
+                if (stubbed != text)
+                {
+                    SourcePatcher.WriteWithBackup(target, stubbed);
+                    changed = true;
+                }
+
+                foreach (var member in members)
+                {
+                    var example = BaseMemberStubs.ExampleOf(member.Name, MeticaPaths.RuntimeScripts, target);
+                    MeticaIntegrationLog.Record(Title, member.Stubbable
+                        ? $"{ClassOf(target)}: added an empty {member.Name}() for the game's own {member.Owner}.{member.Name} — fill it in" +
+                          (example != null ? $" (see {example})" : string.Empty)
+                        : $"{ClassOf(target)}: {member.Owner}.{member.Name} is a property or event — add it by hand");
+                }
+            }
+
+            if (changed) AssetDatabase.Refresh();
         }
 
         internal override IEnumerable<StepControl> Controls(VerifyResult result)

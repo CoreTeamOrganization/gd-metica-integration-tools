@@ -30,7 +30,10 @@ namespace GameDistrict.MeticaIntegrationTools
             "removed first, wherever it is — another version in Assets, Metica v1 or 2.x from the " +
             "Package Manager (com.metica.unity / com.metica.sdk.unity), v1's MeticaSdkConfiguration " +
             "asset — since two Metica SDKs side by side do not compile. Analytics abstractions and " +
-            "this tool are never touched. Then External Dependency Manager's Force Resolve pulls every Android library the " +
+            "this tool are never touched. If the project then fails to compile for want of the " +
+            "analytics abstractions package (METICA_ANALYTICS set without it, or code using it), the " +
+            "step adds com.metica.analytics.abstractions-1.0.0.tgz to Packages/ and the manifest — the " +
+            "same as Package Manager's Add package from tarball. Then External Dependency Manager's Force Resolve pulls every Android library the " +
             "project's SDKs declare into mainTemplate.gradle (turning Custom Main Gradle Template on if " +
             "needed); the step passes only once all of them are there. It needs Android as the build " +
             "target. Enable iOS also ticks iOS on MeticaSDKFramework.xcframework, which Metica's iOS " +
@@ -48,6 +51,7 @@ namespace GameDistrict.MeticaIntegrationTools
             // Where old Metica is removed from.
             "Packages/manifest.json",
             "Packages/packages-lock.json",
+            AnalyticsAbstractions.ProjectFile,
             "Assets/Metica"
         };
 
@@ -116,9 +120,22 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (result.Problems.Count > 0) return result.Seal();
 
+            // Some projects (GD SDK v5 among them) don't compile without the analytics
+            // abstractions package — see AbstractionsCompileErrors for when.
+            if (AbstractionsCompileErrors.PackageNeeded)
+            {
+                result.Problem("Metica analytics abstractions package missing — the project doesn't compile without it.");
+                if (AbstractionsCompileErrors.DefinedWithoutPackage)
+                    result.Note($"{MeticaAnalyticsDefine.Symbol} is in Player settings, and it needs the package.");
+                foreach (var error in AbstractionsCompileErrors.Errors) result.Note(error);
+                return result.Seal();
+            }
+
             if (!TemplateWriter.TypeIsLoaded("Metica.MeticaSdk"))
             {
-                if (ScriptCompile.Pending(MeticaPaths.MeticaSdkRoot)) result.Wait();
+                // Just added, the abstractions package is still resolving before the recompile.
+                if (ScriptCompile.Pending(MeticaPaths.MeticaSdkRoot) || EditorApplication.isCompiling || EditorApplication.isUpdating)
+                    result.Wait();
                 else result.Problem("Metica SDK hasn't compiled — check the Console.");
                 return result.Seal();
             }
@@ -168,6 +185,12 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var installed = InstalledVersion();
 
+            if (installed != null && AbstractionsCompileErrors.PackageNeeded)
+            {
+                AnalyticsAbstractions.Install(Title);
+                return;
+            }
+
             if (installed != null && (AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot) || IosPending))
             {
                 if (IosPending) EnableIosFramework();
@@ -201,6 +224,7 @@ namespace GameDistrict.MeticaIntegrationTools
             if (old.Count > 1) return $"Remove old Metica ({old.Count})";
 
             var installed = InstalledVersion();
+            if (installed != null && AbstractionsCompileErrors.PackageNeeded) return "Add analytics abstractions";
             if (installed != null && AndroidDependencies.NeedsResolve(MeticaPaths.MeticaSdkRoot))
                 return IosPending ? "Resolve Android, enable iOS" : "Resolve Android dependencies";
             if (installed != null && IosPending) return "Enable iOS framework";
@@ -221,9 +245,19 @@ namespace GameDistrict.MeticaIntegrationTools
             if (!Supported) yield break;
 
             if (InstalledVersion() == null)
+            {
                 yield return new StepButton("Change target version…", TargetVersions.OpenOverride);
-            else
-                yield return new StepToggle("Enable iOS", EnableIos, value => EnableIos = value);
+                yield break;
+            }
+
+            // The download can fail (a Drive link no longer shared): the same .tgz by hand.
+            if (AbstractionsCompileErrors.PackageNeeded)
+            {
+                yield return new StepButton("Pick the .tgz…", () => AnalyticsAbstractions.InstallFromPickedFile(Title));
+                yield return new StepButton("Open download folder", () => Application.OpenURL(AnalyticsAbstractions.FolderUrl));
+            }
+
+            yield return new StepToggle("Enable iOS", EnableIos, value => EnableIos = value);
         }
 
         private static void EnableIosFramework()
