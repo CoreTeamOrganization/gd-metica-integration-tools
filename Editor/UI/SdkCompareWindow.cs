@@ -12,8 +12,9 @@ namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
     /// Shows how the project's GD SDK code differs from the original release it declares:
-    /// changed, added and missing files, each with its diff. Read-only — nothing in the
-    /// project is changed from here. See <see cref="SdkCompare"/> for what is compared.
+    /// changed, added and missing files, each with its diff. The only change made from here
+    /// is "Replace with original", one file at a time, after a confirm and with a backup.
+    /// See <see cref="SdkCompare"/> for what is compared.
     /// </summary>
     public sealed class SdkCompareWindow : EditorWindow
     {
@@ -258,6 +259,12 @@ namespace GameDistrict.MeticaIntegrationTools
                 () => OpenOriginal(change), "mi-btn--secondary");
             openOriginal.SetEnabled(change.Kind != ChangeKind.Added);
             buttons.Add(openOriginal);
+
+            // An added file has no original to go back to.
+            var replace = IconTextButton(MiIcon.Kind.Undo, "Replace with original",
+                () => ReplaceWithOriginal(change), "mi-btn--secondary");
+            replace.SetEnabled(change.Kind != ChangeKind.Added);
+            buttons.Add(replace);
             head.Add(buttons);
             _diff.Add(head);
 
@@ -320,6 +327,56 @@ namespace GameDistrict.MeticaIntegrationTools
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? ".");
             File.WriteAllText(target, text);
             InternalEditorUtility.OpenFileAtLineExternal(target, 1);
+        }
+
+        /// <summary>
+        /// Puts the original release's file back — over a changed file, or in place of a
+        /// missing one. The current file is copied to MeticaIntegrationBackups/Replaced/&lt;time&gt;/
+        /// first: always this state, unlike the patch backups, which keep only the pre-tool one.
+        /// </summary>
+        private void ReplaceWithOriginal(SdkFileChange change)
+        {
+            var text = StockFiles.Packaged?.Get(_result.Version, change.Path);
+            if (text == null) return;
+
+            var absolute = MeticaPaths.ToAbsolute(change.ProjectPath);
+            var exists = File.Exists(absolute);
+            var backup = $"{MeticaPaths.BackupRoot}/Replaced/{DateTime.Now:yyyyMMdd-HHmmss}/{change.ProjectPath}";
+
+            var message = $"Replace {change.ProjectPath} with the original from GD SDK {_result.Version}?";
+            if (exists) message += $"\n\nThe current file is copied to MeticaIntegrationBackups/Replaced first.";
+            else message += "\n\nThe file is missing, so the original is added. Unity gives it a new .meta — " +
+                            "a scene or prefab that used the old one needs re-linking.";
+            if (change.Metica) message += "\n\nIts Metica changes go too — run the tool's step again to put them back.";
+
+            if (!EditorUtility.DisplayDialog("Replace with original", message, "Replace", "Cancel")) return;
+
+            try
+            {
+                if (exists)
+                {
+                    // Keep the file's own line endings, so git shows only the real change.
+                    if (File.ReadAllText(absolute).Contains("\r\n")) text = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(backup) ?? MeticaPaths.BackupRoot);
+                    File.Copy(absolute, backup, true);
+                    SourcePatcher.IgnoreBackupsInGit();
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(absolute) ?? ".");
+                File.WriteAllText(absolute, text);
+                Debug.Log($"[Metica Integration] Replaced {change.ProjectPath} with the GD SDK {_result.Version} original" +
+                          (exists ? $" (previous copy: {backup})" : string.Empty));
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                EditorUtility.DisplayDialog("Replace with original", $"Could not replace {change.ProjectPath}: {e.Message}", "OK");
+                return;
+            }
+
+            AssetDatabase.ImportAsset(change.ProjectPath);
+            Rescan();
         }
     }
 }

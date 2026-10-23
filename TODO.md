@@ -27,6 +27,9 @@ cover all of the list below.
 - [ ] Compare window: clicking a file shows its diff; filters (Metica / Tool / All) work;
       Open project file / Open original work; release picker shows when the version is
       unreadable.
+- [ ] Replace with original: asks first; a changed file goes back to the original (line
+      endings kept) with a copy in MeticaIntegrationBackups/Replaced/<time>/; a missing file is
+      added back; disabled for an added file; the list re-scans and the file is gone from it.
 
 ### Metica v1
 

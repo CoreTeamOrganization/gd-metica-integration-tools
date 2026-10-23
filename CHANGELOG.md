@@ -359,3 +359,6 @@
   reported for a hand edit instead of guessed.
 - Standalone runtime: `MeticaAdsManager.ShowRewarded(placement, onComplete, onClosed)` — the new
   `onClosed` runs when the ad closes (or fails to show), reward or not.
+- Compare window: **Replace with original** puts the original GD SDK file back over a changed
+  one, or in place of a missing one — one file at a time, after a confirm, with the current
+  file copied to `MeticaIntegrationBackups/Replaced/<time>/` first.
