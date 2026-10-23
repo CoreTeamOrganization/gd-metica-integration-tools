@@ -33,6 +33,12 @@ cover all of the list below.
       problem; running it adds the stub to MeticaBanner, it compiles, and the warning names the
       game's own RefershBanner to copy from. Unmodified GD SDK: nothing reported.
 
+### iOS build target
+
+- [ ] iOS project: Metica SDK step passes without Android (note instead), the xcframework gets
+      iOS ticked, no Enable iOS switch; MAX step and Android build setup pass with a note.
+- [ ] Switch to Android: those steps ask for the resolve / build rows again.
+
 ### Compare
 
 - [ ] Optional "Compare with original GD SDK" step: opens the window, can be skipped in one

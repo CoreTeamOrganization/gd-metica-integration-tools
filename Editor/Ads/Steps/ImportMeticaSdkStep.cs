@@ -21,9 +21,8 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Title => "Metica SDK";
 
         public override string Summary =>
-            TargetVersion() is string target
-                ? $"Install the Metica SDK v{target} and resolve its Android libraries."
-                : "Install the Metica SDK and resolve its Android libraries.";
+            $"Install the Metica SDK{(TargetVersion() is string target ? " v" + target : "")}" +
+            (IsIosTarget ? " and enable its iOS framework." : " and resolve its Android libraries.");
 
         public override string Why =>
             "Downloads the pinned Metica SDK release from GitHub and imports it. Any other Metica is " +
@@ -35,9 +34,11 @@ namespace GameDistrict.MeticaIntegrationTools
             "step adds com.metica.analytics.abstractions-1.0.0.tgz to Packages/ and the manifest — the " +
             "same as Package Manager's Add package from tarball. Then External Dependency Manager's Force Resolve pulls every Android library the " +
             "project's SDKs declare into mainTemplate.gradle (turning Custom Main Gradle Template on if " +
-            "needed); the step passes only once all of them are there. It needs Android as the build " +
-            "target. Enable iOS also ticks iOS on MeticaSDKFramework.xcframework, which Metica's iOS " +
-            "build step needs. Change target version pins a different release for this project only.";
+            "needed); the step passes only once all of them are there. That part runs only with Android " +
+            "as the build target — on iOS it's skipped (pods resolve when Xcode builds) and asked again " +
+            "after a switch to Android. Enable iOS ticks iOS on MeticaSDKFramework.xcframework, which " +
+            "Metica's iOS build step needs; with iOS as the build target that is always done. Change " +
+            "target version pins a different release for this project only.";
 
         public override string ActionLabel => ActionForState();
 
@@ -59,14 +60,17 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary>
         /// Off by default: most runs are Android-only, and enabling iOS unasked would make the
-        /// step demand an iOS framework state nobody touched. Per project. Also read by the
-        /// Metica settings step, which only asks for iOS keys when this is on.
+        /// step demand an iOS framework state nobody touched. Per project. Always on while iOS
+        /// is the build target — an iOS game needs it whatever the switch says. Also read by
+        /// the Metica settings step, which only asks for iOS keys when this is on.
         /// </summary>
         internal static bool EnableIos
         {
-            get => EditorPrefs.GetBool(EnableIosKey, false);
+            get => IsIosTarget || EditorPrefs.GetBool(EnableIosKey, false);
             set => EditorPrefs.SetBool(EnableIosKey, value);
         }
+
+        private static bool IsIosTarget => EditorUserBuildSettings.activeBuildTarget == BuildTarget.iOS;
 
         private static string EnableIosKey =>
             $"GameDistrict.MeticaIntegrationTools.ResolveLibraries.EnableIos.{Application.dataPath.GetHashCode():X8}";
@@ -145,7 +149,7 @@ namespace GameDistrict.MeticaIntegrationTools
             // Installed is not done: its Android libraries have to reach the build too.
             AndroidDependencies.Report(result, MeticaPaths.MeticaSdkRoot);
 
-            if (MeticaPaths.FileExists(MeticaPaths.GradleProperties))
+            if (AndroidDependencies.IsAndroidTarget && MeticaPaths.FileExists(MeticaPaths.GradleProperties))
             {
                 var properties = SourcePatcher.ReadAll(MeticaPaths.GradleProperties);
                 if (!properties.Contains("android.useAndroidX=true"))
@@ -257,7 +261,8 @@ namespace GameDistrict.MeticaIntegrationTools
                 yield return new StepButton("Open download folder", () => Application.OpenURL(AnalyticsAbstractions.FolderUrl));
             }
 
-            yield return new StepToggle("Enable iOS", EnableIos, value => EnableIos = value);
+            // On an iOS build target iOS is always enabled, so there is nothing to switch.
+            if (!IsIosTarget) yield return new StepToggle("Enable iOS", EnableIos, value => EnableIos = value);
         }
 
         private static void EnableIosFramework()

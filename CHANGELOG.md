@@ -381,3 +381,8 @@
   step adds a compiling, do-nothing stub for each method (backed up first) and keeps warning
   until it's filled in, naming the game's own implementation to copy from. Properties and
   events are reported for a hand edit. Checked clean against every GD SDK release 5.0.0–6.2.5.
+- iOS projects: Android libraries are checked and resolved only while Android is the build
+  target. On iOS the Metica SDK and AppLovin MAX steps note it instead of asking for a switch to
+  Android (pods resolve when Xcode builds), the gradleTemplate.properties checks and the
+  Analytics flow's Android build setup are skipped the same way, and Enable iOS is always on
+  (the switch is hidden). Switching to Android later asks again.

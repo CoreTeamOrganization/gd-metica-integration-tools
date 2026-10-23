@@ -40,6 +40,15 @@ namespace GameDistrict.MeticaIntegrationTools
         public override VerifyResult Verify()
         {
             var result = new VerifyResult();
+
+            // Android build files only: an iOS build never reads them. Asked again after a switch.
+            if (!AndroidDependencies.IsAndroidTarget)
+            {
+                result.Note($"Android only — the build target is {UnityEditor.EditorUserBuildSettings.activeBuildTarget}. " +
+                            "Switch to Android and this asks again; the rows below can be set now anyway.");
+                return result.Seal();
+            }
+
             foreach (var row in _rows.Required())
             {
                 if (row.Done) result.Note(row.Title);

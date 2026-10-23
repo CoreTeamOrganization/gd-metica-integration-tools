@@ -17,7 +17,8 @@ namespace GameDistrict.MeticaIntegrationTools
     /// mediation network, Firebase…) and checks each declared <c>group:artifact</c> reached
     /// mainTemplate.gradle — or Assets/Plugins/Android, for an EDM set to copy libraries
     /// instead of patching the template. No SDK or version is hardcoded. iOS pods resolve at
-    /// Xcode build time, so only Android is checked.</para>
+    /// Xcode build time, so only Android is checked — and only while Android is the build
+    /// target (<see cref="IsAndroidTarget"/>).</para>
     /// </summary>
     internal static class AndroidDependencies
     {
@@ -70,6 +71,14 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         public static void Report(VerifyResult result, string folder)
         {
+            // An iOS (or other) build never uses them, and EDM won't resolve them off Android.
+            if (!IsAndroidTarget)
+            {
+                result.Note($"Android libraries not checked — the build target is {EditorUserBuildSettings.activeBuildTarget}. " +
+                            "Switch to Android and this asks again.");
+                return;
+            }
+
             var unresolved = Unresolved(folder);
 
             if (unresolved == null)
@@ -84,16 +93,22 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
-            result.Problem(EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android
-                ? "Switch the build target to Android, then resolve."
-                : $"{unresolved.Count} Android librar{(unresolved.Count == 1 ? "y isn't" : "ies aren't")} resolved yet.");
+            result.Problem($"{unresolved.Count} Android librar{(unresolved.Count == 1 ? "y isn't" : "ies aren't")} resolved yet.");
 
             foreach (var library in unresolved) result.Problem($"Not resolved: {library}");
         }
 
-        /// <summary>Anything under <paramref name="folder"/> (default: all of Assets) still to resolve.</summary>
+        /// <summary>
+        /// Android is the active build target. Off it, Android libraries are neither checked nor
+        /// resolved: the build doesn't use them, and EDM refuses to run.
+        /// </summary>
+        public static bool IsAndroidTarget => EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android;
+
+        /// <summary>Anything under <paramref name="folder"/> (default: all of Assets) still to resolve — never off Android.</summary>
         public static bool NeedsResolve(string folder = "Assets")
         {
+            if (!IsAndroidTarget) return false;
+
             var unresolved = Unresolved(folder);
             return unresolved == null || unresolved.Count > 0;
         }
