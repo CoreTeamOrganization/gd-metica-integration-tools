@@ -386,3 +386,10 @@
   Android (pods resolve when Xcode builds), the gradleTemplate.properties checks and the
   Analytics flow's Android build setup are skipped the same way, and Enable iOS is always on
   (the switch is hidden). Switching to Android later asks again.
+- Analytics Integration, GD SDK games: no startup script any more. **Start Metica analytics**
+  initializes `<Game>Analytics` at the top of `AnalyticsManager.Initialize()` (and deletes a
+  `MeticaAnalyticsStartup.cs` left by an earlier version); **Connect Adjust to Metica** sends
+  install (first launch) and sessionStart inside `AdjustAnalyticsNetwork`'s `GetAdid` callback,
+  right after `UpdateAdjustInfo`, so both carry the Adjust ID — and adds just those lines to a
+  file wired by the earlier version. Skipped when the game's code already sends them. Custom-SDK
+  games keep the startup script. Checked on every GD SDK release 5.0.0–6.0.1 (syntax).

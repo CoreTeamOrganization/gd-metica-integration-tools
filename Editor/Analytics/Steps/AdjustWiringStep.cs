@@ -24,20 +24,26 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private const string BeforeMarker = "Metica analytics: Adjust and Metica share one user id";
         private const string AfterMarker = "Metica analytics: hand the Adjust ID to the genre";
+        internal const string EventsMarker = "Metica analytics: install (first launch) and sessionStart, once Adjust has its ID";
 
         private static readonly Regex InitSdk = new Regex(@"\bAdjust\.InitSdk\s*\(\s*(\w+)\s*\)\s*;");
         private static readonly Regex AdjustV4Start = new Regex(@"\bAdjust\.start\s*\(");
 
         public override string Title => StepTitle;
 
-        public override string Summary => "Send the Metica user id to Adjust (muid) and hand Adjust's id to the genre asset.";
+        public override string Summary => MeticaPaths.HasGDSdk
+            ? "Send the Metica user id to Adjust (muid), hand Adjust's id to the genre asset, then send install and sessionStart."
+            : "Send the Metica user id to Adjust (muid) and hand Adjust's id to the genre asset.";
 
         public override string Why =>
             "Right before Adjust starts: its external device id and a \"muid\" global callback parameter are set " +
             "to SystemInfo.deviceUniqueIdentifier — the same id the genre asset uses for Metica when its User Id " +
             "is empty. Right after: the genre asset is loaded from Resources and, once Adjust reports its id, " +
-            "UpdateAdjustInfo(adid, app token) is called on it. In a GD SDK project this is AdjustAnalyticsNetwork.cs; " +
-            "otherwise the file that calls Adjust.InitSdk. A file inside an assembly definition also gets a " +
+            "UpdateAdjustInfo(adid, app token) is called on it. In a GD SDK project this is AdjustAnalyticsNetwork.cs, " +
+            "and the same Adjust ID callback then sends the install event (first launch only, PlayerPrefs " +
+            $"{AnalyticsStartupStep.InstallLoggedKey}) and sessionStart — unless the game's own code already does; " +
+            "a project wired by an earlier version gets just those lines. Otherwise it's the file that calls " +
+            "Adjust.InitSdk. A file inside an assembly definition also gets a " +
             $"reference to {GenreCreatorPackage.RuntimeAssembly}. Backed up first.";
 
         public override string ActionLabel
@@ -45,7 +51,9 @@ namespace GameDistrict.MeticaIntegrationTools
             get
             {
                 var target = Target(out _);
-                return target == null || Wired(target) ? null : $"Wire Adjust in {Path.GetFileName(target)}";
+                if (target == null) return null;
+                if (!Wired(target)) return $"Wire Adjust in {Path.GetFileName(target)}";
+                return EventsMissing(target) ? "Add install and sessionStart" : null;
             }
         }
 
@@ -80,6 +88,17 @@ namespace GameDistrict.MeticaIntegrationTools
                 var asmdef = AsmdefFor(wired);
                 if (asmdef != null && !References(asmdef))
                     result.Problem($"{Path.GetFileName(asmdef)} needs a reference to {GenreCreatorPackage.RuntimeAssembly}.");
+
+                if (EventsMissing(wired))
+                    result.Problem("install and sessionStart aren't sent yet — they go in the Adjust ID callback.");
+                else if (MeticaPaths.HasGDSdk)
+                {
+                    var own = AnalyticsStartupStep.GameCodeEvents();
+                    result.Note(own.Count > 0
+                        ? $"install / sessionStart sent by the game's code: {string.Join("; ", own)}"
+                        : "install (first launch) and sessionStart sent once Adjust has its ID");
+                }
+
                 return result.Seal();
             }
 
@@ -101,10 +120,15 @@ namespace GameDistrict.MeticaIntegrationTools
             var game = GenreFilesStep.GameName;
             var wired = WiredFile();
 
-            // Only the reference is missing.
+            // Wired before: only the reference, or (GD SDK, an earlier version) the events, are missing.
             if (wired != null)
             {
                 AddReference(AsmdefFor(wired));
+                if (EventsMissing(wired))
+                {
+                    MeticaIntegrationLog.Record(Title, AddEvents(wired));
+                    AssetDatabase.ImportAsset(wired);
+                }
                 return;
             }
 
@@ -138,6 +162,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var config = InitSdk.Match(code[index]).Groups[1].Value;
             var indent = lines[index].Substring(0, lines[index].Length - lines[index].TrimStart().Length);
             var setsDeviceId = code.Any(line => line.Contains("ExternalDeviceId"));
+            var events = MeticaPaths.HasGDSdk && AnalyticsStartupStep.GameCodeEvents().Count == 0;
 
             return new List<string>
             {
@@ -145,8 +170,10 @@ namespace GameDistrict.MeticaIntegrationTools
                     SourcePatcher.InsertBeforeLine(target, BeforeMarker, lines[index], Before(indent, config, setsDeviceId)),
                     target, "set the muid before Adjust.InitSdk"),
                 SourcePatcher.Describe(
-                    SourcePatcher.InsertAfterLine(target, AfterMarker, lines[index], After(indent, config, game)),
-                    target, "hand the Adjust ID to the genre asset after Adjust.InitSdk")
+                    SourcePatcher.InsertAfterLine(target, AfterMarker, lines[index], After(indent, config, game, events)),
+                    target, events
+                        ? "hand the Adjust ID to the genre asset after Adjust.InitSdk, then send install and sessionStart"
+                        : "hand the Adjust ID to the genre asset after Adjust.InitSdk")
             };
         }
 
@@ -155,14 +182,63 @@ namespace GameDistrict.MeticaIntegrationTools
             (setsDeviceId ? "" : $"{i}{config}.ExternalDeviceId = UnityEngine.SystemInfo.deviceUniqueIdentifier;\n") +
             $"{i}Adjust.AddGlobalCallbackParameter(\"muid\", UnityEngine.SystemInfo.deviceUniqueIdentifier);";
 
-        private static string After(string i, string config, string game) =>
+        private static string After(string i, string config, string game, bool events) =>
             $"{i}// {AfterMarker}'s analytics asset.\n" +
             $"{i}var meticaAnalytics = UnityEngine.Resources.Load<GameDistrict.MeticaAnalytics.GDMeticaAnalytics>(\"{game}Analytics\");\n" +
             $"{i}Adjust.GetAdid(adid =>\n" +
             $"{i}{{\n" +
             $"{i}    if (meticaAnalytics != null && !string.IsNullOrEmpty(adid))\n" +
             $"{i}        meticaAnalytics.UpdateAdjustInfo(adid, {config}.AppToken);\n" +
+            (events ? Events(i + "    ") : "") +
             $"{i}}});";
+
+        /// <summary>
+        /// The install event on the first launch only, and sessionStart on every launch — inside
+        /// the Adjust ID callback, so both carry the Adjust ID. Adjust runs that callback on
+        /// Unity's main thread, so PlayerPrefs is safe there.
+        /// </summary>
+        private static string Events(string i) =>
+            $"{i}// {EventsMarker}.\n" +
+            $"{i}if (meticaAnalytics != null)\n" +
+            $"{i}{{\n" +
+            $"{i}    if (UnityEngine.PlayerPrefs.GetInt(\"{AnalyticsStartupStep.InstallLoggedKey}\", 0) == 0)\n" +
+            $"{i}    {{\n" +
+            $"{i}        meticaAnalytics.LogInstallEvent(null);\n" +
+            $"{i}        UnityEngine.PlayerPrefs.SetInt(\"{AnalyticsStartupStep.InstallLoggedKey}\", 1);\n" +
+            $"{i}        UnityEngine.PlayerPrefs.Save();\n" +
+            $"{i}    }}\n" +
+            $"{i}    meticaAnalytics.LogSessionStartEvent(null);\n" +
+            $"{i}}}\n";
+
+        /// <summary>
+        /// GD SDK: the events are not in the wired file, and the game's own code doesn't send
+        /// them either. Custom SDKs get them from the startup script instead.
+        /// </summary>
+        internal static bool EventsMissing(string path) =>
+            MeticaPaths.HasGDSdk
+            && !SourcePatcher.Contains(path, "LogSessionStartEvent(")
+            && AnalyticsStartupStep.GameCodeEvents().Count == 0;
+
+        /// <summary>For a file wired by an earlier version: the events, right after its UpdateAdjustInfo line.</summary>
+        private static List<string> AddEvents(string path)
+        {
+            var lines = SourcePatcher.ReadAll(path).Replace("\r\n", "\n").Split('\n');
+            var index = Array.FindIndex(lines, line => line.Contains("UpdateAdjustInfo("));
+            if (index < 0) return new List<string> { $"UpdateAdjustInfo not found in {path} — add install and sessionStart by hand." };
+
+            // The call sits under an un-braced if inside the callback: one level up is the callback's own.
+            var updateIndent = lines[index].Substring(0, lines[index].Length - lines[index].TrimStart().Length);
+            var callbackIndent = index > 0 && lines[index - 1].TrimStart().StartsWith("if ")
+                ? lines[index - 1].Substring(0, lines[index - 1].Length - lines[index - 1].TrimStart().Length)
+                : updateIndent;
+
+            return new List<string>
+            {
+                SourcePatcher.Describe(
+                    SourcePatcher.InsertAfterLine(path, EventsMarker, lines[index], Events(callbackIndent).TrimEnd('\n')),
+                    path, "send install and sessionStart in the Adjust ID callback")
+            };
+        }
 
         // ── UI ─────────────────────────────────────────────────────────────────
 
@@ -181,7 +257,7 @@ namespace GameDistrict.MeticaIntegrationTools
                     var game = GenreFilesStep.GameName;
                     EditorGUIUtility.systemCopyBuffer =
                         "// Before Adjust.InitSdk(config):\n" + Before("", "config", false) +
-                        "\n\n// After Adjust.InitSdk(config):\n" + After("", "config", game);
+                        "\n\n// After Adjust.InitSdk(config):\n" + After("", "config", game, false);
                 }, icon: StepIcon.File);
         }
 
@@ -287,7 +363,7 @@ namespace GameDistrict.MeticaIntegrationTools
         // ── Assembly definitions ───────────────────────────────────────────────
 
         /// <summary>The .asmdef that compiles <paramref name="path"/>, or null (Assembly-CSharp).</summary>
-        private static string AsmdefFor(string path)
+        internal static string AsmdefFor(string path)
         {
             var folder = Path.GetDirectoryName(path)?.Replace('\\', '/');
             while (!string.IsNullOrEmpty(folder) && folder.StartsWith("Assets", StringComparison.Ordinal))
@@ -305,7 +381,7 @@ namespace GameDistrict.MeticaIntegrationTools
             return null;
         }
 
-        private static bool References(string asmdef)
+        internal static bool References(string asmdef)
         {
             var text = SourcePatcher.ReadAll(asmdef);
             if (text.Contains("\"" + GenreCreatorPackage.RuntimeAssembly + "\"")) return true;
@@ -315,7 +391,7 @@ namespace GameDistrict.MeticaIntegrationTools
             return guid != null && text.Contains("GUID:" + guid);
         }
 
-        private static void AddReference(string asmdef)
+        internal static void AddReference(string asmdef)
         {
             if (asmdef == null || References(asmdef)) return;
 

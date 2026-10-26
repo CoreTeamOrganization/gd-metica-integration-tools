@@ -113,8 +113,13 @@ cover all of the list below.
 - [ ] Step 4: Create stays disabled until the name is valid and Excel chosen; name error under
       the field while typing; files + `<Game>Analytics.asset` after the compile; App Id / Api
       Key / App Token written to the asset; Enable Metica Logs on.
-- [ ] Step 6: startup script written (or skipped when the game does it); on device, install
-      once, sessionStart every launch.
+- [ ] Step 6, custom SDK: startup script written (or skipped when the game does it); on device,
+      install once, sessionStart every launch.
+- [ ] Step 6, GD SDK: no script — `<Game>Analytics.Initialize()` at the top of
+      AnalyticsManager.Initialize(); an old MeticaAnalyticsStartup.cs is deleted; compiles.
+- [ ] Step 5, GD SDK: install (first launch) and sessionStart in the GetAdid callback after
+      UpdateAdjustInfo; a file wired by the earlier version gets just those lines; on device,
+      install once, sessionStart every launch, both after the Adjust ID.
 - [ ] Add Genre Creator's commit includes ProjectSettings.asset (METICA_ANALYTICS); no
       MeticaIntegrationBackups file left uncommitted.
 - [ ] Step 5: GD SDK — AdjustAnalyticsNetwork.cs patched and compiles; custom SDK — the
