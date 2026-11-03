@@ -6,8 +6,8 @@ namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
     /// The Moloco adapter versions MAX declares in Moloco's Dependencies.xml, against the floor
-    /// Metica publishes (https://docs.metica.com/api/unity-sdk/unity-sdk-2): 4.3.1 on both
-    /// platforms. Older Moloco builds break dependency resolution next to Metica.
+    /// Metica publishes (https://docs.metica.com/api/unity-sdk/unity-sdk-2): 4.3.1 on Android,
+    /// 4.3.0 on iOS. Older Moloco builds break dependency resolution next to Metica.
     ///
     /// <para>Only relevant to a project that already has Moloco — one without it has nothing
     /// to add. Fixing only rewrites the declared version; resolving then fetches it.</para>
@@ -16,7 +16,9 @@ namespace GameDistrict.MeticaIntegrationTools
     {
         public const string DocsUrl = "https://docs.metica.com/api/unity-sdk/unity-sdk-2";
 
-        public static readonly Version Minimum = new Version(4, 3, 1);
+        public static readonly Version AndroidMinimum = new Version(4, 3, 1);
+
+        public static readonly Version IosMinimum = new Version(4, 3, 0);
 
         // Android: spec="com.applovin.mediation:moloco-adapter:4.5.0.0"
         private static readonly Regex Android = new Regex("moloco-adapter:([0-9]+(?:\\.[0-9]+)*)", RegexOptions.IgnoreCase);
@@ -36,12 +38,19 @@ namespace GameDistrict.MeticaIntegrationTools
         /// Adapter versions carry a fourth part for the adapter revision (4.5.0.0 wraps Moloco
         /// SDK 4.5.0); the first three are the SDK version compared against the floor.
         /// </summary>
-        public static bool BelowFloor(Version adapter) =>
-            adapter != null && new Version(adapter.Major, adapter.Minor, Math.Max(adapter.Build, 0)) < Minimum;
+        public static bool BelowFloor(Version adapter, Version minimum) =>
+            adapter != null && new Version(adapter.Major, adapter.Minor, Math.Max(adapter.Build, 0)) < minimum;
 
-        public static void FixAndroid() => Fix("Android", Android);
+        public static bool AndroidOld => BelowFloor(AndroidVersion, AndroidMinimum);
 
-        public static void FixIos() => Fix("iOS", Ios);
+        public static bool IosOld => BelowFloor(IosVersion, IosMinimum);
+
+        /// <summary>The adapter version a fix writes: the floor plus adapter revision 0.</summary>
+        public static string Target(Version minimum) => $"{minimum}.0";
+
+        public static void FixAndroid() => Fix("Android", Android, AndroidMinimum);
+
+        public static void FixIos() => Fix("iOS", Ios, IosMinimum);
 
         private static Version Read(Regex pattern)
         {
@@ -54,7 +63,7 @@ namespace GameDistrict.MeticaIntegrationTools
             return Version.TryParse(raw, out var version) ? version : null;
         }
 
-        private static void Fix(string platform, Regex pattern)
+        private static void Fix(string platform, Regex pattern, Version minimum)
         {
             const string title = "Dependencies & troubleshooting";
             if (!Installed) return;
@@ -68,7 +77,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
-            var target = $"{Minimum}.0";
+            var target = Target(minimum);
             var group = match.Groups[1];
             if (group.Value == target) return;
 
@@ -76,8 +85,9 @@ namespace GameDistrict.MeticaIntegrationTools
                 text.Substring(0, group.Index) + target + text.Substring(group.Index + group.Length));
             AssetDatabase.Refresh();
 
-            MeticaIntegrationLog.Record(title,
-                $"Set the {platform} Moloco adapter to {target}. Press Resolve Android dependencies to fetch it.");
+            MeticaIntegrationLog.Record(title, platform == "Android"
+                ? $"Set the Android Moloco adapter to {target}. Press Resolve Android dependencies to fetch it."
+                : $"Set the iOS Moloco adapter to {target}. CocoaPods fetches it when Xcode builds.");
         }
     }
 }

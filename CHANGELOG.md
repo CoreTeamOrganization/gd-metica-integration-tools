@@ -407,3 +407,5 @@
 - Per-step commit also takes the .meta of every folder above the step's files (e.g.
   `Assets/MeticaAds.meta` for the standalone runtime, `…/Ads/Metica.meta` for the GD wrapper) —
   a new folder's .meta was left uncommitted. Only changed ones are committed.
+- Moloco row: separate floors — Android adapter 4.3.1.0, iOS adapter 4.3.0.0 (was 4.3.1 for
+  both). Only the build target's fix is enabled (iOS fix off on Android, and the other way).

@@ -147,7 +147,7 @@ without them.
 
 | Row | Shows | Fix |
 |---|---|---|
-| Moloco | only if the project has Moloco | Fix Android / iOS adapter → 4.3.1.0 (rewrites `Dependencies.xml`; Resolve libraries fetches it) |
+| Moloco | only if the project has Moloco | Fix Android adapter → 4.3.1.0, Fix iOS adapter → 4.3.0.0 (rewrites `Dependencies.xml`; Resolve libraries fetches Android, Xcode's CocoaPods iOS). Only the build target's fix is on |
 | Gradle 8.6 | always | **Download Gradle 8.6…**: pick a folder, the tool downloads `gradle-8.6-all.zip`, unzips it and points Unity at it with "Gradle installed with Unity" off. Or choose an existing folder. On Gradle 8+, also **Fix dexing property**: MAX 8.0.1 – 8.2.0 write `android.enableDexingArtifactTransform`, which Gradle 8 removed; it becomes `android.useFullClasspathForDexingTransform` (MAX 8.2.1+ already has it) |
 | JDK 17 | always | Choose a JDK folder — `org.gradle.java.home` in `gradleTemplate.properties` |
 | Kotlin | always | Add the Kotlin plugin and a matching AGP classpath to `baseProjectTemplate.gradle`, turning on Custom Base Gradle Template if needed |

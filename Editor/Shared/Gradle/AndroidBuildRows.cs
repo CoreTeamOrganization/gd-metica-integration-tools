@@ -35,24 +35,32 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var android = MolocoVersions.AndroidVersion;
             var ios = MolocoVersions.IosVersion;
-            var androidOld = MolocoVersions.BelowFloor(android);
-            var iosOld = MolocoVersions.BelowFloor(ios);
+            var androidOld = MolocoVersions.AndroidOld;
+            var iosOld = MolocoVersions.IosOld;
 
-            // Only the platform being built counts — the other one is fixed when it is built.
+            // Only the platform being built counts — the other one is fixed when it is built,
+            // so its fix stays off until then.
             var target = UnityEditor.EditorUserBuildSettings.activeBuildTarget;
-            var done = target == UnityEditor.BuildTarget.Android ? !androidOld
-                : target == UnityEditor.BuildTarget.iOS ? !iosOld
+            var onAndroid = target == UnityEditor.BuildTarget.Android;
+            var onIos = target == UnityEditor.BuildTarget.iOS;
+            var done = onAndroid ? !androidOld
+                : onIos ? !iosOld
                 : !androidOld && !iosOld;
 
+            var needs = onAndroid ? $"Android needs {MolocoVersions.AndroidMinimum}+"
+                : onIos ? $"iOS needs {MolocoVersions.IosMinimum}+"
+                : $"needs Android {MolocoVersions.AndroidMinimum}+ / iOS {MolocoVersions.IosMinimum}+";
             var status = $"Android {android?.ToString() ?? "?"} · iOS {ios?.ToString() ?? "?"}" +
-                         (done ? "" : $" — needs {MolocoVersions.Minimum}+") +
-                         (target == UnityEditor.BuildTarget.Android && iosOld ? " · iOS old, not the build target" : "") +
-                         (target == UnityEditor.BuildTarget.iOS && androidOld ? " · Android old, not the build target" : "");
+                         (done ? "" : $" — {needs}") +
+                         (onAndroid && iosOld ? " · iOS old, not the build target" : "") +
+                         (onIos && androidOld ? " · Android old, not the build target" : "");
 
             return new StepItem("Moloco", done, status, risk: MolocoRisk, actions: new StepControl[]
             {
-                new StepButton($"Fix Android Moloco → {MolocoVersions.Minimum}.0", MolocoVersions.FixAndroid, androidOld),
-                new StepButton($"Fix iOS Moloco → {MolocoVersions.Minimum}.0", MolocoVersions.FixIos, iosOld),
+                new StepButton($"Fix Android Moloco → {MolocoVersions.Target(MolocoVersions.AndroidMinimum)}",
+                    MolocoVersions.FixAndroid, androidOld && !onIos),
+                new StepButton($"Fix iOS Moloco → {MolocoVersions.Target(MolocoVersions.IosMinimum)}",
+                    MolocoVersions.FixIos, iosOld && !onAndroid),
                 new StepButton("Resolve Android dependencies", () => AndroidDependencies.Resolve(_logTitle),
                     AndroidDependencies.NeedsResolve()),
                 new StepButton("Select Dependencies.xml",
@@ -126,7 +134,8 @@ namespace GameDistrict.MeticaIntegrationTools
         // ── What can go wrong without each row (shown when the row is opened) ──
 
         private static readonly string MolocoRisk =
-            $"Moloco below {MolocoVersions.Minimum} can break Android dependency resolution next to Metica, so the build may fail.";
+            $"Moloco below {MolocoVersions.AndroidMinimum} (Android) / {MolocoVersions.IosMinimum} (iOS) can break dependency " +
+            "resolution next to Metica, so the build may fail.";
 
         private static readonly string GradleRisk =
             $"Metica's Android SDK needs Gradle {GradleVersionStep.DownloadVersion} or later — with an older Gradle the Android build can fail.";
