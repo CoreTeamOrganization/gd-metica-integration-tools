@@ -404,3 +404,6 @@
   core.longpaths=true` (this call only, the repo's config untouched), so "LF will be replaced by
   CRLF" can't block a commit and deep SDK paths (the Metica xcframework) can be staged on
   Windows. A failure now shows git's real error, not its first warning line.
+- Per-step commit also takes the .meta of every folder above the step's files (e.g.
+  `Assets/MeticaAds.meta` for the standalone runtime, `…/Ads/Metica.meta` for the GD wrapper) —
+  a new folder's .meta was left uncommitted. Only changed ones are committed.

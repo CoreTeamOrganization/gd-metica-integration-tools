@@ -243,7 +243,12 @@ namespace GameDistrict.MeticaIntegrationTools
             return true;
         }
 
-        /// <summary>The step's paths and their .meta files, relative to the repository root.</summary>
+        /// <summary>
+        /// The step's paths and their .meta files, relative to the repository root — plus the
+        /// .meta of every folder above them inside Assets / Packages. A step that writes
+        /// Assets/MeticaAds/X.cs also created Assets/MeticaAds.meta; only changed ones are
+        /// committed, so an existing folder's untouched .meta adds nothing.
+        /// </summary>
         private static List<string> Specs(MeticaStep step, string prefix)
         {
             var specs = new List<string>();
@@ -254,6 +259,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 var path = raw.Replace('\\', '/').TrimEnd('/');
                 specs.Add(prefix + path);
                 if (!path.EndsWith(".meta")) specs.Add(prefix + path + ".meta");
+
+                // Parent folders, stopping below the root folder (Assets has no .meta).
+                for (var slash = path.LastIndexOf('/'); slash > 0; slash = path.LastIndexOf('/', slash - 1))
+                {
+                    var folder = path.Substring(0, slash);
+                    if (folder.IndexOf('/') < 0) break;
+                    specs.Add(prefix + folder + ".meta");
+                }
             }
             return specs.Distinct().ToList();
         }
