@@ -1,5 +1,123 @@
 # TODO
 
+## To build
+
+### MainAdNetwork instead of the UseMetica bool (fair A/B split)
+
+Why: with a bool pref, a user whose Firebase fetch never landed (or landed after the
+AppMetrica event) counts as `false`, so the MAX group grows. A three-value pref leaves those
+users out of the comparison.
+
+- [ ] Pref `MonetizationPreferences.MainAdNetwork` (string, key `"GDPrefs_MainAdNetwork"`,
+      default `"Unassigned"`), values from `enum MainAdNetwork { Unassigned, MAX, Metica }`,
+      replacing the `UseMetica` bool pref. Firebase stays `UseMetica: true / false`.
+- [ ] `PersistRemoteToggles`: on a successful fetch, `true` → `Metica`, `false` → `MAX`. Only
+      when the fetched AdsSettings JSON has `"UseMetica"` — users outside the experiment stay
+      `Unassigned` (matters when exposure is below 100%).
+- [ ] AdsManager reads the pref once at ads init: that one value picks the network
+      (`Metica` → Metica; `MAX` or `Unassigned` → AppLovin) and is what's reported, so the
+      label always matches the network that served the session:
+
+      | When the fetch lands  | Pref at ads init                     | Reported this session | Network served this session |
+      |-----------------------|--------------------------------------|-----------------------|-----------------------------|
+      | Not fetched yet       | `Unassigned`                         | `Unassigned`          | MAX (fallback)              |
+      | Fetched after ads init| `Unassigned` (saved for next session)| `Unassigned`          | MAX (fallback)              |
+      | Fetched before ads init| `MAX` / `Metica`                    | `MAX` / `Metica`      | the same                    |
+
+- [ ] AppMetrica: `AnalyticsManager.SendEvent("GameData", { "MainAdNetwork": value })`,
+      replacing `{ "UseMetica": bool }`.
+- [ ] Tool: PatchCoreFilesStep / RemoteSwitchStep write this (and migrate projects already
+      patched with the bool); the standalone runtime (`MeticaRemoteConfig`) gets the same
+      three values, reported through `MeticaAdsHooks.OnEvent`.
+- [ ] Analysis note for the README: compare per session, exclude `Unassigned`, filter by
+      install date from the test start.
+
+### Game additions to carry over (AppLovin units → Metica units, GD SDK)
+
+Why: games add their own lines to the AppLovin units (OneLineDraw, GD SDK 5.4.0: Adjust raw-data
+`AdjustTrackingManager.AdImpressionAppLovin(arg2, …)`, `AdsManager.OnFullScreenAdShown/Hide` and
+`OnRewardedAdShown/Hide` invokes, logs). The Metica units don't have them, so with Metica on they
+stop firing.
+
+Fact checked: the `AdsManager.On…AdShown/Hide` hooks are **not** GD SDK's — no release 5.0.0–6.2.5
+has them. OneLineDraw declared them in its own AdsManager.cs (and calls them from its AdMob units
+too). So they are carried over like any other game line, not added to the templates.
+
+- [ ] New optional step "Game additions to carry over" in AdsFlow, after WrapperFilesStep and
+      before PatchCoreFilesStep.
+- [ ] Detect: each AppLovin unit vs its stock copy for the declared version (StockFiles /
+      SdkCompare), statement by statement per method (CSharpSource). Ignore usings, whitespace,
+      comments, Metica v1 code. Edited (not just added) statements → "add by hand".
+- [ ] Map method to method: `Show*` → Metica `Show*` (after its show call); hidden → hidden
+      (inside its ThreadDispatcher.Enqueue when the original was); reward → reward; revenue →
+      revenue; loaded / failed → loaded / failed; displayed → `OnAdShowSuccess` (listener and
+      handler added, the units don't listen yet); no match → "add by hand".
+- [ ] UI: a checkbox per line (file, method, one-line preview), unchecked by default; log lines
+      tagged "log"; Apply inserts only the checked lines.
+- [ ] Needs adapting (`arg1` / `arg2`, `MaxSdkBase.AdInfo`, `MaxSdk.*`): badge plus a suggested
+      Metica version — for the Adjust line `AdImpressionAppLovin(MeticaAdInfo(meticaAd), …)`, a
+      helper building `new MaxSdkBase.AdInfo(dict)` from the MeticaAd (keys `adUnitId`,
+      `networkName`, `placement`, `revenue` — the public MAX constructor). Inserted with a
+      `// TODO` comment when checked, never silently.
+- [ ] Idempotent: a marker comment on each inserted line, skip lines already there, back up the
+      Metica units to MeticaIntegrationBackups/, log through MeticaIntegrationLog. AppLovin units
+      untouched.
+- [ ] Verify: passes when every checked line is present, or nothing is checked (sign off); note
+      with found / carried / skipped / by hand.
+- [ ] SdkCompareWindow "Replace with original" on an AppLovin unit: warn "This file has N
+      game-added lines that will be lost. Carry them to Metica first?"
+- [ ] Editor/Ads/README.md and CHANGELOG.md.
+- [ ] Open questions: hooks through this step instead of the templates (OK?); list log-only lines
+      or hide them; scan the AdMob units too (they keep working, AdMob isn't replaced — leaning no).
+
+### Commit the tool's own install from the tool
+
+Why: adding the tool through the Package Manager (git URL) changes the project, and nothing in
+the tool commits that — so it sits uncommitted next to the first step's changes.
+
+- [ ] On Home (or before step 1), when git shows changes to the tool's install, offer "Commit
+      the tool install" (and "Commit and push"), like the per-step commit section.
+- [ ] Files: `Packages/manifest.json` (the `com.gamedistrict.metica-integration-tools` entry) and
+      `Packages/packages-lock.json` (its pinned commit). Commit only the tool's lines? — git
+      commits whole files, so check first that nothing else in them is uncommitted; if there is,
+      list it and let the user decide.
+- [ ] Prefilled message, e.g. "Add Metica Integration Tools <version> (<commit>)"; same again
+      for a tool update (the lock file's hash changes).
+- [ ] Nothing to show when both files are clean.
+
+### Analytics: perfStats and loadTime (GD Performance Tracker)
+
+Source: https://github.com/CoreTeamOrganization/GDPerformanceTracker (README + wizard, read
+v1.3.2). Package `com.gamedistrict.performance-tracker`; one API, `GDPerformance`:
+`Configure(perfOn, interval, startupOn)`, `ConsumePerfPayload()`, `MarkGameInteractive()`,
+`GetStartupPayload()`. Payloads come back as dictionaries; the game adds the base fields and
+sends `perfStats` / `loadTime` through `MeticaSdk.Analytics.LogCustomEvent`.
+
+- [ ] Install: add `https://github.com/CoreTeamOrganization/GDPerformanceTracker.git` to the
+      manifest (pin a tag?), like the genre creator step.
+- [ ] Prefab: put `GDPerfTracker.prefab` in the first scene enabled in Build Settings, the way
+      its wizard does (skip if one exists, save the scene). Pick the scene from a list when the
+      first one isn't the boot scene.
+- [ ] Remote config: `GDPerformance.Configure(perf_tracking_enabled, perf_sample_interval,
+      startup_tracking_enabled)` once remote config is fetched. GD SDK: hook next to the tool's
+      PersistRemoteToggles in RemoteConfigManager (check `remoteConfig.GetRemoteValue<T>(key)`
+      reads separate keys on 5.x — the wizard's snippet uses 6.2's `MonetizationServices.Remote`);
+      custom SDK: pick the fetch callback or copy the code. List the three Firebase keys to add
+      (the tool can't create them in Firebase).
+- [ ] Senders: generate `LogPerfStats()` / `LogLoadTime()` helpers in the genre folder — payload,
+      base fields (`adid`, `appToken`, `abTest`, `abGroup`, `abTestStartDate` from the genre asset /
+      Adjust), null-strip, `LogCustomEvent`. On GD 5.x / custom there is no
+      `AdjustAnalyticsNetwork.AdId`: take adid from the genre asset's stored Adjust info.
+- [ ] loadTime: `MarkGameInteractive()` + `LogLoadTime()` where the game becomes playable — the
+      game decides where. Script / function picker (like the init patch), or copy the code.
+- [ ] perfStats: `LogPerfStats()` at the logging moment (level end / session end) — same picker.
+- [ ] Verify: package in, prefab in the boot scene, Configure wired, both calls found in game
+      code (or signed off).
+- [ ] Note: startup timing is Android-only (iOS falls back to engine time); Editor readings
+      aren't comparable.
+- [ ] Also check the guide PDF (Documentation/GDPerformanceTracker-Guide.pdf) for any step the
+      README doesn't list.
+
 ## Test in Unity before `v1-migration` goes to `main`
 
 Everything below compiles and passes the scratch test harness, but has not been run in a
@@ -113,6 +231,11 @@ cover all of the list below.
 - [ ] Step 4: Create stays disabled until the name is valid and Excel chosen; name error under
       the field while typing; files + `<Game>Analytics.asset` after the compile; App Id / Api
       Key / App Token written to the asset; Enable Metica Logs on.
+- [ ] Step 4: game name prefilled from Player Settings (e.g. "Anti Stress Game" → AntiStressGame);
+      Adjust App Token prefilled (GD: AdjustConfiguration; custom: AdjustConfig in code / Adjust
+      prefab); Metica App ID / API Key prefilled from MeticaSettings (build target's platform) or
+      MeticaAdsConfig; typing (even clearing) wins; values land in the asset.
+- [ ] Secret fields show a Show / Hide text button (genre step and Metica settings step).
 - [ ] Step 6, custom SDK: startup script written (or skipped when the game does it); on device,
       install once, sessionStart every launch.
 - [ ] Step 6, GD SDK: no script — `<Game>Analytics.Initialize()` at the top of

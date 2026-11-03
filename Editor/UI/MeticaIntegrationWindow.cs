@@ -1173,16 +1173,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (text.Secret)
             {
-                // Masked by default; the eye shows it, without a rebuild that would lose the focus.
+                // Masked by default; Show / Hide toggles it, without a rebuild that would lose the focus.
                 field.isPasswordField = true;
-                var reveal = new Button { tooltip = "Show" }.With("mi-icon-btn", "mi-field__reveal");
-                reveal.Add(new MiIcon(MiIcon.Kind.Eye, 1.75f, "mi-icon--16"));
+                var reveal = new Button { text = "Show" }.With("mi-btn", "mi-btn--secondary", "mi-btn--small", "mi-field__reveal");
                 reveal.clicked += () =>
                 {
                     field.isPasswordField = !field.isPasswordField;
-                    reveal.tooltip = field.isPasswordField ? "Show" : "Hide";
-                    reveal.Clear();
-                    reveal.Add(new MiIcon(field.isPasswordField ? MiIcon.Kind.Eye : MiIcon.Kind.EyeOff, 1.75f, "mi-icon--16"));
+                    reveal.text = field.isPasswordField ? "Show" : "Hide";
                 };
                 row.Add(reveal);
             }

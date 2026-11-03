@@ -38,6 +38,14 @@ namespace GameDistrict.MeticaIntegrationTools
         private const int CommitTimeoutMs = 120000;
 
         /// <summary>
+        /// For add and commit, this call only — the repository's own config is left alone.
+        /// safecrlf off: "LF will be replaced by CRLF" is noise on Windows, and with
+        /// core.safecrlf=true it would refuse the add outright. longpaths on: SDK imports carry
+        /// deep paths (the Metica xcframework) that Windows git otherwise can't open.
+        /// </summary>
+        private const string Quiet = "-c core.safecrlf=false -c core.longpaths=true";
+
+        /// <summary>
         /// Stands in for the Unity project folder, for exercising the git calls outside
         /// Unity; never set in normal use.
         /// </summary>
@@ -58,7 +66,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var specs = Specs(step, prefix);
             if (specs.Count == 0) return true;
 
-            var args = "-c core.quotepath=off --literal-pathspecs status --porcelain=v1 -z --no-renames " +
+            var args = $"{Quiet} -c core.quotepath=off --literal-pathspecs status --porcelain=v1 -z --no-renames " +
                        "--untracked-files=all -- " + string.Join(" ", specs.Select(Quote));
             var status = Git(top, args, StatusTimeoutMs);
             if (status.exit != 0)
@@ -122,21 +130,21 @@ namespace GameDistrict.MeticaIntegrationTools
 
                 var pathspec = $"--pathspec-from-file={Quote(pathFile)} --pathspec-file-nul";
 
-                var add = Git(top, $"--literal-pathspecs add -A {pathspec}", CommitTimeoutMs);
+                var add = Git(top, $"{Quiet} --literal-pathspecs add -A {pathspec}", CommitTimeoutMs);
                 if (add.exit != 0)
                 {
-                    error = "git add failed: " + FirstLine(add.error);
+                    error = "git add failed:\n" + Shorten(WithoutWarnings(add.error));
                     return null;
                 }
 
-                var commit = Git(top, $"--literal-pathspecs commit --only -F {Quote(messageFile)} {pathspec}",
+                var commit = Git(top, $"{Quiet} --literal-pathspecs commit --only -F {Quote(messageFile)} {pathspec}",
                     CommitTimeoutMs);
                 if (commit.exit != 0)
                 {
                     // All of it: a hook's or a missing identity's explanation spans lines.
                     error = "git commit failed:\n" + Shorten(string.IsNullOrWhiteSpace(commit.error)
                         ? commit.output
-                        : commit.error);
+                        : WithoutWarnings(commit.error));
                     return null;
                 }
 
@@ -297,6 +305,22 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var line = (text ?? string.Empty).Trim().Split('\n').FirstOrDefault(l => l.Trim().Length > 0);
             return string.IsNullOrEmpty(line) ? "no output" : line.Trim();
+        }
+
+        /// <summary>
+        /// git's output without its warning and hint lines, which come first and hid the real
+        /// error ("LF will be replaced by CRLF…" in front of the fatal line). All of it when
+        /// that leaves nothing.
+        /// </summary>
+        private static string WithoutWarnings(string text)
+        {
+            var lines = (text ?? string.Empty).Replace("\r\n", "\n").Split('\n')
+                .Where(line => line.Trim().Length > 0)
+                .ToList();
+            var real = lines.Where(line => !line.StartsWith("warning:", StringComparison.OrdinalIgnoreCase)
+                                           && !line.StartsWith("hint:", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return string.Join("\n", real.Count > 0 ? real : lines);
         }
 
         private static string Shorten(string text)

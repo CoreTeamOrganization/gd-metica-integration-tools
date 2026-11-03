@@ -393,3 +393,14 @@
   right after `UpdateAdjustInfo`, so both carry the Adjust ID — and adds just those lines to a
   file wired by the earlier version. Skipped when the game's code already sends them. Custom-SDK
   games keep the startup script. Checked on every GD SDK release 5.0.0–6.0.1 (syntax).
+- Create genre files: the game name starts as Player Settings' product name in one word
+  (spaces and symbols dropped). Fields renamed **Metica App ID**, **Metica API Key** and
+  **Adjust App Token**, and prefilled from the project — the Adjust token from GD SDK's
+  AdjustConfiguration, an `AdjustConfig("…")` in code or the Adjust prefab / scene; the Metica
+  keys from MeticaSettings (the build target's platform) or MeticaAdsConfig. Typing wins. Once
+  the asset exists, **Fill empty fields from the game** fills any blank one.
+- Secret fields: the eye icon is now a **Show** / **Hide** text button.
+- Per-step commit: `git add` / `commit` / `status` run with `-c core.safecrlf=false -c
+  core.longpaths=true` (this call only, the repo's config untouched), so "LF will be replaced by
+  CRLF" can't block a commit and deep SDK paths (the Metica xcframework) can be staged on
+  Windows. A failure now shows git's real error, not its first warning line.

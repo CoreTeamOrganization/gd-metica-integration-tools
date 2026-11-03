@@ -25,9 +25,13 @@ namespace GameDistrict.MeticaIntegrationTools
             "The genre creator reads the Excel sheet's events and writes three scripts to " +
             $"{MeticaPaths.GenresRoot}/<Game>/ — the analytics class, its interface and the event data — then, " +
             $"after Unity recompiles, <Game>Analytics.asset in {MeticaPaths.GenresResources}. The game name becomes " +
-            "the class names, so it is one word: letters and digits, starting with a letter. App Id, Api Key and the " +
-            "Adjust App Token are optional here; whatever is filled is written to the asset once it exists, and " +
-            "Enable Metica Logs is turned on. They can be changed here afterwards too.";
+            "the class names, so it is one word: letters and digits, starting with a letter — filled in from Player " +
+            "Settings' product name (spaces and symbols dropped) until you type one. Metica App ID, Metica API Key and " +
+            "Adjust App Token are optional; they start filled from the project when it has them — the Adjust token " +
+            "from GD SDK's AdjustConfiguration, an AdjustConfig in code or the Adjust prefab; the Metica keys from the " +
+            "Ads integration's MeticaSettings (the build target's platform) or MeticaAdsConfig. Whatever is filled is " +
+            "written to the asset once it exists, and Enable Metica Logs is turned on. They can be changed here " +
+            "afterwards too.";
 
         /// <summary>
         /// Only the leftover-asset case. "Create genre files" is a control instead, so it can stay
@@ -55,8 +59,9 @@ namespace GameDistrict.MeticaIntegrationTools
             $"GameDistrict.MeticaIntegrationTools.Analytics.{name}.{Application.dataPath.GetHashCode():X8}";
 
         /// <summary>
-        /// The game name typed here — or, when nothing is typed and the project already has one
-        /// genre, that genre, so a project set up by hand is recognised.
+        /// The game name typed here — or, when nothing is typed, the project's one genre if it
+        /// already has one (so a project set up by hand is recognised), else Player Settings'
+        /// product name made into one word.
         /// </summary>
         internal static string GameName
         {
@@ -66,7 +71,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 if (typed.Length > 0) return typed;
 
                 var existing = ExistingGenres();
-                return existing.Count == 1 ? existing[0] : "";
+                return existing.Count == 1 ? existing[0] : GameKeys.GameName();
             }
             set => EditorPrefs.SetString(Pref("GameName"), value ?? "");
         }
@@ -86,12 +91,19 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>The asset's optional fields, as typed before the asset exists.</summary>
         private static readonly (string field, string label, bool secret)[] AssetFields =
         {
-            ("appId", "App Id", false),
-            ("apiKey", "Api Key", true),
-            ("appToken", "App Token", false)
+            ("appId", "Metica App ID", false),
+            ("apiKey", "Metica API Key", true),
+            ("appToken", "Adjust App Token", false)
         };
 
-        private static string Typed(string field) => EditorPrefs.GetString(Pref("Asset." + field), "");
+        /// <summary>
+        /// What's typed — or, until the field is first edited, what the project already has
+        /// (<see cref="GameKeys"/>). Once edited, even emptied, the typed value counts.
+        /// </summary>
+        private static string Typed(string field) =>
+            EditorPrefs.HasKey(Pref("Asset." + field))
+                ? EditorPrefs.GetString(Pref("Asset." + field), "")
+                : GameKeys.ForGenreField(field);
 
         private static void SetTyped(string field, string value) => EditorPrefs.SetString(Pref("Asset." + field), value ?? "");
 
@@ -149,9 +161,9 @@ namespace GameDistrict.MeticaIntegrationTools
                 if (FieldsPending || !EditorPrefs.GetBool(Pref("Asset.LogsOn." + game), false)) WriteTypedFields(asset);
 
                 var serialized = new SerializedObject(asset);
-                var empty = new[] { ("appId", "App Id"), ("apiKey", "Api Key") }
-                    .Where(field => string.IsNullOrEmpty(serialized.FindProperty(field.Item1)?.stringValue))
-                    .Select(field => field.Item2).ToList();
+                var empty = AssetFields.Where(field => field.field != "appToken")
+                    .Where(field => string.IsNullOrEmpty(serialized.FindProperty(field.field)?.stringValue))
+                    .Select(field => field.label).ToList();
                 if (empty.Count > 0)
                     result.Warning($"{string.Join(" and ", empty)} not set on {game}Analytics.asset — optional, fill below.");
 
@@ -295,6 +307,16 @@ namespace GameDistrict.MeticaIntegrationTools
                 // Created: the same fields, now editing the asset itself.
                 foreach (var (field, label, secret) in AssetFields)
                     yield return new StepText(label, AssetValue(game, field), value => WriteField(game, field, value), secret);
+
+                // An empty field the project has a value for: one click fills them.
+                var found = GameKeys.ForGenreAsset();
+                if (AssetFields.Any(f => AssetValue(game, f.field).Length == 0 && found[f.field].Length > 0))
+                    yield return new StepButton("Fill empty fields from the game", () =>
+                    {
+                        foreach (var (field, _, _) in AssetFields)
+                            if (AssetValue(game, field).Length == 0 && found[field].Length > 0) WriteField(game, field, found[field]);
+                        MeticaIntegrationLog.Record(StepTitle, $"Filled empty fields of {game}Analytics.asset from the project");
+                    });
 
                 yield return new StepButton($"Select {game}Analytics.asset",
                     () => SelectAndPing(AssetDatabase.LoadAssetAtPath<ScriptableObject>(AssetPath(game))), icon: StepIcon.File);
