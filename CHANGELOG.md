@@ -409,3 +409,24 @@
   a new folder's .meta was left uncommitted. Only changed ones are committed.
 - Moloco row: separate floors — Android adapter 4.3.1.0, iOS adapter 4.3.0.0 (was 4.3.1 for
   both). Only the build target's fix is enabled (iOS fix off on Android, and the other way).
+- New optional step **Game additions to carry over** (GD SDK flow, after Wrapper files): each
+  AppLovin unit is compared with the original release, method by method, and every line the game
+  added (an Adjust ad-revenue call, its own AdsManager hooks, logs) is listed with where it goes in
+  the Metica unit — show → show, hidden → hidden (inside its ThreadDispatcher lambda), reward,
+  revenue, loaded / failed, displayed → OnAdShowSuccess (handler and subscription added). Tick
+  the lines to carry; logs are tagged and left unticked. Lines using MAX's ad info are adapted
+  (`arg2.NetworkName` → `meticaAd.networkName`, a whole AdInfo → `MeticaMaxAdInfo.From(meticaAd)`,
+  a new helper file) and go in with a TODO. Edited stock lines, and lines the tool can't place,
+  are listed to add by hand. Only shown when the game added something; AdMob units aren't read.
+- Compare: "Replace with original" on an AppLovin unit warns when its game-added lines aren't in
+  the Metica unit yet.
+- Home: **Commit the tool install** — while adding or updating the tool has left
+  `Packages/manifest.json` / `packages-lock.json` uncommitted, Home offers a prefilled commit
+  ("Add Metica Integration Tools <version> (<hash>)", or "Update … to …") with Commit / Commit and
+  push. Other uncommitted package changes in those files are listed, and need a confirm to go along.
+- Analytics: new optional step **Performance events (perfStats, loadTime)** — GD Performance
+  Tracker in five rows: add the package (its define follows from the genre creator), put the
+  GDPerfTracker prefab in the boot scene, switch it from remote config (GD SDK: patched into
+  `RemoteConfigManager.CreateAndUpdateConfig`; custom SDK: copy the code), and send loadTime /
+  perfStats from a function the developer picks (or copy the code). Everything goes through the
+  genre asset's own calls (genre creator 2.0.0), which add the base fields.

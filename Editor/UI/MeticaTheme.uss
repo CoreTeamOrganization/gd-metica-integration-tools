@@ -175,6 +175,25 @@
 .mi-line__hover { flex-shrink: 0; padding-right: 6px; }
 .mi-line:hover > .mi-line__hover { display: flex; }
 
+.mi-root .mi-controls > .mi-check { margin-bottom: 2px; }
+.mi-check { flex-direction: row; align-items: flex-start; border-radius: 6px; }
+.mi-check:hover { background-color: var(--surface-2); }
+.mi-root .mi-check__box { width: 16px; height: 16px; min-width: 16px; padding: 0; margin: 7px 0 0 8px; border-width: 1px; border-radius: 4px; border-color: var(--border-strong); background-color: var(--surface-2); align-items: center; justify-content: center; flex-shrink: 0; cursor: link; }
+.mi-root .mi-check__box:hover { border-color: var(--yellow); }
+.mi-root .mi-check__box--on { background-color: var(--yellow); border-color: var(--yellow); color: var(--ink); }
+.mi-check__mark { width: 16px; height: 16px; margin: 7px 0 0 8px; align-items: center; justify-content: center; flex-shrink: 0; }
+.mi-check__mark--done { color: var(--ok); }
+.mi-check__dash { width: 8px; height: 2px; background-color: var(--text-3); }
+.mi-root .mi-check__body { flex-grow: 1; flex-shrink: 1; flex-direction: column; align-items: stretch; padding: 5px 8px; margin: 0; background-color: rgba(0, 0, 0, 0); border-width: 0; -unity-text-align: upper-left; cursor: link; }
+.mi-check__top { flex-direction: row; align-items: center; }
+.mi-check__code { font-size: 12px; color: var(--text); flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-check__tag { font-size: 10px; height: 16px; padding: 0 6px; margin-left: 6px; border-radius: 8px; border-width: 1px; border-color: var(--border-strong); color: var(--text-2); flex-shrink: 0; -unity-text-align: middle-center; }
+.mi-check__tag--adapted { border-color: var(--yellow); color: var(--yellow); }
+.mi-check__tag--by-hand { border-color: var(--warn-border); color: var(--warn); }
+.mi-check__tag--carried { border-color: var(--ok-border); color: var(--ok); }
+.mi-check__suggested { font-size: 11px; color: var(--yellow); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-check__hint { font-size: 11px; color: var(--text-3); margin-top: 2px; white-space: normal; }
+
 .mi-field { flex-direction: row; align-items: center; }
 .mi-field__label { width: 110px; flex-shrink: 0; font-size: 13px; color: var(--text-2); }
 .mi-root .mi-text { flex-grow: 1; flex-shrink: 1; margin: 0; max-width: 420px; }
@@ -213,6 +232,7 @@
 
 /* ---------- Commit (under the review sign-off, or on a done step) ---------- */
 .mi-commit { margin-top: 14px; padding-top: 12px; border-top-width: 1px; border-color: var(--border); }
+.mi-commit--home { margin-top: 0; margin-bottom: 14px; padding: 12px; border-width: 1px; border-radius: 8px; border-color: var(--border); }
 .mi-root .mi-commit > * { margin-bottom: 8px; }
 .mi-root .mi-commit__files-toggle { padding: 0; }
 .mi-commit__files-toggle { height: 24px; align-self: flex-start; flex-direction: row; align-items: center; justify-content: flex-start; background-color: rgba(0, 0, 0, 0); border-width: 0; color: var(--text-2); font-size: 12px; cursor: link; }

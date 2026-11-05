@@ -434,7 +434,16 @@ namespace GameDistrict.MeticaIntegrationTools
             if (originals.Any(item => item.change.Metica))
                 message += "\n\nTheir Metica changes go too — run the tool's step again to put them back.";
 
-            if (!EditorUtility.DisplayDialog("Replace with original", message, "Replace", "Cancel")) return;
+            // An AppLovin unit's own lines run nowhere else until they're carried to the Metica unit.
+            var uncarried = originals
+                .Select(item => (path: item.change.ProjectPath, lines: GameAdditionsStep.UncarriedIn(item.change.ProjectPath)))
+                .Where(item => item.lines > 0)
+                .ToList();
+            foreach (var (path, lines) in uncarried)
+                message += $"\n\n{Path.GetFileName(path)} has {lines} game-added line{(lines == 1 ? "" : "s")} not in its " +
+                           "Metica unit — they'll be lost. Carry them first in the \"Game additions to carry over\" step.";
+
+            if (!EditorUtility.DisplayDialog("Replace with original", message, uncarried.Count > 0 ? "Replace anyway" : "Replace", "Cancel")) return;
 
             var backupRoot = $"{MeticaPaths.BackupRoot}/Replaced/{DateTime.Now:yyyyMMdd-HHmmss}";
             var failed = new List<string>();

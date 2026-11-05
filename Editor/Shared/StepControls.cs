@@ -160,6 +160,39 @@ namespace GameDistrict.MeticaIntegrationTools
         }
     }
 
+    /// <summary>
+    /// One line of code to pick: a tick box, the code with small tags, an optional "goes in as"
+    /// version under it, and a hint. No box when there is nothing to pick — then a check mark
+    /// when <see cref="Done"/>, a dash when not. Click the code to open the file there.
+    /// </summary>
+    internal sealed class StepCheck : StepControl
+    {
+        public readonly string Code;
+        public readonly string Suggested;
+        public readonly string Hint;
+        public readonly IReadOnlyList<string> Tags;
+        public readonly bool Value;
+
+        /// <summary>Null when there is no box.</summary>
+        public readonly Action<bool> OnChanged;
+
+        public readonly bool Done;
+        public readonly Action OnOpen;
+
+        public StepCheck(string code, string hint, IReadOnlyList<string> tags, bool value, Action<bool> onChanged,
+            Action onOpen, string suggested = null, bool done = false)
+        {
+            Code = code;
+            Hint = hint;
+            Tags = tags ?? Array.Empty<string>();
+            Value = value;
+            OnChanged = onChanged;
+            OnOpen = onOpen;
+            Suggested = suggested;
+            Done = done;
+        }
+    }
+
     /// <summary>A labelled dropdown, with an optional one-line caption under it.</summary>
     internal sealed class StepChoice : StepControl
     {

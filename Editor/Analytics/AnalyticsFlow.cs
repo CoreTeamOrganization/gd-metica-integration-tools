@@ -31,6 +31,7 @@ namespace GameDistrict.MeticaIntegrationTools
             new GenreFilesStep(),
             new AdjustWiringStep(),
             new AnalyticsStartupStep(),
+            new PerformanceEventsStep(),
             new AnalyticsBuildSetupStep()
         };
 

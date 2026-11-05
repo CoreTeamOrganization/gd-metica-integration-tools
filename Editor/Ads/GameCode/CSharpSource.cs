@@ -22,7 +22,13 @@ namespace GameDistrict.MeticaIntegrationTools
         /// The text with comments and the contents of string and char literals replaced by
         /// spaces — quotes, newlines and every other character kept in place.
         /// </summary>
-        public static string Mask(string text)
+        public static string Mask(string text) => Mask(text, false);
+
+        /// <param name="keepInterpolations">
+        /// Leaves the code in an interpolated string's holes ({x}) unmasked — for renaming what
+        /// a line uses, holes included. Not for splitting statements.
+        /// </param>
+        public static string Mask(string text, bool keepInterpolations)
         {
             var masked = new StringBuilder(text);
             var i = 0;
@@ -55,7 +61,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 }
                 else if (c == '"' || ((c == '@' || c == '$') && (next == '"' || ((next == '@' || next == '$') && i + 2 < text.Length && text[i + 2] == '"'))))
                 {
-                    i = MaskString(text, masked, i);
+                    i = MaskString(text, masked, i, keepInterpolations);
                 }
                 else if (c == '\'')
                 {
@@ -76,7 +82,7 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>Masks one string literal (regular, verbatim, interpolated) starting at <paramref name="start"/>; returns the index after it.</summary>
-        private static int MaskString(string text, StringBuilder masked, int start)
+        private static int MaskString(string text, StringBuilder masked, int start, bool keepHoles = false)
         {
             var i = start;
             var verbatim = false;
@@ -107,14 +113,14 @@ namespace GameDistrict.MeticaIntegrationTools
                     {
                         if (text[i] == '"' || (text[i] == '$' || text[i] == '@') && i + 1 < text.Length && text[i + 1] == '"')
                         {
-                            var after = MaskString(text, masked, i);
-                            for (var k = i; k < after; k++) Blank(masked, text, k);
+                            var after = MaskString(text, masked, i, keepHoles);
+                            if (!keepHoles) for (var k = i; k < after; k++) Blank(masked, text, k);
                             i = after;
                             continue;
                         }
                         if (text[i] == '{') depth++;
                         if (text[i] == '}') depth--;
-                        Blank(masked, text, i);
+                        if (!keepHoles) Blank(masked, text, i);
                         i++;
                         if (depth == 0) break;
                     }

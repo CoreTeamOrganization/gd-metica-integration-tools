@@ -1,0 +1,27 @@
+using System.Collections.Generic;
+using Metica.Ads;
+
+namespace Monetization.Runtime.Ads
+{
+    /// <summary>
+    /// Written by Metica Integration Tools for lines carried over from the AppLovin ad units
+    /// that take a MAX AdInfo (an Adjust ad-revenue call, say): the same ad, as MAX describes it,
+    /// built from the MeticaAd the Metica units get. Only the fields both SDKs share are filled.
+    /// </summary>
+    internal static class MeticaMaxAdInfo
+    {
+        public static MaxSdkBase.AdInfo From(MeticaAd meticaAd)
+        {
+            var info = new Dictionary<string, object>();
+            if (meticaAd != null)
+            {
+                info["adUnitId"] = meticaAd.adUnitId;
+                info["networkName"] = meticaAd.networkName;
+                info["placement"] = meticaAd.placementTag;
+                if (meticaAd.revenue.HasValue) info["revenue"] = meticaAd.revenue.Value;
+            }
+
+            return new MaxSdkBase.AdInfo(info);
+        }
+    }
+}

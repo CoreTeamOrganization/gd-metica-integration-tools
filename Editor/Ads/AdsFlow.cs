@@ -26,6 +26,7 @@ namespace GameDistrict.MeticaIntegrationTools
             new MeticaV1CodeStep(),
             new ImportMeticaSdkStep(),
             new WrapperFilesStep(),
+            new GameAdditionsStep(),
             new PatchCoreFilesStep(),
             new RemoteSwitchStep(),
             new MeticaSettingsStep(),

@@ -57,13 +57,17 @@ namespace GameDistrict.MeticaIntegrationTools
         /// The step's uncommitted changes. False, with the reason, when there is no git to
         /// ask — git missing, or the project is not in a repository.
         /// </summary>
-        public static bool TryGetChanges(MeticaStep step, out List<Change> changes, out string unavailable)
+        public static bool TryGetChanges(MeticaStep step, out List<Change> changes, out string unavailable) =>
+            TryGetChanges(step.TouchedPaths, out changes, out unavailable);
+
+        /// <summary>The same for any project-relative paths (with their .meta files).</summary>
+        public static bool TryGetChanges(IEnumerable<string> paths, out List<Change> changes, out string unavailable)
         {
             changes = new List<Change>();
 
             if (!TryRepo(out var top, out var prefix, out unavailable)) return false;
 
-            var specs = Specs(step, prefix);
+            var specs = Specs(paths, prefix);
             if (specs.Count == 0) return true;
 
             var args = $"{Quiet} -c core.quotepath=off --literal-pathspecs status --porcelain=v1 -z --no-renames " +
@@ -163,6 +167,17 @@ namespace GameDistrict.MeticaIntegrationTools
             }
         }
 
+        /// <summary>
+        /// A project file as the last commit has it, or null when it isn't in HEAD (new, or no
+        /// commits yet) or there is no git to ask.
+        /// </summary>
+        public static string HeadText(string projectPath)
+        {
+            if (!TryRepo(out var top, out var prefix, out _)) return null;
+            var show = Git(top, $"show {Quote("HEAD:" + prefix + projectPath.Replace('\\', '/'))}", StatusTimeoutMs);
+            return show.exit == 0 ? show.output : null;
+        }
+
         // ── Push ───────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -249,10 +264,10 @@ namespace GameDistrict.MeticaIntegrationTools
         /// Assets/MeticaAds/X.cs also created Assets/MeticaAds.meta; only changed ones are
         /// committed, so an existing folder's untouched .meta adds nothing.
         /// </summary>
-        private static List<string> Specs(MeticaStep step, string prefix)
+        private static List<string> Specs(IEnumerable<string> paths, string prefix)
         {
             var specs = new List<string>();
-            foreach (var raw in step.TouchedPaths)
+            foreach (var raw in paths)
             {
                 if (string.IsNullOrEmpty(raw)) continue;
 

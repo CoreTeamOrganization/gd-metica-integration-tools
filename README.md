@@ -43,6 +43,12 @@ the CoreTeamOrganization GitHub org.
 **Updating.** Unity pins the commit it installed in `Packages/packages-lock.json`. To get the
 latest, delete the `com.gamedistrict.metica-integration-tools` entry there and return to Unity.
 
+**Committing the install.** Adding or updating the tool changes `Packages/manifest.json` and
+`Packages/packages-lock.json`. Until those are committed, Home shows **Commit the tool install**
+with a prefilled message ("Add Metica Integration Tools 0.2.0 (2e2f56b)") and Commit / Commit and
+push. git commits whole files, so any other package change uncommitted in the two files is listed
+first, and committed along only if you confirm.
+
 **Version settings.** The Metica SDK and AppLovin MAX versions the tool installs come from the
 package's `Editor/Ads/MeticaTargetVersion.asset`. A game can override them with its own
 `Assets/MeticaIntegrationToolsSettings/MeticaTargetVersion.asset` (**Change target version…** in
@@ -78,6 +84,7 @@ Editor/
     MeticaFlow               one run's engine, no UI: verify, sign off, skip, current step
     MeticaStep, MeticaPaths, SourcePatcher, TemplateWriter, the log/progress stores
     StepCommit               commits one step's changed files to the game's git repo, and pushes on request
+    ToolInstallCommit        the tool's own uncommitted install (manifest + lock), for Home's commit
     LineDiff                 line diff (Myers) and hunks, for the compare window
     ToolRemover              removes the package (menu item + ⋮ menu)
     PackageRequests          waits on Package Manager requests without blocking the editor

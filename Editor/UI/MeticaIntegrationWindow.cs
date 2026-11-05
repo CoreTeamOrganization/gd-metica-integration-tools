@@ -41,6 +41,13 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Count-only GD SDK comparison for the Home line; refreshed on every re-check of Home.</summary>
         private SdkCompareResult _sdkSummary;
 
+        /// <summary>The tool's own uncommitted install, for Home; null when there is none. Re-read with Home.</summary>
+        private ToolInstallCommit.State _install;
+        private bool _installRead;
+
+        /// <summary>The commit fields' key for the tool install (step ids never contain a space).</summary>
+        private const string InstallCommitId = "tool install";
+
         /// <summary>Each shown step's uncommitted changes, from git; emptied on every re-check.</summary>
         private readonly Dictionary<string, (List<StepCommit.Change> changes, string unavailable)> _commitChanges =
             new Dictionary<string, (List<StepCommit.Change>, string)>();
@@ -194,6 +201,7 @@ namespace GameDistrict.MeticaIntegrationTools
                 MeticaPaths.ForgetCache();
                 _commitChanges.Clear();
                 _unpushed = null;
+                _installRead = false;
 
                 // Backups made before the self-ignore existed get it too.
                 if (Directory.Exists(MeticaPaths.BackupRoot)) SourcePatcher.IgnoreBackupsInGit();
@@ -383,6 +391,14 @@ namespace GameDistrict.MeticaIntegrationTools
             intro.Add(Text("Two separate jobs. Pick one — you can come back to the other.", "mi-home-sub"));
             _content.Add(intro);
 
+            if (!_installRead)
+            {
+                try { _install = ToolInstallCommit.Read(); }
+                catch (Exception e) { Debug.LogException(e); _install = null; }
+                _installRead = true;
+            }
+            if (_install != null) _content.Add(InstallCommitSection(_install));
+
             var adsCount = _ads.Steps.Length;
             var gdSdk = MeticaPaths.HasGDSdk ? GdSdkVersion.Reported() : null;
             var gdSdkSupported = GdSdkVersion.IsSupported(gdSdk);
@@ -408,6 +424,90 @@ namespace GameDistrict.MeticaIntegrationTools
                     ? $"GD Monetization SDK {GdSdkVersion.Reported()} — {_analytics.Steps.Length} steps"
                     : $"Custom SDK — {_analytics.Steps.Length} steps"),
                 notCovered == null, () => ShowPage(Page.Analytics)));
+        }
+
+        /// <summary>
+        /// The tool's own install — its lines in Packages/manifest.json and packages-lock.json —
+        /// not committed yet: a prefilled commit, like a step's. Other uncommitted changes in the
+        /// two files are listed, since git can only commit them along.
+        /// </summary>
+        private VisualElement InstallCommitSection(ToolInstallCommit.State install)
+        {
+            var section = El("mi-commit", "mi-commit--home");
+            section.Add(Text("COMMIT THE TOOL INSTALL", "mi-section-label"));
+            section.Add(Text(
+                $"Adding the tool changed {string.Join(" and ", install.Changes.Select(c => c.ProjectPath))} — not committed yet.",
+                "mi-caption"));
+
+            if (install.Others.Count > 0)
+                section.Add(Box("mi-warning", MiIcon.Kind.Error,
+                    "Also uncommitted in these files, and committed along with the tool (git commits whole files): " +
+                    string.Join(", ", install.Others) + "."));
+
+            if (!_commitSummary.ContainsKey(InstallCommitId)) _commitSummary[InstallCommitId] = install.Summary;
+            if (!_commitBody.ContainsKey(InstallCommitId)) _commitBody[InstallCommitId] = install.Description;
+            section.Add(CommitField("Summary", InstallCommitId, _commitSummary, false));
+            section.Add(CommitField("Description", InstallCommitId, _commitBody, true));
+
+            var buttons = El("mi-row");
+            var commit = IconTextButton(MiIcon.Kind.Check, "Commit", () => CommitInstall(install, false), "mi-btn--secondary");
+            commit.SetEnabled(!_busy);
+            buttons.Add(commit);
+            var commitAndPush = IconTextButton(MiIcon.Kind.Check, "Commit and push", () => CommitInstall(install, true), "mi-btn--secondary");
+            commitAndPush.SetEnabled(!_busy);
+            buttons.Add(commitAndPush);
+            section.Add(buttons);
+            return section;
+        }
+
+        private void CommitInstall(ToolInstallCommit.State install, bool push)
+        {
+            if (_busy) return;
+            if (install.Others.Count > 0
+                && !EditorUtility.DisplayDialog("Commit the tool install",
+                    "These uncommitted changes are in the same files and go into the commit too:\n\n" +
+                    string.Join("\n", install.Others) + "\n\nCommit them along?", "Commit", "Cancel"))
+                return;
+
+            _busy = true;
+            Rebuild();
+
+            NextTick(() =>
+            {
+                const string title = "Tool install";
+                try
+                {
+                    EditorUtility.DisplayProgressBar("Metica Integration", "Committing the tool install…", 0.5f);
+                    string sha, error;
+                    try
+                    {
+                        sha = StepCommit.Commit(install.Changes, _commitSummary[InstallCommitId], _commitBody[InstallCommitId], out error);
+                    }
+                    finally
+                    {
+                        EditorUtility.ClearProgressBar();
+                    }
+
+                    if (sha == null)
+                    {
+                        MeticaIntegrationLog.Record(title, "Commit failed: " + error);
+                        EditorUtility.DisplayDialog("Commit failed", error, "OK");
+                        return;
+                    }
+
+                    _commitSummary.Remove(InstallCommitId);
+                    _commitBody.Remove(InstallCommitId);
+                    MeticaIntegrationLog.Record(title, $"Committed {string.Join(" and ", install.Changes.Select(c => c.ProjectPath))} as {sha}");
+                    ShowNotification(new GUIContent($"Committed {sha}"));
+
+                    if (push) Push(title);
+                }
+                finally
+                {
+                    _busy = false;
+                    if (this != null) RefreshNow();
+                }
+            });
         }
 
         /// <summary>How the project's GD SDK differs from the original it declares, and a way to look.</summary>
@@ -1025,6 +1125,11 @@ namespace GameDistrict.MeticaIntegrationTools
                         block.Add(LineRow(line));
                         break;
 
+                    case StepCheck check:
+                        buttons = null;
+                        block.Add(CheckRow(check));
+                        break;
+
                     case StepChoice choice:
                         buttons = null;
                         block.Add(Choice(choice));
@@ -1107,6 +1212,55 @@ namespace GameDistrict.MeticaIntegrationTools
             row.Add(open);
 
             if (line.HoverActions.Count > 0) row.Add(HoverButtons(line.HoverActions, "mi-line__hover"));
+            return row;
+        }
+
+        /// <summary>A line to pick: its tick box, then the code, its tags, what goes in, and a hint.</summary>
+        private VisualElement CheckRow(StepCheck check)
+        {
+            var row = El("mi-check");
+
+            if (check.OnChanged != null)
+            {
+                var box = new Button(() => RunControl(() => check.OnChanged(!check.Value))).With("mi-check__box");
+                box.tooltip = check.Value ? "Untick" : "Tick to carry";
+                if (check.Value)
+                {
+                    box.AddToClassList("mi-check__box--on");
+                    box.Add(new MiIcon(MiIcon.Kind.Check, 2f, "mi-icon--12"));
+                }
+                box.SetEnabled(!_busy);
+                row.Add(box);
+            }
+            else
+            {
+                var mark = El("mi-check__mark", check.Done ? "mi-check__mark--done" : "mi-check__mark--todo");
+                if (check.Done) mark.Add(new MiIcon(MiIcon.Kind.Check, 2f, "mi-icon--12"));
+                else mark.Add(El("mi-check__dash"));
+                row.Add(mark);
+            }
+
+            var open = new Button(() => RunControl(check.OnOpen)).With("mi-check__body");
+            open.tooltip = "Open the file at this line";
+
+            var top = El("mi-check__top");
+            var code = Text(check.Code, "mi-check__code");
+            code.enableRichText = false;
+            Mono(code);
+            top.Add(code);
+            foreach (var tag in check.Tags)
+                top.Add(Text(tag, "mi-check__tag", "mi-check__tag--" + tag.Replace(' ', '-')));
+            open.Add(top);
+
+            if (!string.IsNullOrEmpty(check.Suggested))
+            {
+                var suggested = Text("→ " + check.Suggested, "mi-check__suggested");
+                suggested.enableRichText = false;
+                Mono(suggested);
+                open.Add(suggested);
+            }
+            if (!string.IsNullOrEmpty(check.Hint)) open.Add(Text(check.Hint, "mi-check__hint"));
+            row.Add(open);
             return row;
         }
 
