@@ -20,7 +20,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>The two names the build-time flag went by before it became remote.</summary>
         private static readonly string[] LegacyFlags = { "sdkConfig.UseMeticaForAds", "sdkConfig.UseMetica" };
 
-        private const string RemoteRead = "MonetizationPreferences.UseMetica.Get()";
+        private const string RemoteRead = PatchCoreFilesStep.MainAdNetworkRead;
 
         public override string Title => "Remote Metica switch";
 
@@ -28,8 +28,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Why =>
             "v6.0.0–v6.2.0 read the flag off SDKConfiguration, so turning Metica off meant shipping a " +
-            "build. This points AdsManager at MonetizationPreferences.UseMetica (filled from remote config " +
-            "by the patch step) and removes the dead SDKConfiguration field. The flag applies on the next " +
+            "build. This points AdsManager at MonetizationPreferences.MainAdNetwork (filled from remote config " +
+            "by the patch step), sends it in a GameData event like v6.2.1+ does, and removes the dead " +
+            "SDKConfiguration field. The flag applies on the next " +
             "launch — ads start about 2s in, before the fetch lands. Nothing to do on v5 or v6.2.1+.";
 
         public override string ActionLabel => "Switch to the remote flag";
@@ -41,7 +42,7 @@ namespace GameDistrict.MeticaIntegrationTools
         };
 
         public override string ReviewHint =>
-            "AdsManager reads MonetizationPreferences.UseMetica.Get(); the SDKConfiguration field is gone.";
+            "AdsManager reads MonetizationPreferences.MainAdNetwork.Get() and sends GameData; the SDKConfiguration field is gone.";
 
         public override VerifyResult Verify()
         {
@@ -53,7 +54,9 @@ namespace GameDistrict.MeticaIntegrationTools
                 return result.Seal();
             }
 
-            if (SourcePatcher.Contains(MeticaPaths.AdsManager, RemoteRead))
+            // The bool read is the patch step's to move to MainAdNetwork, not this one's.
+            if (SourcePatcher.Contains(MeticaPaths.AdsManager, RemoteRead)
+                || SourcePatcher.Contains(MeticaPaths.AdsManager, PatchCoreFilesStep.OldAdsManagerRead))
             {
                 result.Note("Already remote");
                 return result.Seal();
@@ -91,15 +94,19 @@ namespace GameDistrict.MeticaIntegrationTools
                 return log;
             }
 
-            // The SDKConfiguration load exists only to read that flag.
+            // The SDKConfiguration load exists only to read that flag. In its place: the
+            // MainAdNetwork read, and the GameData event these releases don't send yet.
+            const string indent = "            ";
+            SourcePatcher.EnsureUsing(path, "using System.Collections.Generic;");
             var loadOutcome = SourcePatcher.ReplaceFirst(path, RemoteRead,
                 "var sdkConfig = Resources.Load<SDKConfiguration>(MonetizationConfigurationsPath.SDK);",
-                "var useMetica = MonetizationPreferences.UseMetica.Get();");
+                PatchCoreFilesStep.Lines(path, PatchCoreFilesStep.ReadMainAdNetwork(indent) + "\n" +
+                    indent + "AnalyticsManager.SendEvent(\"GameData\", new Dictionary<string, object> { { \"MainAdNetwork\", mainAdNetwork } });"));
 
             log.Add(SourcePatcher.IsSatisfied(loadOutcome)
-                ? "AdsManager now reads MonetizationPreferences.UseMetica"
+                ? "AdsManager now reads MonetizationPreferences.MainAdNetwork and sends it in GameData"
                 : "Could not find the SDKConfiguration load in AdsManager — replace it by hand with: " +
-                  "var useMetica = MonetizationPreferences.UseMetica.Get();");
+                  PatchCoreFilesStep.ReadMainAdNetwork(""));
 
             // Then every use of the old flag becomes the local.
             var replaced = SourcePatcher.ReplaceEvery(path, legacy, "useMetica");

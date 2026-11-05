@@ -41,8 +41,10 @@ namespace MeticaIntegration
         public static Func<bool> HasUserConsent;
 
         /// <summary>
-        /// A named event with parameters, for your analytics. Used once, to report the
-        /// Smart Floors user group and the Metica SDK version after initialization.
+        /// A named event with parameters, for your analytics. Used twice: "GameData" with the
+        /// main ad network (Unassigned / MAX / Metica) when the session starts its ads, and
+        /// "Monetization" with the Smart Floors user group and the Metica SDK version after
+        /// initialization.
         /// </summary>
         public static Action<string, IDictionary<string, object>> OnEvent;
 

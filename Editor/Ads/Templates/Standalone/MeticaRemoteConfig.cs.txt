@@ -1,10 +1,12 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MeticaIntegration
 {
     /// <summary>
     /// The remote switch that decides whether Metica runs at all — a kill switch you can
-    /// throw from your backend without shipping a build.
+    /// throw from your backend without shipping a build, and the A/B split between Metica and
+    /// AppLovin MAX.
     ///
     /// <para>The awkward part, and the reason this is not just a bool: remote config arrives
     /// well after the point where Metica has to be initialized. Waiting for the fetch would
@@ -12,6 +14,11 @@ namespace MeticaIntegration
     /// So the value is <b>persisted</b>: <see cref="Apply"/> writes what your remote config
     /// says, and the next session reads it at boot. The same trade the GD Monetization SDK
     /// makes — a change takes effect on the session after the one that received it.</para>
+    ///
+    /// <para>What is stored is the main ad network: <see cref="Unassigned"/> until a fetch
+    /// carrying the switch lands, then <see cref="Max"/> or <see cref="Metica"/>. Users still
+    /// Unassigned get the config's default network, but are reported as Unassigned, so a
+    /// Metica-vs-MAX comparison can leave them out instead of counting them as MAX.</para>
     ///
     /// <para>Metica is off by default: MeticaAdsConfig has <c>UseRemoteSwitch</c> on and
     /// <c>DefaultUseMetica</c> off, so Metica stays off until your remote config calls
@@ -21,28 +28,47 @@ namespace MeticaIntegration
     /// </summary>
     public static class MeticaRemoteConfig
     {
-        private const string Key = "Metica_UseMetica";
+        public const string Unassigned = "Unassigned";
+        public const string Max = "MAX";
+        public const string Metica = "Metica";
+
+        /// <summary>
+        /// Holds "MAX" or "Metica". An earlier version stored a bool under "Metica_UseMetica";
+        /// that is left unread, so every user starts Unassigned.
+        /// </summary>
+        private const string Key = "Metica_MainAdNetwork";
+
+        private static bool _reported;
+
+        /// <summary>Once per session, also in the Editor with domain reload off.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSession() => _reported = false;
 
         /// <summary>True once a remote value has ever been stored on this device.</summary>
         public static bool HasStoredValue => PlayerPrefs.HasKey(Key);
 
+        /// <summary>"Unassigned", "MAX" or "Metica" — what this device has stored.</summary>
+        public static string MainAdNetwork => HasStoredValue ? PlayerPrefs.GetString(Key, Unassigned) : Unassigned;
+
         /// <summary>
         /// Records what your remote config says. Call it whenever a fetch completes — the
-        /// value is for the next session, not this one.
+        /// value is for the next session, not this one. Only call it when the fetched config
+        /// actually has the switch: a user outside the test should stay Unassigned.
         /// </summary>
         public static void Apply(bool useMetica)
         {
-            var changed = !HasStoredValue || Stored(false) != useMetica;
+            var value = useMetica ? Metica : Max;
+            var changed = MainAdNetwork != value;
 
-            PlayerPrefs.SetInt(Key, useMetica ? 1 : 0);
+            PlayerPrefs.SetString(Key, value);
             PlayerPrefs.Save();
 
             MeticaAdsLog.Log(changed
-                ? $"Remote switch stored: UseMetica = {useMetica}. It takes effect next session."
-                : $"Remote switch unchanged: UseMetica = {useMetica}");
+                ? $"Remote switch stored: MainAdNetwork = {value}. It takes effect next session."
+                : $"Remote switch unchanged: MainAdNetwork = {value}");
         }
 
-        /// <summary>Forgets the stored value, so the next session falls back to the default.</summary>
+        /// <summary>Forgets the stored value, so the next session is Unassigned again.</summary>
         public static void Clear()
         {
             PlayerPrefs.DeleteKey(Key);
@@ -52,16 +78,36 @@ namespace MeticaIntegration
 
         /// <summary>
         /// Whether Metica should come up this session. With the switch off this is always
-        /// true; with it on it is the value stored last session, or the config's default
+        /// true; with it on it is the network stored last session, or the config's default
         /// until a fetch has ever landed.
+        ///
+        /// <para>The first call in a session also reports the network, through
+        /// <see cref="MeticaAdsHooks.OnEvent"/>: "GameData" with { "MainAdNetwork": "Unassigned" /
+        /// "MAX" / "Metica" } — the same event the GD Monetization SDK sends.</para>
         /// </summary>
         public static bool ShouldInitialize(MeticaAdsConfig config)
         {
-            if (config == null || !config.UseRemoteSwitch) return true;
+            bool useMetica;
+            string reported;
+            if (config == null || !config.UseRemoteSwitch)
+            {
+                useMetica = true;
+                reported = Metica;
+            }
+            else
+            {
+                reported = MainAdNetwork;
+                useMetica = reported == Unassigned ? config.DefaultUseMetica : reported == Metica;
+            }
 
-            return HasStoredValue ? Stored(config.DefaultUseMetica) : config.DefaultUseMetica;
+            // Wire MeticaAdsHooks.OnEvent before ads start (BeforeSceneLoad), or this one is missed.
+            if (!_reported && MeticaAdsHooks.OnEvent != null)
+            {
+                _reported = true;
+                MeticaAdsHooks.ReportEvent("GameData", new Dictionary<string, object> { { "MainAdNetwork", reported } });
+            }
+
+            return useMetica;
         }
-
-        private static bool Stored(bool fallback) => PlayerPrefs.GetInt(Key, fallback ? 1 : 0) == 1;
     }
 }

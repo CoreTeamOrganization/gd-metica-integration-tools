@@ -430,3 +430,13 @@
   `RemoteConfigManager.CreateAndUpdateConfig`; custom SDK: copy the code), and send loadTime /
   perfStats from a function the developer picks (or copy the code). Everything goes through the
   genre asset's own calls (genre creator 2.0.0), which add the base fields.
+- MainAdNetwork instead of the UseMetica bool preference, for a fair Metica vs MAX split. GD SDK:
+  `MonetizationPreferences.MainAdNetwork` ("GDPrefs_MainAdNetwork": Unassigned / MAX / Metica, enum
+  `MainAdNetwork`), set by PersistRemoteToggles only when the fetched AdsSettings has UseMetica;
+  AdsManager reads it once at ads init (Metica only for Metica) and sends GameData { MainAdNetwork }.
+  Firebase stays `UseMetica: true / false`. Projects on the bool (this tool's earlier patch, GD SDK
+  6.2.1+'s own) are moved over by the patch step; every user starts Unassigned. GD SDK 6.0–6.2.0:
+  the Remote Metica switch writes the same, plus the GameData event. Standalone:
+  `MeticaRemoteConfig.MainAdNetwork` (new key, so users start Unassigned) and GameData through
+  `MeticaAdsHooks.OnEvent` once per session — rewrite the runtime to get it. Analysis notes in the
+  Ads README.

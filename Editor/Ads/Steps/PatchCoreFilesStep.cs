@@ -25,8 +25,11 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Why =>
             "Additions only: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
-            "AdRevenueInfo payload, the AdUnits Metica section, the UseMetica preference and remote flag, " +
-            "the AdsManager network switch, a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
+            "AdRevenueInfo payload, the AdUnits Metica section, the UseMetica remote flag and the " +
+            "MainAdNetwork preference it feeds (Unassigned / MAX / Metica — set only when the fetched AdsSettings " +
+            "has UseMetica, so users outside the test stay Unassigned; a project on the older UseMetica bool " +
+            "preference is moved over, every user starting Unassigned), the AdsManager network switch (reads " +
+            "MainAdNetwork once at ads init, Metica only for Metica, and reports it in the GameData event), a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
             "(\"applovin_max_sdk\" — without it Adjust drops Metica revenue), and on GD SDK 5.0–5.2 " +
             "MeticaConsentSettings in ConsentManager's fixed consent list. OnAdRevenuePaidEvent stays " +
             "invoked directly — an older " +
@@ -45,10 +48,21 @@ namespace GameDistrict.MeticaIntegrationTools
         private const string MarkerRevenueParam = "revenuePayload = null";
         private const string MarkerRevenueAssign = "RevenuePayload = revenuePayload";
         private const string MarkerAdUnits = "AdNetworkInfo Metica";
-        private const string MarkerPreference = "GDPrefs_UseMetica";
+        private const string MarkerPreference = "GDPrefs_MainAdNetwork";
+        private const string MarkerEnum = "enum MainAdNetwork";
         private const string MarkerRemoteFlag = "public bool UseMetica";
         private const string MarkerPersistHook = "PersistRemoteToggles;";
         private const string MarkerPersistMethod = "static void PersistRemoteToggles";
+        private const string MarkerPersistMainAdNetwork = "MonetizationPreferences.MainAdNetwork.Set(";
+
+        /// <summary>What AdsManager reads, once, at ads init.</summary>
+        internal const string MainAdNetworkRead = "MonetizationPreferences.MainAdNetwork.Get()";
+        private const string MarkerGameData = "{ \"MainAdNetwork\", mainAdNetwork }";
+
+        // The UseMetica bool preference: this tool's earlier patch, and GD SDK 6.2.1+'s own.
+        private const string OldPersist = "MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);";
+        internal const string OldAdsManagerRead = "var useMetica = MonetizationPreferences.UseMetica.Get();";
+        private const string OldGameData = "{ \"UseMetica\", useMetica }";
         private const string MarkerAdsManager = "new AdNetworkMetica()";
         /// <summary>The wrap an earlier version of this tool added; it must not be there.</summary>
         private const string WrappedRevenueDispatch = "ThreadDispatcher.Enqueue(() => OnAdRevenuePaidEvent?.Invoke(adRevenueInfo));";
@@ -117,10 +131,11 @@ namespace GameDistrict.MeticaIntegrationTools
                 (MeticaPaths.AdRevenueInfo, MarkerRevenueParam, "AdRevenueInfo constructor parameter"),
                 (MeticaPaths.AdRevenueInfo, MarkerRevenueAssign, "AdRevenueInfo payload assignment"),
                 (MeticaPaths.AdUnitsConfiguration, MarkerAdUnits, "AdUnitsConfiguration.Metica"),
-                (MeticaPaths.Preferences, MarkerPreference, "MonetizationPreferences.UseMetica"),
+                (MeticaPaths.Preferences, MarkerPreference, "MonetizationPreferences.MainAdNetwork"),
+                (MeticaPaths.Preferences, MarkerEnum, "MainAdNetwork enum (Unassigned / MAX / Metica)"),
                 (MeticaPaths.RemoteConfiguration, MarkerRemoteFlag, "RemoteConfiguration.UseMetica"),
                 (MeticaPaths.RemoteConfigManager, MarkerPersistHook, "PersistRemoteToggles subscription"),
-                (MeticaPaths.RemoteConfigManager, MarkerPersistMethod, "PersistRemoteToggles method"),
+                (MeticaPaths.RemoteConfigManager, MarkerPersistMainAdNetwork, "PersistRemoteToggles sets MainAdNetwork"),
                 (MeticaPaths.AdsManager, MarkerAdsManager, "AdsManager Metica network")
             };
 
@@ -131,6 +146,12 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (RevenueDispatchWrapped())
                 missing.Add("OnAdRevenuePaidEvent is inside ThreadDispatcher — it has to be invoked directly");
+
+            // The bool form, from this tool's earlier patch or GD SDK 6.2.1+.
+            if (SourcePatcher.Contains(MeticaPaths.AdsManager, OldAdsManagerRead))
+                missing.Add("AdsManager reads the UseMetica bool preference — it has to read MainAdNetwork");
+            if (SourcePatcher.Contains(MeticaPaths.AdsManager, OldGameData))
+                missing.Add("AdsManager's GameData event sends UseMetica — it has to send MainAdNetwork");
 
             if (ConsentListIsFixed && !SourcePatcher.Contains(MeticaPaths.ConsentManager, MarkerConsent))
                 missing.Add("ConsentManager's consent list has no MeticaConsentSettings");
@@ -146,7 +167,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             // One count up front; the list itself goes under "Why?" as the extra problems.
             // The direct-invoke rule and the Adjust ad source count as patches too.
-            result.Problem($"{missing.Count} of {checks.Length + 2 + (ConsentListIsFixed ? 1 : 0)} patches missing.");
+            result.Problem($"{missing.Count} of {checks.Length + 4 + (ConsentListIsFixed ? 1 : 0)} patches missing.");
             foreach (var what in missing)
                 result.Problem($"Missing: {what}");
 
@@ -267,9 +288,14 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>
-        /// Before v5.3.0 there is no RestorePurchaseOnce to sit after, and Preferences takes only
-        /// a key — its Get() already defaults a bool to false, so the one-argument form behaves
-        /// the same.
+        /// MainAdNetwork, a string preference: "Unassigned" until a fetch that carries UseMetica
+        /// lands, then "MAX" or "Metica"; the enum names the three. Before v5.3.0 there is no
+        /// RestorePurchaseOnce to sit after, and Preferences takes only a key — Get() then gives
+        /// null for an unset string, which AdsManager reads as Unassigned.
+        ///
+        /// <para>A UseMetica bool preference already there (this tool's earlier patch, or GD SDK
+        /// 6.2.1+'s own) stays declared, in case game code reads it, but nothing writes it any
+        /// more. Its value isn't carried over: every user starts Unassigned.</para>
         /// </summary>
         private static void PatchPreferences(List<string> log)
         {
@@ -277,15 +303,34 @@ namespace GameDistrict.MeticaIntegrationTools
             var modern = SourcePatcher.Contains(path, "RestorePurchaseOnce");
             var takesDefault = SourcePatcher.Contains(path, "public Preferences(string key, T defaultValue)");
 
-            Run(log, "MonetizationPreferences.UseMetica",
+            Run(log, "MonetizationPreferences.MainAdNetwork",
                 SourcePatcher.InsertAfterLine(path, MarkerPreference,
-                    modern ? "RestorePurchaseOnce" : "Preferences<int> SessionCount",
+                    SourcePatcher.Contains(path, "GDPrefs_UseMetica") ? "GDPrefs_UseMetica"
+                    : modern ? "RestorePurchaseOnce" : "Preferences<int> SessionCount",
                     takesDefault
-                        ? "    public static readonly Preferences<bool> UseMetica = new Preferences<bool>(\"GDPrefs_UseMetica\", false);"
-                        : "    public static readonly Preferences<bool> UseMetica = new Preferences<bool>(\"GDPrefs_UseMetica\");"),
+                        ? "    public static readonly Preferences<string> MainAdNetwork = new Preferences<string>(\"GDPrefs_MainAdNetwork\", global::MainAdNetwork.Unassigned.ToString());"
+                        : "    public static readonly Preferences<string> MainAdNetwork = new Preferences<string>(\"GDPrefs_MainAdNetwork\");"),
                 path,
-                "add a UseMetica preference keyed \"GDPrefs_UseMetica\"");
+                "add a MainAdNetwork string preference keyed \"GDPrefs_MainAdNetwork\"");
+
+            Run(log, "MainAdNetwork enum",
+                AppendToFile(path, MarkerEnum,
+                    "/// <summary>The network that serves this user's ads, from remote config — stored by name. Unassigned until a fetch carrying UseMetica lands.</summary>\n" +
+                    "public enum MainAdNetwork\n" +
+                    "{\n" +
+                    "    Unassigned,\n" +
+                    "    MAX,\n" +
+                    "    Metica\n" +
+                    "}"),
+                path, "add at the end of the file: public enum MainAdNetwork { Unassigned, MAX, Metica }");
         }
+
+        /// <summary>PersistRemoteToggles' lines after its early return; the first line goes where the indent already is.</summary>
+        private static string PersistBody(string indent) =>
+            "// Metica Integration Tools: MainAdNetwork, only when the fetched AdsSettings has UseMetica — users outside the test stay Unassigned.\n" +
+            $"{indent}var adsSettings = GetRemoteValue<string>(REMOTE_KEY).Value;\n" +
+            $"{indent}if (string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\")) return;\n" +
+            $"{indent}MonetizationPreferences.MainAdNetwork.Set((m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString());";
 
         private static void PatchRemoteConfig(List<string> log)
         {
@@ -297,33 +342,40 @@ namespace GameDistrict.MeticaIntegrationTools
             // OnFetchCompleteWithSuccess (bool, string) arrived in v5.3.6. Before that the only
             // event is OnFetchComplete, with no arguments — the same one CreateAndUpdateConfig
             // uses there, which does not know about success either.
-            var withSuccess = SourcePatcher.Contains(MeticaPaths.RemoteConfigManager, "OnFetchCompleteWithSuccess");
+            var path = MeticaPaths.RemoteConfigManager;
+            var withSuccess = SourcePatcher.Contains(path, "OnFetchCompleteWithSuccess");
 
             Run(log, "PersistRemoteToggles subscription",
-                SourcePatcher.InsertAfterLine(MeticaPaths.RemoteConfigManager, MarkerPersistHook,
+                SourcePatcher.InsertAfterLine(path, MarkerPersistHook,
                     "+= CreateAndUpdateConfig;",
                     withSuccess
                         ? "            OnFetchCompleteWithSuccess += PersistRemoteToggles;"
                         : "            OnFetchComplete += PersistRemoteToggles;"),
-                MeticaPaths.RemoteConfigManager,
+                path,
                 "subscribe PersistRemoteToggles alongside CreateAndUpdateConfig");
 
+            const string body = "            ";
             Run(log, "PersistRemoteToggles method",
-                SourcePatcher.InsertBeforeLine(MeticaPaths.RemoteConfigManager, MarkerPersistMethod,
+                SourcePatcher.InsertBeforeLine(path, MarkerPersistMethod,
                     "public static void AddOrUpdateValue",
-                    withSuccess
+                    (withSuccess
                         ? "        static void PersistRemoteToggles(bool success, string message)\n" +
                           "        {\n" +
-                          "            if (!success || m_Configuration == null) return;\n" +
-                          "            MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);\n" +
-                          "        }\n"
+                          "            if (!success || m_Configuration == null) return;\n"
                         : "        static void PersistRemoteToggles()\n" +
                           "        {\n" +
-                          "            if (m_Configuration == null) return;\n" +
-                          "            MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);\n" +
-                          "        }\n"),
-                MeticaPaths.RemoteConfigManager,
-                "add a PersistRemoteToggles method that copies UseMetica into MonetizationPreferences");
+                          "            if (m_Configuration == null) return;\n") +
+                    body + PersistBody(body) + "\n" +
+                    "        }\n"),
+                path,
+                "add a PersistRemoteToggles method that sets MonetizationPreferences.MainAdNetwork");
+
+            // Already there with the bool (an earlier patch, or GD SDK 6.2.1+): MainAdNetwork instead.
+            Run(log, "PersistRemoteToggles sets MainAdNetwork",
+                SourcePatcher.Contains(path, OldPersist)
+                    ? SourcePatcher.ReplaceFirst(path, MarkerPersistMainAdNetwork, OldPersist, Lines(path, PersistBody(body)))
+                    : SourcePatcher.Contains(path, MarkerPersistMainAdNetwork) ? O.AlreadyApplied : O.AnchorNotFound,
+                path, $"in PersistRemoteToggles, set MonetizationPreferences.MainAdNetwork instead of UseMetica");
         }
 
         private static void PatchAdsManager(List<string> log)
@@ -342,8 +394,8 @@ namespace GameDistrict.MeticaIntegrationTools
                     "                new MeticaMRec()\n" +
                     "            }, new AdNetworkMetica(), adUnits.Metica);\n" +
                     "\n" +
-                    "            var useMetica = MonetizationPreferences.UseMetica.Get();\n" +
-                    "            Message.LogWarning(Tag.SDK, \"Using \" + (useMetica ? \"Metica\" : \"AppLovin\") + \" as main AdNetwork\");\n" +
+                    "            " + ReadMainAdNetwork("            ") + "\n" +
+                    "            Message.LogWarning(Tag.SDK, \"Using \" + (useMetica ? \"Metica\" : \"AppLovin\") + \" as main AdNetwork (\" + mainAdNetwork + \")\");\n" +
                     "\n" +
                     "            adNetworks = useMetica\n" +
                     "                ? new AdNetworkController[] { metica, admob }\n" +
@@ -351,11 +403,47 @@ namespace GameDistrict.MeticaIntegrationTools
                     "\n" +
                     "            AnalyticsManager.SendEvent(\"GameData\", new Dictionary<string, object>\n" +
                     "            {\n" +
-                    "                { \"UseMetica\", useMetica }\n" +
+                    "                " + MarkerGameData + "\n" +
                     "            });"),
                 path,
                 "build an AdNetworkController for the four Metica units and pick it when " +
-                "MonetizationPreferences.UseMetica is set");
+                "MonetizationPreferences.MainAdNetwork is Metica");
+
+            // Reading the bool (an earlier patch, or GD SDK 6.2.1+): MainAdNetwork instead.
+            if (SourcePatcher.Contains(path, OldAdsManagerRead))
+                Run(log, "AdsManager reads MainAdNetwork",
+                    SourcePatcher.ReplaceFirst(path, MainAdNetworkRead, OldAdsManagerRead, Lines(path, ReadMainAdNetwork("            "))),
+                    path, $"replace {OldAdsManagerRead} with the MainAdNetwork read");
+            if (SourcePatcher.Contains(path, OldGameData))
+                Run(log, "GameData sends MainAdNetwork",
+                    SourcePatcher.ReplaceFirst(path, MarkerGameData, OldGameData, MarkerGameData),
+                    path, $"in the GameData event, replace {OldGameData} with {MarkerGameData}");
+        }
+
+        /// <summary>
+        /// The preference read, once, at ads init: Unassigned when never fetched (null before
+        /// v5.3.0), and Metica only for Metica — MAX and Unassigned both get AppLovin.
+        /// <c>useMetica</c> stays, so the rest of AdsManager reads as before. The first line
+        /// goes where the indent already is.
+        /// </summary>
+        internal static string ReadMainAdNetwork(string indent) =>
+            "var mainAdNetwork = MonetizationPreferences.MainAdNetwork.Get();\n" +
+            $"{indent}if (string.IsNullOrEmpty(mainAdNetwork)) mainAdNetwork = MainAdNetwork.Unassigned.ToString();\n" +
+            $"{indent}var useMetica = mainAdNetwork == MainAdNetwork.Metica.ToString();";
+
+        /// <summary><paramref name="text"/> with the line breaks of the file at <paramref name="path"/>.</summary>
+        internal static string Lines(string path, string text) =>
+            SourcePatcher.Exists(path) && SourcePatcher.ReadAll(path).Contains("\r\n") ? text.Replace("\n", "\r\n") : text;
+
+        /// <summary>Appends <paramref name="block"/> at the end of the file, unless <paramref name="marker"/> is there.</summary>
+        private static O AppendToFile(string path, string marker, string block)
+        {
+            if (!SourcePatcher.Exists(path)) return O.FileMissing;
+            var text = SourcePatcher.ReadAll(path);
+            if (text.Contains(marker)) return O.AlreadyApplied;
+
+            SourcePatcher.WriteWithBackup(path, text.TrimEnd() + Lines(path, "\n\n" + block + "\n"));
+            return O.Applied;
         }
 
         /// <summary>

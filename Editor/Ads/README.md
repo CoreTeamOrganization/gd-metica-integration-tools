@@ -109,15 +109,35 @@ stays off until the game calls `MeticaRemoteConfig.Apply(true)`. Feed it from wh
 config the game already has:
 
 ```csharp
-MeticaRemoteConfig.Apply(myRemoteConfig.GetBool("use_metica"));
+// Only when the fetched config has the key — users outside the test stay Unassigned.
+if (myRemoteConfig.Has("use_metica"))
+    MeticaRemoteConfig.Apply(myRemoteConfig.GetBool("use_metica"));
 ```
 
 The value applies from the **next** session — Metica initializes long before a remote fetch
-returns, so the flag is persisted and read at boot, the same trade the GD SDK makes with
-`MonetizationPreferences.UseMetica`. So a first install runs its first session without
-Metica. Unticking **Use Remote Switch** makes Metica always on.
+returns, so the network is persisted and read at boot, the same trade the GD SDK makes with
+`MonetizationPreferences.MainAdNetwork`. So a first install runs its first session without
+Metica. Unticking **Use Remote Switch** makes Metica always on. What is stored is the main ad
+network, `MeticaRemoteConfig.MainAdNetwork`: `Unassigned` until `Apply` is called, then `MAX` or
+`Metica`; at the first ads start of a session it is reported through `MeticaAdsHooks.OnEvent` as
+`GameData` { `MainAdNetwork` } — wire `OnEvent` before ads start.
 
 > **Warning:** if the game never calls `MeticaRemoteConfig.Apply`, Metica never runs.
+
+## Reading the Metica vs MAX test (MainAdNetwork)
+
+Every session sends `GameData` with `MainAdNetwork` — `Unassigned`, `MAX` or `Metica` — read once
+when ads start, so it always names the network that served that session. (GD SDK: AppMetrica, and
+Firebase from 5.3; standalone: `MeticaAdsHooks.OnEvent`.) The stored value changes only when a
+fetched `AdsSettings` carries `UseMetica`, and takes effect the session after.
+
+- **Compare per session, not per user**: a user's first session (or the one before a fetch lands)
+  is `Unassigned`, later ones `MAX` / `Metica`.
+- **Leave `Unassigned` out.** They are served by MAX, but counting them as MAX would grow the MAX
+  group with users the test never reached (no network, fetch too late, outside the exposure).
+- **Filter by install date** from the test start (e.g. installs 18 Oct – 30 Oct), as before.
+- Games on the earlier `UseMetica` bool start every user at `Unassigned` after the update — the
+  first sessions after it are not part of either group.
 
 **If the tool will not do it**, `Documentation/Metica-Standalone/` in the
 `Monetization-SDK-Unity` repo has the same files as ordinary `.cs` (outside `Assets/`, so
@@ -133,8 +153,8 @@ integration by hand.
 | 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. Any other Metica is removed first, wherever it is: another version in Assets, Metica v1 or 2.x from the Package Manager (`com.metica.unity` / `com.metica.sdk.unity`, also embedded), v1's `Assets/Metica/Data/MeticaSdkConfiguration.asset` — one dialog lists it all. `com.metica.analytics.abstractions` and this tool are never touched. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
 | 2 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
 | – | Game additions to carry over | **Only when the game added lines to its AppLovin units**; optional. Compares each AppLovin unit with the original release, method by method (comments, whitespace, usings and Metica v1 code ignored), and lists every added line with where it goes in the Metica unit: show → show, hidden → hidden, reward → reward, revenue → revenue, loaded / failed → loaded / failed, displayed → `OnAdShowSuccess` (the handler and its subscription are added). A tick box per line, unticked; log lines tagged. Lines using MAX's ad info are adapted — `arg2.NetworkName` → `meticaAd.networkName`, a whole `AdInfo` → `MeticaMaxAdInfo.From(meticaAd)` (written next to the units when needed) — and go in with a TODO. A stock line the game edited, a line in a method or block the Metica unit lacks, or one using MAX-only names, is listed to add by hand. Every carried line is marked; the Metica units are backed up; the AppLovin and AdMob units are untouched. Passes when the ticked lines are in and nothing but logs is left; skip it when Metica needs none |
-| 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` preference and remote flag, the `AdsManager` network switch; plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
-| 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.UseMetica` instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
+| 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` remote flag and the `MainAdNetwork` preference it feeds (`Unassigned` / `MAX` / `Metica` — set only when the fetched `AdsSettings` has `UseMetica`; a project on the older `UseMetica` bool preference, this tool's or GD SDK 6.2.1+'s own, is moved over with every user starting `Unassigned`), the `AdsManager` network switch (reads it once at ads init, Metica only for `Metica`, and sends `GameData` { `MainAdNetwork` }); plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
+| 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.MainAdNetwork` (and adds the `GameData` event) instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
 | 5 | Metica settings asset | Creates `MeticaSettings.asset` with the App ID and API Key typed into the step — Android, plus iOS when Enable iOS is on. Blank keys are a warning, never a block |
 | 6 | Metica ad units | Copies the Applovin App Key and ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values |
 | 7 | Remove the unused async init path | Only bites on a project that already had the async Metica integration: strips `IAsyncAdNetworkService` and the `AdNetworkController` overload built for it. Leaves them if `AdNetworkAdmob` / `AdNetworkAppLovin` still implement the interface |
@@ -196,7 +216,7 @@ Version differences the patches handle on their own:
 |---|---|---|
 | `PersistRemoteToggles` subscription | 5.3.6 | `OnFetchComplete` (no arguments) instead of `OnFetchCompleteWithSuccess` |
 | MeticaSettings resource path | 5.1.0 | anchored after `AppMetrica`, since there is no `InApps` |
-| `MonetizationPreferences.UseMetica` | 5.3.0 | anchored after `SessionCount`, one-argument `Preferences` constructor |
+| `MonetizationPreferences.MainAdNetwork` | 5.3.0 | anchored after `SessionCount`, one-argument `Preferences` constructor (an unset string reads as null, taken as `Unassigned`) |
 | `OnAdRevenuePaidEvent` invoked directly (an older `ThreadDispatcher` wrap is undone) | 5.3.0 | nothing to check — the event does not exist |
 | Remove SDK menu (Finish up) | 5.2.0 | skipped — `MonetizationRemover.cs` does not exist |
 

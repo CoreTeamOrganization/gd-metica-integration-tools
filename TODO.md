@@ -2,35 +2,7 @@
 
 ## To build
 
-### MainAdNetwork instead of the UseMetica bool (fair A/B split)
-
-Why: with a bool pref, a user whose Firebase fetch never landed (or landed after the
-AppMetrica event) counts as `false`, so the MAX group grows. A three-value pref leaves those
-users out of the comparison.
-
-- [ ] Pref `MonetizationPreferences.MainAdNetwork` (string, key `"GDPrefs_MainAdNetwork"`,
-      default `"Unassigned"`), values from `enum MainAdNetwork { Unassigned, MAX, Metica }`,
-      replacing the `UseMetica` bool pref. Firebase stays `UseMetica: true / false`.
-- [ ] `PersistRemoteToggles`: on a successful fetch, `true` → `Metica`, `false` → `MAX`. Only
-      when the fetched AdsSettings JSON has `"UseMetica"` — users outside the experiment stay
-      `Unassigned` (matters when exposure is below 100%).
-- [ ] AdsManager reads the pref once at ads init: that one value picks the network
-      (`Metica` → Metica; `MAX` or `Unassigned` → AppLovin) and is what's reported, so the
-      label always matches the network that served the session:
-
-      | When the fetch lands  | Pref at ads init                     | Reported this session | Network served this session |
-      |-----------------------|--------------------------------------|-----------------------|-----------------------------|
-      | Not fetched yet       | `Unassigned`                         | `Unassigned`          | MAX (fallback)              |
-      | Fetched after ads init| `Unassigned` (saved for next session)| `Unassigned`          | MAX (fallback)              |
-      | Fetched before ads init| `MAX` / `Metica`                    | `MAX` / `Metica`      | the same                    |
-
-- [ ] AppMetrica: `AnalyticsManager.SendEvent("GameData", { "MainAdNetwork": value })`,
-      replacing `{ "UseMetica": bool }`.
-- [ ] Tool: PatchCoreFilesStep / RemoteSwitchStep write this (and migrate projects already
-      patched with the bool); the standalone runtime (`MeticaRemoteConfig`) gets the same
-      three values, reported through `MeticaAdsHooks.OnEvent`.
-- [ ] Analysis note for the README: compare per session, exclude `Unassigned`, filter by
-      install date from the test start.
+Nothing queued.
 
 ## Test in Unity before `v1-migration` goes to `main`
 
@@ -64,6 +36,18 @@ cover all of the list below.
 - [ ] A game with `public abstract void RefershBanner();` in BannerAdUnit: the step shows the
       problem; running it adds the stub to MeticaBanner, it compiles, and the warning names the
       game's own RefershBanner to copy from. Unmodified GD SDK: nothing reported.
+
+### MainAdNetwork (GD SDK and standalone)
+
+- [ ] GD SDK 5.x, fresh: Patch the existing SDK files compiles; first session logs
+      "main AdNetwork (Unassigned)" and AppMetrica gets GameData { MainAdNetwork: Unassigned }.
+- [ ] Firebase AdsSettings with "UseMetica": true → next session Metica, GameData "Metica";
+      false → "MAX". AdsSettings without UseMetica → stays Unassigned.
+- [ ] A 5.x game patched by the earlier tool (UseMetica bool), and a GD SDK 6.2.1+ game: the step
+      shows the bool lines missing; Apply moves them; every user starts Unassigned.
+- [ ] GD SDK 6.0–6.2.0: Remote Metica switch writes the MainAdNetwork read and a GameData event.
+- [ ] Standalone: rewrite the runtime (Overwrite on); OnEvent gets GameData once per session;
+      MeticaRemoteConfig.Apply(true) → next session Metica.
 
 ### Game additions to carry over (GD SDK)
 
