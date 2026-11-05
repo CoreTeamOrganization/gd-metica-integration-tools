@@ -440,3 +440,6 @@
   `MeticaRemoteConfig.MainAdNetwork` (new key, so users start Unassigned) and GameData through
   `MeticaAdsHooks.OnEvent` once per session — rewrite the runtime to get it. Analysis notes in the
   Ads README.
+- Metica ad units: only Interstitial, Rewarded, Banner and MRec are copied from the Applovin section
+  into Metica's in AdUnitsSettings. App-Open (and any other format) is left out; one already there
+  from an earlier copy is reported, and the next copy takes it out.

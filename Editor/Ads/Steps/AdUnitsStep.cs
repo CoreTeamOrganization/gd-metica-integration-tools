@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -7,7 +8,9 @@ using UnityEngine;
 namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
-    /// Fills the Metica section of AdUnitsSettings by copying the Applovin section.
+    /// Fills the Metica section of AdUnitsSettings by copying the Applovin section — the
+    /// four formats Metica serves only. App-Open, and any other format a game added, stays
+    /// out of it.
     ///
     /// <para>That is not a shortcut: Metica mediates through MAX, so its App Key <em>is</em>
     /// the AppLovin MAX SDK key and its ad unit IDs <em>are</em> the MAX ad unit IDs. The
@@ -28,6 +31,9 @@ namespace GameDistrict.MeticaIntegrationTools
             (4, "MRec")
         };
 
+        /// <summary>The AdFormat names Metica serves — matched by name, so a game's own enum order doesn't matter.</summary>
+        private static readonly HashSet<string> MeticaFormats = new HashSet<string>(RequiredFormats.Select(f => f.name));
+
         public override string Title => "Metica ad units";
 
         public override string Summary => "Copy the Applovin App Key and ad units into Metica's section.";
@@ -35,14 +41,17 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Why =>
             "Metica mediates through MAX, so its App Key is the AppLovin MAX SDK key and its ad unit IDs " +
             "are the MAX ad unit IDs — copying the Applovin section is exactly right. Metica has no " +
-            "App-Open unit, so App-Open ads keep coming from Admob. The per-game Metica API Key and App ID " +
+            "App-Open unit, so App-Open ads keep coming from Admob: only Interstitial, Rewarded, Banner and MRec are " +
+            "copied — App-Open, or any other format the game added, is left out (and taken out if an earlier copy " +
+            "put it there). The per-game Metica API Key and App ID " +
             "are different values and live in MeticaSettings.";
 
         public override string ActionLabel => "Copy the Applovin section into Metica";
 
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.AdUnitsSettingsAsset };
 
-        public override string ReviewHint => "The Metica block should match the Applovin block. Nothing else moves.";
+        public override string ReviewHint =>
+            "The Metica block should match the Applovin block, minus App-Open and anything but the four formats. Nothing else moves.";
 
         public override VerifyResult Verify()
         {
@@ -92,9 +101,17 @@ namespace GameDistrict.MeticaIntegrationTools
                         empty.Add($"{formatName} {label}");
             }
 
+            // Formats Metica doesn't serve — App-Open, from a copy made before they were left out.
+            for (var i = 0; i < units.arraySize; i++)
+            {
+                var name = FormatName(units.GetArrayElementAtIndex(i));
+                if (name != null && !MeticaFormats.Contains(name))
+                    result.Problem($"Metica has a {name} unit — Metica doesn't serve {name}. Copy again to take it out.");
+            }
+
             if (empty.Count == 0)
             {
-                result.Note("App Key and 4 ad units set");
+                if (result.Problems.Count == 0) result.Note("App Key and 4 ad units set");
                 return result.Seal();
             }
 
@@ -126,11 +143,26 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var value = source.GetValue(asset);
 
-            // AdNetworkInfo holds its ad units by reference. Clone the array, or editing
-            // Metica's units would silently edit Applovin's too.
+            // AdNetworkInfo holds its ad units by reference: a new array, or editing Metica's
+            // units would silently edit Applovin's too. Only the formats Metica serves.
             var unitsField = value.GetType().GetField("AdUnitsInfo", flags);
+            var skipped = new List<string>();
             if (unitsField?.GetValue(value) is Array units)
-                unitsField.SetValue(value, units.Clone());
+            {
+                var elementType = units.GetType().GetElementType();
+                var adType = elementType?.GetField("AdType", flags);
+                var kept = new List<object>();
+                foreach (var unit in units)
+                {
+                    var format = adType?.GetValue(unit)?.ToString();
+                    if (format == null || MeticaFormats.Contains(format)) kept.Add(unit);
+                    else skipped.Add(format);
+                }
+
+                var copy = Array.CreateInstance(elementType, kept.Count);
+                for (var i = 0; i < kept.Count; i++) copy.SetValue(kept[i], i);
+                unitsField.SetValue(value, copy);
+            }
 
             target.SetValue(asset, value);
 
@@ -138,8 +170,10 @@ namespace GameDistrict.MeticaIntegrationTools
             AssetDatabase.SaveAssets();
 
             MeticaIntegrationLog.Record(Title,
-                "Copied the Applovin App Key and ad units into the Metica section. Metica does not serve " +
-                "App-Open, so that entry — if there was one — is simply ignored.");
+                "Copied the Applovin App Key and ad units into the Metica section" +
+                (skipped.Count > 0
+                    ? $" — left out {string.Join(", ", skipped.Distinct())}: Metica serves only Interstitial, Rewarded, Banner and MRec."
+                    : "."));
         }
 
         internal override IEnumerable<StepControl> Controls(VerifyResult result)
@@ -186,6 +220,15 @@ namespace GameDistrict.MeticaIntegrationTools
             var ios = entry.FindPropertyRelative("iOS");
             if (android != null) yield return ("Android ad unit ID", android.stringValue);
             if (ios != null) yield return ("iOS ad unit ID", ios.stringValue);
+        }
+
+        /// <summary>The entry's AdType by name, or null when it can't be read.</summary>
+        private static string FormatName(SerializedProperty entry)
+        {
+            var type = entry.FindPropertyRelative("AdType");
+            if (type == null || type.propertyType != SerializedPropertyType.Enum) return null;
+            var index = type.enumValueIndex;
+            return index >= 0 && index < type.enumNames.Length ? type.enumNames[index] : null;
         }
 
         private static SerializedProperty FindEntry(SerializedProperty units, int adFormatValue)
