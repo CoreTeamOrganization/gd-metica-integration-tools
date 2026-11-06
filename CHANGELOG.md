@@ -443,3 +443,9 @@
 - Metica ad units: only Interstitial, Rewarded, Banner and MRec are copied from the Applovin section
   into Metica's in AdUnitsSettings. App-Open (and any other format) is left out; one already there
   from an earlier copy is reported, and the next copy takes it out.
+- MainAdNetwork logs (GD SDK). AdsManager's "Using Metica / AppLovin as main AdNetwork" line now
+  ends with the stored value, e.g. `(Unassigned)` — GD 6.x had it without (5.x already had it).
+  PersistRemoteToggles logs `Remote Switch saved: <value> as pref`, or, for a fetch without
+  UseMetica, `Remote AdsSettings has no UseMetica, MainAdNetwork stays <value>`. Already-patched
+  projects get both from the patch step. Standalone: the "Remote switch stored" log no longer says
+  "It takes effect next session".

@@ -112,6 +112,11 @@ namespace GameDistrict.MeticaIntegrationTools
             var replaced = SourcePatcher.ReplaceEvery(path, legacy, "useMetica");
             if (replaced > 0) log.Add($"Replaced {replaced} use(s) of {legacy} with useMetica");
 
+            // The "which network" log, with the stored value now that there is one.
+            if (SourcePatcher.IsSatisfied(loadOutcome)
+                && PatchCoreFilesStep.LogMainAdNetwork(path) == SourcePatcher.Outcome.Applied)
+                log.Add("The \"as main AdNetwork\" log now shows MainAdNetwork");
+
             // And the field it pointed at is now dead weight: leaving it invites someone to
             // toggle it and wonder why nothing happens.
             var field = MeticaPaths.Combine(MeticaPaths.RuntimeScripts, "Configurations/SDKConfiguration.cs");

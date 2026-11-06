@@ -139,6 +139,11 @@ fetched `AdsSettings` carries `UseMetica`, and takes effect the session after.
 - Games on the earlier `UseMetica` bool start every user at `Unassigned` after the update — the
   first sessions after it are not part of either group.
 
+On device (GD SDK, tag SDK): `Using Metica as main AdNetwork (Metica)` once at ads init — or
+`Using AppLovin as main AdNetwork (MAX)` / `(Unassigned)`; and after each fetch either
+`Remote Switch saved: Metica as pref` or `Remote AdsSettings has no UseMetica, MainAdNetwork stays
+Unassigned`. Standalone: `[Metica] Remote switch stored: MainAdNetwork = Metica`.
+
 **If the tool will not do it**, `Documentation/Metica-Standalone/` in the
 `Monetization-SDK-Unity` repo has the same files as ordinary `.cs` (outside `Assets/`, so
 Unity ignores them until you copy them in) next to a runbook for doing the whole standalone

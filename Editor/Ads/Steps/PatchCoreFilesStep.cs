@@ -54,6 +54,16 @@ namespace GameDistrict.MeticaIntegrationTools
         private const string MarkerPersistHook = "PersistRemoteToggles;";
         private const string MarkerPersistMethod = "static void PersistRemoteToggles";
         private const string MarkerPersistMainAdNetwork = "MonetizationPreferences.MainAdNetwork.Set(";
+        private const string MarkerPersistSaveLog = "Remote Switch saved: ";
+        private const string MarkerPersistNoSwitchLog = "Remote AdsSettings has no UseMetica, MainAdNetwork stays ";
+
+        // PersistRemoteToggles' lines before the logs were added.
+        private const string OldPersistNoSwitch = "if (string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\")) return;";
+        private const string OldPersistSave = "MonetizationPreferences.MainAdNetwork.Set((m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString());";
+
+        // AdsManager's "which network" log: GD 6.x's stock form, and with the stored value.
+        private const string OldMainNetworkLog = " as main AdNetwork\");";
+        private const string MarkerMainNetworkLog = " as main AdNetwork (\" + mainAdNetwork + \")\");";
 
         /// <summary>What AdsManager reads, once, at ads init.</summary>
         internal const string MainAdNetworkRead = "MonetizationPreferences.MainAdNetwork.Get()";
@@ -152,6 +162,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 missing.Add("AdsManager reads the UseMetica bool preference — it has to read MainAdNetwork");
             if (SourcePatcher.Contains(MeticaPaths.AdsManager, OldGameData))
                 missing.Add("AdsManager's GameData event sends UseMetica — it has to send MainAdNetwork");
+
+            // Patched before the logs were added.
+            if (SourcePatcher.Contains(MeticaPaths.RemoteConfigManager, OldPersistNoSwitch)
+                || SourcePatcher.Contains(MeticaPaths.RemoteConfigManager, OldPersistSave))
+                missing.Add("PersistRemoteToggles doesn't log the remote switch");
+            if (SourcePatcher.Contains(MeticaPaths.AdsManager, MainAdNetworkRead)
+                && SourcePatcher.Contains(MeticaPaths.AdsManager, OldMainNetworkLog))
+                missing.Add("AdsManager's \"as main AdNetwork\" log doesn't show MainAdNetwork");
 
             if (ConsentListIsFixed && !SourcePatcher.Contains(MeticaPaths.ConsentManager, MarkerConsent))
                 missing.Add("ConsentManager's consent list has no MeticaConsentSettings");
@@ -329,8 +347,29 @@ namespace GameDistrict.MeticaIntegrationTools
         private static string PersistBody(string indent) =>
             "// Metica Integration Tools: MainAdNetwork, only when the fetched AdsSettings has UseMetica — users outside the test stay Unassigned.\n" +
             $"{indent}var adsSettings = GetRemoteValue<string>(REMOTE_KEY).Value;\n" +
-            $"{indent}if (string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\")) return;\n" +
-            $"{indent}MonetizationPreferences.MainAdNetwork.Set((m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString());";
+            $"{indent}" + PersistNoSwitch(indent) + "\n" +
+            $"{indent}" + PersistSave(indent);
+
+        /// <summary>No UseMetica in the fetched AdsSettings: log what stays stored, and stop.</summary>
+        private static string PersistNoSwitch(string indent) =>
+            "if (string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\"))\n" +
+            $"{indent}{{\n" +
+            $"{indent}    Message.Log(Tag.SDK, \"{MarkerPersistNoSwitchLog}\" + (MonetizationPreferences.MainAdNetwork.Get() ?? MainAdNetwork.Unassigned.ToString()));\n" +
+            $"{indent}    return;\n" +
+            $"{indent}}}";
+
+        /// <summary>Store MAX or Metica, and log it.</summary>
+        private static string PersistSave(string indent) =>
+            "var mainAdNetwork = (m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString();\n" +
+            $"{indent}MonetizationPreferences.MainAdNetwork.Set(mainAdNetwork);\n" +
+            $"{indent}Message.Log(Tag.SDK, \"{MarkerPersistSaveLog}\" + mainAdNetwork + \" as pref\");";
+
+        /// <summary>
+        /// The AdsManager line that says which network won, with the stored value added. GD 6.x
+        /// has the line without it; on 5.x the patch writes it with it.
+        /// </summary>
+        internal static O LogMainAdNetwork(string path) =>
+            SourcePatcher.ReplaceFirst(path, MarkerMainNetworkLog, OldMainNetworkLog, MarkerMainNetworkLog);
 
         private static void PatchRemoteConfig(List<string> log)
         {
@@ -376,6 +415,19 @@ namespace GameDistrict.MeticaIntegrationTools
                     ? SourcePatcher.ReplaceFirst(path, MarkerPersistMainAdNetwork, OldPersist, Lines(path, PersistBody(body)))
                     : SourcePatcher.Contains(path, MarkerPersistMainAdNetwork) ? O.AlreadyApplied : O.AnchorNotFound,
                 path, $"in PersistRemoteToggles, set MonetizationPreferences.MainAdNetwork instead of UseMetica");
+
+            // An earlier patch, without the logs: add them.
+            if (SourcePatcher.Contains(path, OldPersistNoSwitch))
+                Run(log, "PersistRemoteToggles logs a fetch without UseMetica",
+                    SourcePatcher.ReplaceFirst(path, MarkerPersistNoSwitchLog, OldPersistNoSwitch, Lines(path, PersistNoSwitch(body))),
+                    path, "log the stored MainAdNetwork before the early return");
+            if (SourcePatcher.Contains(path, OldPersistSave))
+                Run(log, "PersistRemoteToggles logs the saved MainAdNetwork",
+                    SourcePatcher.ReplaceFirst(path, MarkerPersistSaveLog, OldPersistSave, Lines(path, PersistSave(body))),
+                    path, $"log \"{MarkerPersistSaveLog}\" + mainAdNetwork + \" as pref\" after the Set");
+
+            if (SourcePatcher.Contains(path, "Message.Log("))
+                SourcePatcher.EnsureUsing(path, "using Monetization.Runtime.Logger;");
         }
 
         private static void PatchAdsManager(List<string> log)
@@ -418,6 +470,12 @@ namespace GameDistrict.MeticaIntegrationTools
                 Run(log, "GameData sends MainAdNetwork",
                     SourcePatcher.ReplaceFirst(path, MarkerGameData, OldGameData, MarkerGameData),
                     path, $"in the GameData event, replace {OldGameData} with {MarkerGameData}");
+
+            // GD 6.2.1+: its "which network" log, with the stored value. (6.0–6.2.0 get it
+            // from the remote switch step, which is where mainAdNetwork arrives there.)
+            if (SourcePatcher.Contains(path, MainAdNetworkRead) && SourcePatcher.Contains(path, OldMainNetworkLog))
+                Run(log, "AdsManager logs MainAdNetwork", LogMainAdNetwork(path),
+                    path, "end the \"as main AdNetwork\" log with (\" + mainAdNetwork + \")");
         }
 
         /// <summary>

@@ -64,7 +64,7 @@ namespace MeticaIntegration
             PlayerPrefs.Save();
 
             MeticaAdsLog.Log(changed
-                ? $"Remote switch stored: MainAdNetwork = {value}. It takes effect next session."
+                ? $"Remote switch stored: MainAdNetwork = {value}"
                 : $"Remote switch unchanged: MainAdNetwork = {value}");
         }
 
