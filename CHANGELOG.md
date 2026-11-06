@@ -449,3 +449,7 @@
   UseMetica, `Remote AdsSettings has no UseMetica, MainAdNetwork stays <value>`. Already-patched
   projects get both from the patch step. Standalone: the "Remote switch stored" log no longer says
   "It takes effect next session".
+- Removed the "Remove the unused async init path" step and the "Existing async init" (Callback /
+  Async) choice on the patch step. The async plumbing it deleted is unused but harmless, and on
+  GD SDK 6 the step could break the build (it did not check the SDK's own AdNetworkMetica).
+  Async plumbing a project has is now always left alone.

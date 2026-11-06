@@ -10,15 +10,11 @@ namespace GameDistrict.MeticaIntegrationTools
     /// </summary>
     internal static class MeticaPatchSet
     {
-        /// <param name="callback">
-        /// Whether the async init path is removed (<see cref="MeticaIntegrationMode.IsCallback"/>).
-        /// </param>
-        public static List<string> ApplyAll(bool callback)
+        public static List<string> ApplyAll()
         {
             var log = new List<string>();
             log.AddRange(PatchCoreFilesStep.ApplyPatches());
             log.AddRange(RemoteSwitchStep.ApplyPatches());
-            if (callback) log.AddRange(AsyncCleanupStep.ApplyPatches());
             log.AddRange(FinishUpStep.ApplyPatches());
             return log;
         }

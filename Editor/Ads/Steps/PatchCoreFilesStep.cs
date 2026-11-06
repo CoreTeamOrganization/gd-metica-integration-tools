@@ -247,30 +247,6 @@ namespace GameDistrict.MeticaIntegrationTools
             return log;
         }
 
-        /// <summary>
-        /// The async-init choice, only for a project that already has the async plumbing —
-        /// anywhere else there is no choice to make. Changing it clears every sign-off, since
-        /// the async cleanup step would then do something different from what was reviewed.
-        /// </summary>
-        internal override IEnumerable<StepControl> Controls(VerifyResult result)
-        {
-            if (!MeticaIntegrationMode.ProjectHasAsyncPath) yield break;
-
-            yield return new StepChoice("Existing async init", new[] { "Callback", "Async" },
-                MeticaIntegrationMode.IsCallback ? 0 : 1,
-                selected =>
-                {
-                    var mode = selected == 0 ? InitMode.Callback : InitMode.Async;
-                    if (mode == MeticaIntegrationMode.Current) return;
-
-                    MeticaIntegrationMode.Current = mode;
-                    MeticaIntegrationProgress.ClearAll(AdsFlow.AllStepIds.Distinct().ToArray());
-                },
-                MeticaIntegrationMode.IsCallback
-                    ? "Callback: the async cleanup step removes it."
-                    : "Async: the async cleanup step leaves it alone.");
-        }
-
         // ── Individual patches ─────────────────────────────────────────────────
 
         private static void PatchAdRevenueInfo(List<string> log)

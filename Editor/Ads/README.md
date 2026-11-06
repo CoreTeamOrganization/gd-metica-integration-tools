@@ -48,7 +48,7 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
 
 The tool looks for the GD Monetization SDK and picks a run from what it finds.
 
-**With the GD SDK** — nine steps, below (ten while AppLovin MAX is below 8.0.1). Metica is
+**With the GD SDK** — eight steps, below (nine while AppLovin MAX is below 8.0.1). Metica is
 wired into the ads layer that is already there.
 
 **Without it** — four steps (five with the MAX step). There is nothing to patch, no remote flag
@@ -162,9 +162,8 @@ integration by hand.
 | 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.MainAdNetwork` (and adds the `GameData` event) instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
 | 5 | Metica settings asset | Creates `MeticaSettings.asset` with the App ID and API Key typed into the step — Android, plus iOS when Enable iOS is on. Blank keys are a warning, never a block |
 | 6 | Metica ad units | Copies the Applovin App Key and the Interstitial, Rewarded, Banner and MRec ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values. App-Open, and any other format, is left out (Metica serves only those four); one an earlier copy put there is flagged and taken out on the next copy |
-| 7 | Remove the unused async init path | Only bites on a project that already had the async Metica integration: strips `IAsyncAdNetworkService` and the `AdNetworkController` overload built for it. Leaves them if `AdNetworkAdmob` / `AdNetworkAppLovin` still implement the interface |
-| 8 | Finish up | Teaches the Remove SDK menu about Metica. The Metica on/off switch stays on remote config — there is no local override |
-| 9 | Dependencies & troubleshooting | One optional checklist, see below. Never blocks |
+| 7 | Finish up | Teaches the Remove SDK menu about Metica. The Metica on/off switch stays on remote config — there is no local override |
+| 8 | Dependencies & troubleshooting | One optional checklist, see below. Never blocks |
 
 ### Dependencies & troubleshooting
 
@@ -250,8 +249,8 @@ the tool ever writes. `IAsyncAdNetworkService` only existed because Metica shipp
 
 | Project | Has Metica | Has async | Metica switch | What it needs |
 |---|---|---|---|---|
-| v5.0.0 – v5.5.0 | no | no | — | the full install (steps 1–4, 6–10) |
-| v6.0.0 – v6.2.0 | yes | yes | build-time | the remote switch (step 5) |
+| v5.0.0 – v5.5.0 | no | no | — | the full install (steps 1–3, 5–8) |
+| v6.0.0 – v6.2.0 | yes | yes | build-time | the remote switch (step 4) |
 | v6.2.1 – v6.2.4 | yes | yes | remote | nothing — every step verifies as already done |
 
 The tool's `MeticaInitializer` is for v5 only: the wrapper step skips it when the project
@@ -262,14 +261,8 @@ next to an async `AdNetworkMetica`, which it would shadow.
 Nothing routes on a version number. Each step reads the project and decides for itself, so a
 fork sitting between two releases still lands in the right place.
 
-So the only question about async is the reverse one — whether to convert plumbing a project
-already has. It is asked only where async exists, and it changes exactly one step:
-
-| Step 7 | Callback | Async |
-|---|---|---|
-| Async cleanup | removes `IAsyncAdNetworkService` and the `AdNetworkController` overload | leaves them alone |
-
-Everything else is identical either way.
+Async plumbing a project already has (`IAsyncAdNetworkService`, the `AdNetworkController`
+overload for it) is left alone: unused, but harmless.
 
 ## Ads only
 

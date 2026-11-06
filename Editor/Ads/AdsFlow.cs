@@ -31,7 +31,6 @@ namespace GameDistrict.MeticaIntegrationTools
             new RemoteSwitchStep(),
             new MeticaSettingsStep(),
             new AdUnitsStep(),
-            new AsyncCleanupStep(),
             new FinishUpStep(),
             new TroubleshootingStep()
         };

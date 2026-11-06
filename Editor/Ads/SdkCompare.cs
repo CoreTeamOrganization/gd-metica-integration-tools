@@ -97,7 +97,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var gdRoot = MeticaPaths.GDRoot;
             if (!details)
                 return Run(stock, MeticaPaths.ToAbsolute(gdRoot), gdRoot, ModifiedFileCheck.ChosenVersion,
-                    MeticaIntegrationMode.IsCallback, null, false);
+                    null, false);
 
             var templates = WrapperFilesStep.Files()
                 .Where(file => file.target.StartsWith(gdRoot + "/", StringComparison.Ordinal))
@@ -108,17 +108,16 @@ namespace GameDistrict.MeticaIntegrationTools
                         : ReadOrNull(MeticaPaths.ToAbsolute(MeticaPaths.TemplatesRoot + "/" + file.template)));
 
             return Run(stock, MeticaPaths.ToAbsolute(gdRoot), gdRoot, ModifiedFileCheck.ChosenVersion,
-                MeticaIntegrationMode.IsCallback, templates);
+                templates);
         }
 
         /// <param name="gdRootAbsolute">The GD SDK root on disk.</param>
         /// <param name="gdRoot">The same, project-relative ("Assets/GDMonetization").</param>
         /// <param name="chosenVersion">Used only when the declared Version matches no release.</param>
-        /// <param name="callback">Which async-init choice the tool's patches follow.</param>
         /// <param name="templates">The tool's wrapper templates by path relative to the GD SDK root.</param>
         /// <param name="details">False: count changed files only, see <see cref="Run(bool)"/>.</param>
         internal static SdkCompareResult Run(StockFiles stock, string gdRootAbsolute, string gdRoot,
-            string chosenVersion, bool callback, IReadOnlyDictionary<string, string> templates, bool details = true)
+            string chosenVersion, IReadOnlyDictionary<string, string> templates, bool details = true)
         {
             var result = new SdkCompareResult();
 
@@ -157,14 +156,14 @@ namespace GameDistrict.MeticaIntegrationTools
                 var originals = patched.ToDictionary(p => p, p => stock.Get(version, p));
                 var current = patched.ToDictionary(p => p, p => project.TryGetValue(p, out var file) ? ReadOrNull(file) : null);
 
-                tooled.UnionWith(ModifiedFileCheck.Classify(originals, current, callback)
+                tooled.UnionWith(ModifiedFileCheck.Classify(originals, current)
                     .Where(c => c.state == FileState.Patched)
                     .Select(c => c.path));
 
                 // Earlier versions of this tool added a using at the top instead of after the
                 // last one; the same edit in another using order is still the tool's.
-                var patchedOriginals = ModifiedFileCheck.PatchInMemory(originals, callback);
-                var patchedCurrent = ModifiedFileCheck.PatchInMemory(current, callback);
+                var patchedOriginals = ModifiedFileCheck.PatchInMemory(originals);
+                var patchedCurrent = ModifiedFileCheck.PatchInMemory(current);
                 foreach (var path in patched.Where(p => !tooled.Contains(p) && current[p] != null && patchedOriginals[p] != null))
                     if (SameIgnoringUsingOrder(current[path], patchedOriginals[path])
                         || SameIgnoringUsingOrder(patchedCurrent[path], patchedOriginals[path]))

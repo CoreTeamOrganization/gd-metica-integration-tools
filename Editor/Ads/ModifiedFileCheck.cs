@@ -125,7 +125,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var original = paths.ToDictionary(p => p, p => stock.Get(check.GdSdkVersion, p));
             var project = paths.ToDictionary(p => p, p => ReadProjectFile(MeticaPaths.Combine(MeticaPaths.GDRoot, p)));
 
-            foreach (var (path, state) in Classify(original, project, MeticaIntegrationMode.IsCallback))
+            foreach (var (path, state) in Classify(original, project))
                 check.Files.Add(new FileStatus { Path = MeticaPaths.Combine(MeticaPaths.GDRoot, path), State = state });
         }
 
@@ -170,10 +170,10 @@ namespace GameDistrict.MeticaIntegrationTools
         /// when it happens to contain this tool's marker strings.
         /// </summary>
         internal static List<(string path, FileState state)> Classify(
-            Dictionary<string, string> original, Dictionary<string, string> project, bool callback)
+            Dictionary<string, string> original, Dictionary<string, string> project)
         {
-            var patchedOriginal = PatchInMemory(original, callback);
-            var patchedProject = PatchInMemory(project, callback);
+            var patchedOriginal = PatchInMemory(original);
+            var patchedProject = PatchInMemory(project);
 
             var states = new List<(string, FileState)>();
             foreach (var path in original.Keys)
@@ -196,14 +196,14 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>Runs every patch on copies of <paramref name="files"/> in memory.</summary>
-        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files, bool callback)
+        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files)
         {
             var memory = files
                 .Where(file => file.Value != null)
                 .ToDictionary(file => MeticaPaths.Combine(MeticaPaths.GDRoot, file.Key), file => file.Value);
 
             using (SourcePatcher.InMemory(memory))
-                MeticaPatchSet.ApplyAll(callback);
+                MeticaPatchSet.ApplyAll();
 
             return files.Keys.ToDictionary(path => path,
                 path => memory.TryGetValue(MeticaPaths.Combine(MeticaPaths.GDRoot, path), out var text) ? text : null);

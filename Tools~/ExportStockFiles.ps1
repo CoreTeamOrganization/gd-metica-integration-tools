@@ -56,7 +56,7 @@ $Paths = @(
     'Runtime/Scripts/Analytics/Services/AdjustAnalyticsNetwork.cs',
     'Runtime/Scripts/Consent/Core/ConsentManager.cs',                # 5.0 - 5.2: Metica consent in the fixed list
     'Runtime/Scripts/Configurations/SDKConfiguration.cs',       # Remote Metica switch
-    'Runtime/Scripts/Ads/Core/IAdNetworkService.cs',            # Remove the unused async init path
+    'Runtime/Scripts/Ads/Core/IAdNetworkService.cs',            # not patched (the async cleanup step is gone); kept for Compare
     'Runtime/Scripts/Ads/Core/AdNetworkController.cs',
     'Editor/Scripts/MenuItems/MonetizationRemover.cs',          # Finish up
     'Runtime/Scripts/MonetizationInitializeOnLoad.cs'           # version source, never patched

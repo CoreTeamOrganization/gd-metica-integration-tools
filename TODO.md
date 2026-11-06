@@ -4,7 +4,7 @@
 
 Nothing queued.
 
-## Test in Unity before `v1-migration` goes to `main`
+## Test in Unity
 
 Everything below compiles and passes the scratch test harness, but has not been run in a
 real project yet.
@@ -48,6 +48,10 @@ cover all of the list below.
 - [ ] GD SDK 6.0–6.2.0: Remote Metica switch writes the MainAdNetwork read and a GameData event.
 - [ ] Standalone: rewrite the runtime (Overwrite on); OnEvent gets GameData once per session;
       MeticaRemoteConfig.Apply(true) → next session Metica.
+- [ ] Logs (GD SDK): after a fetch, "Remote Switch saved: Metica as pref" (or "Remote AdsSettings
+      has no UseMetica, MainAdNetwork stays Unassigned"); next launch "Using Metica as main
+      AdNetwork (Metica)". GD 6.x shows the value in brackets too. A project patched before the
+      logs: the patch step flags them missing and adds them.
 
 ### Game additions to carry over (GD SDK)
 
@@ -185,7 +189,4 @@ cover all of the list below.
 
 ## Known issues
 
-- [ ] GD SDK v6 + Callback mode: the "Remove the unused async init path" step removes
-      `IAsyncAdNetworkService` and the `AdNetworkController` async constructor while the
-      SDK's own `AdNetworkMetica` still uses them, so the build breaks. `StillImplementing()`
-      in `AsyncCleanupStep` checks Admob and AppLovin only, not Metica.
+None open.
