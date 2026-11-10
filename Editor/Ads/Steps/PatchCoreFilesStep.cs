@@ -163,12 +163,14 @@ namespace GameDistrict.MeticaIntegrationTools
             if (SourcePatcher.Contains(MeticaPaths.AdsManager, OldGameData))
                 missing.Add("AdsManager's GameData event sends UseMetica — it has to send MainAdNetwork");
 
-            // Patched before the logs were added.
-            if (SourcePatcher.Contains(MeticaPaths.RemoteConfigManager, OldPersistNoSwitch)
-                || SourcePatcher.Contains(MeticaPaths.RemoteConfigManager, OldPersistSave))
+            // Patched before the logs were added. An old line counts only while its log is
+            // absent — the same rule Apply uses, so a hand-added log next to it doesn't leave
+            // this step failing with nothing for Apply to do.
+            if (OldFormWithoutMarker(MeticaPaths.RemoteConfigManager, OldPersistNoSwitch, MarkerPersistNoSwitchLog)
+                || OldFormWithoutMarker(MeticaPaths.RemoteConfigManager, OldPersistSave, MarkerPersistSaveLog))
                 missing.Add("PersistRemoteToggles doesn't log the remote switch");
             if (SourcePatcher.Contains(MeticaPaths.AdsManager, MainAdNetworkRead)
-                && SourcePatcher.Contains(MeticaPaths.AdsManager, OldMainNetworkLog))
+                && OldFormWithoutMarker(MeticaPaths.AdsManager, OldMainNetworkLog, MarkerMainNetworkLog))
                 missing.Add("AdsManager's \"as main AdNetwork\" log doesn't show MainAdNetwork");
 
             if (ConsentListIsFixed && !SourcePatcher.Contains(MeticaPaths.ConsentManager, MarkerConsent))
@@ -191,6 +193,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
             return result.Seal();
         }
+
+        /// <summary>The old line is there and its replacement's marker isn't — what ReplaceFirst would still change.</summary>
+        private static bool OldFormWithoutMarker(string path, string oldForm, string marker) =>
+            SourcePatcher.Contains(path, oldForm) && !SourcePatcher.Contains(path, marker);
 
         public override void Apply()
         {

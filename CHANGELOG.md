@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Patch step no longer gets stuck on "PersistRemoteToggles doesn't log the remote switch" when
+  the old `MainAdNetwork.Set(...)` line already has a hand-added `Remote Switch saved: ` log
+  next to it. Verify now flags an old line only while its log marker is absent — the same rule
+  Apply uses — so it can't report a patch Apply has nothing to do for. Same fix for AdsManager's
+  "as main AdNetwork" log check.
 - Repo created. Ads Integration wizard moved in from `Monetization-SDK-Unity`'s
   `Assets/MeticaIntegrationTool/`, repackaged as `com.gamedistrict.metica-integration-tools`.
   - `MeticaPaths.ToolRoot` now resolves via `PackageManager.PackageInfo.FindForAssembly`
