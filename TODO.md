@@ -53,6 +53,41 @@ cover all of the list below.
       AdNetwork (Metica)". GD 6.x shows the value in brackets too. A project patched before the
       logs: the patch step flags them missing and adds them.
 
+### GD SDK 5.0.0-beta5 banner (IsTopPriority never set)
+
+- [ ] Copy of the beta5 game, already integrated: Wrapper files shows "MeticaBanner waits for
+      IsTopPriority…"; running it rewrites only the load handler to `AdsManager.ShowBanner()`;
+      compiles; Compare shows MeticaBanner as the tool's.
+- [ ] Fresh beta5 copy: Wrapper files writes the NoPriority banner straight away.
+- [ ] On device (beta5, Metica on): the banner shows on the first screen, AdMob's is hidden, the
+      PADDownloader banner canvas turns on; it stays shown across auto-refreshes and hides on
+      `AdsManager.HideBanner()`; with ads removed it never shows.
+- [ ] Stock 5.0.0 / 5.0.1: still the IsTopPriority banner, nothing flagged.
+
+### Metica ad units (GD SDK 6, per platform)
+
+- [ ] iOS build target, only iOS IDs in Applovin: Copy fills Metica's iOS key and IDs, leaves
+      Android as it was, and the step passes ("Checked for iOS").
+- [ ] Android target: the same for Android; switch target to iOS → the step asks for the iOS copy.
+
+### Integration review (optional last step, both runs)
+
+- [ ] Claude Code CLI installed: "Build bundle and run review" writes
+      `MeticaIntegrationReview/<time>/` (review.md, facts.json, sdk-diffs/, sdk-original/,
+      git-diff.patch, git-log.txt), installs `.claude/skills/metica-integration-review`, shows
+      "Claude is reviewing…", and turns into the findings when done (result.json read).
+- [ ] A recompile while it runs: the step still shows it running and picks up result.json after.
+- [ ] Blockers: each an open row (detail, fix, Open file); ticking Acknowledged passes the step
+      once all are ticked; warnings never block. Stop the review kills it.
+- [ ] No CLI: the step says so; Build bundle only copies the prompt; pasting it into Claude Code
+      in the project folder writes result.json and the step picks it up.
+- [ ] Compare with commit: a commit hash there is used as the git base; a bad one is reported.
+- [ ] Beta5 copy with the old banner: the review reports the IsTopPriority blocker; unknown build
+      warning shown on the step.
+- [ ] OneLineDraw (5.4.0), a 6.x game and a standalone game: reviews finish with sensible
+      findings (no false blockers on the tool's own patches).
+- [ ] macOS: the CLI is found from a Hub-started Unity (short PATH).
+
 ### Game additions to carry over (GD SDK)
 
 - [ ] OneLineDraw (GD 5.4.0): the step lists the AdsManager hooks, the Adjust

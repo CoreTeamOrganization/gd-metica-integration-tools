@@ -43,7 +43,9 @@ namespace GameDistrict.MeticaIntegrationTools
             "are the MAX ad unit IDs — copying the Applovin section is exactly right. Metica has no " +
             "App-Open unit, so App-Open ads keep coming from Admob: only Interstitial, Rewarded, Banner and MRec are " +
             "copied — App-Open, or any other format the game added, is left out (and taken out if an earlier copy " +
-            "put it there). The per-game Metica API Key and App ID " +
+            "put it there). On GD SDK 6, which keeps an Android and an iOS value for each, only the build " +
+            "target's platform is copied and checked; Metica's other-platform values are left as they are. " +
+            "The per-game Metica API Key and App ID " +
             "are different values and live in MeticaSettings.";
 
         public override string ActionLabel => "Copy the Applovin section into Metica";
@@ -51,7 +53,8 @@ namespace GameDistrict.MeticaIntegrationTools
         public override IEnumerable<string> TouchedPaths => new[] { MeticaPaths.AdUnitsSettingsAsset };
 
         public override string ReviewHint =>
-            "The Metica block should match the Applovin block, minus App-Open and anything but the four formats. Nothing else moves.";
+            "The Metica block should match the Applovin block, minus App-Open and anything but the four formats " +
+            "(GD SDK 6: the build target's platform only). Nothing else moves.";
 
         public override VerifyResult Verify()
         {
@@ -82,6 +85,7 @@ namespace GameDistrict.MeticaIntegrationTools
             }
 
             var empty = new List<string>();
+            if (IsPerPlatform(metica)) result.Note($"Checked for {Platform} (the build target)");
 
             foreach (var (label, value) in ReadAppKeys(metica))
                 if (string.IsNullOrWhiteSpace(value))
@@ -141,22 +145,40 @@ namespace GameDistrict.MeticaIntegrationTools
                 return;
             }
 
-            var value = source.GetValue(asset);
+            var value = source.GetValue(asset);   // AdNetworkInfo is a struct: a boxed copy
+            var previous = target.GetValue(asset);
+
+            // GD SDK 6 keeps an Android and an iOS value per field: only the build target's are
+            // copied, Metica's other-platform values stay as they were.
+            var other = OtherPlatform;
+            var networkType = value.GetType();
+            var otherKey = networkType.GetField(other + "AppKey", flags);
+            var perPlatform = otherKey != null && networkType.GetField(Platform + "AppKey", flags) != null;
+            if (perPlatform) otherKey.SetValue(value, otherKey.GetValue(previous));
 
             // AdNetworkInfo holds its ad units by reference: a new array, or editing Metica's
             // units would silently edit Applovin's too. Only the formats Metica serves.
-            var unitsField = value.GetType().GetField("AdUnitsInfo", flags);
+            var unitsField = networkType.GetField("AdUnitsInfo", flags);
+            var previousUnits = unitsField?.GetValue(previous) as Array;
             var skipped = new List<string>();
             if (unitsField?.GetValue(value) is Array units)
             {
                 var elementType = units.GetType().GetElementType();
                 var adType = elementType?.GetField("AdType", flags);
+                var otherId = perPlatform ? elementType?.GetField(other, flags) : null;
                 var kept = new List<object>();
-                foreach (var unit in units)
+                foreach (var unit in units)   // each a boxed copy of the AdUnitIdInfo struct
                 {
                     var format = adType?.GetValue(unit)?.ToString();
-                    if (format == null || MeticaFormats.Contains(format)) kept.Add(unit);
-                    else skipped.Add(format);
+                    if (format != null && !MeticaFormats.Contains(format))
+                    {
+                        skipped.Add(format);
+                        continue;
+                    }
+
+                    if (otherId != null)
+                        otherId.SetValue(unit, PreviousId(previousUnits, adType, otherId, format) ?? string.Empty);
+                    kept.Add(unit);
                 }
 
                 var copy = Array.CreateInstance(elementType, kept.Count);
@@ -171,6 +193,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             MeticaIntegrationLog.Record(Title,
                 "Copied the Applovin App Key and ad units into the Metica section" +
+                (perPlatform ? $" ({Platform} only — the build target)" : string.Empty) +
                 (skipped.Count > 0
                     ? $" — left out {string.Join(", ", skipped.Distinct())}: Metica serves only Interstitial, Rewarded, Banner and MRec."
                     : "."));
@@ -190,7 +213,30 @@ namespace GameDistrict.MeticaIntegrationTools
                 ? null
                 : AssetDatabase.LoadAssetAtPath<ScriptableObject>(MeticaPaths.AdUnitsSettingsAsset);
 
-        /// <summary>App key fields, whichever layout this SDK version uses.</summary>
+        /// <summary>
+        /// The build target's platform, as GD SDK 6 names its per-platform fields: "iOS" on
+        /// iOS, "Android" otherwise. Only its values are copied and checked.
+        /// </summary>
+        private static string Platform =>
+            EditorUserBuildSettings.activeBuildTarget == BuildTarget.iOS ? "iOS" : "Android";
+
+        private static string OtherPlatform => Platform == "iOS" ? "Android" : "iOS";
+
+        /// <summary>True for GD SDK 6's layout, an Android and an iOS value per field.</summary>
+        private static bool IsPerPlatform(SerializedProperty network) =>
+            network.FindPropertyRelative("AppKey") == null && network.FindPropertyRelative(Platform + "AppKey") != null;
+
+        /// <summary>The other-platform id Metica had for this format before the copy; null when none.</summary>
+        private static string PreviousId(Array previousUnits, FieldInfo adType, FieldInfo id, string format)
+        {
+            if (previousUnits == null || adType == null || format == null) return null;
+            foreach (var unit in previousUnits)
+                if (adType.GetValue(unit)?.ToString() == format)
+                    return id.GetValue(unit) as string;
+            return null;
+        }
+
+        /// <summary>App key fields, whichever layout this SDK version uses — the build target's only.</summary>
         private static IEnumerable<(string label, string value)> ReadAppKeys(SerializedProperty network)
         {
             var single = network.FindPropertyRelative("AppKey");
@@ -200,13 +246,11 @@ namespace GameDistrict.MeticaIntegrationTools
                 yield break;
             }
 
-            var android = network.FindPropertyRelative("AndroidAppKey");
-            var ios = network.FindPropertyRelative("iOSAppKey");
-            if (android != null) yield return ("Android App Key", android.stringValue);
-            if (ios != null) yield return ("iOS App Key", ios.stringValue);
+            var key = network.FindPropertyRelative(Platform + "AppKey");
+            if (key != null) yield return ($"{Platform} App Key", key.stringValue);
         }
 
-        /// <summary>Ad unit id fields, whichever layout this SDK version uses.</summary>
+        /// <summary>Ad unit id fields, whichever layout this SDK version uses — the build target's only.</summary>
         private static IEnumerable<(string label, string value)> ReadAdUnitIds(SerializedProperty entry)
         {
             var single = entry.FindPropertyRelative("AdUnitId");
@@ -216,10 +260,8 @@ namespace GameDistrict.MeticaIntegrationTools
                 yield break;
             }
 
-            var android = entry.FindPropertyRelative("Android");
-            var ios = entry.FindPropertyRelative("iOS");
-            if (android != null) yield return ("Android ad unit ID", android.stringValue);
-            if (ios != null) yield return ("iOS ad unit ID", ios.stringValue);
+            var id = entry.FindPropertyRelative(Platform);
+            if (id != null) yield return ($"{Platform} ad unit ID", id.stringValue);
         }
 
         /// <summary>The entry's AdType by name, or null when it can't be read.</summary>

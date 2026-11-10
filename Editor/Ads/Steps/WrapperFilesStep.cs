@@ -49,20 +49,13 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var ads = MeticaPaths.AdsMeticaFolder;
             var scripts = MeticaPaths.RuntimeScripts;
-            var baseClasses = MeticaPaths.Combine(scripts, "Ads/Abstraction");
-
-            var interstitialHasClose = SourcePatcher.Contains(
-                MeticaPaths.Combine(baseClasses, "IntersitialAdUnit.cs"), "Action onClosed");
-            var bannerBase = MeticaPaths.Combine(baseClasses, "BannerAdUnit.cs");
-            var bannerHasReposition = SourcePatcher.Contains(bannerBase, "RepositionBanner");
-            var bannerLoadIsPublic = SourcePatcher.Contains(bannerBase, "public abstract void LoadBanner");
-            var mrecHasReposition = SourcePatcher.Contains(
-                MeticaPaths.Combine(baseClasses, "MRecAdUnit.cs"), "RepositionMRec");
-            var consentCanAdd = SourcePatcher.Contains(MeticaPaths.ConsentManager, "AddAndUpdateConsentService");
-
-            // 5.0–5.2: Add(Action, float, bool ignoreTimeScale), no default — the units' retries differ.
-            var addNeedsTimeScale = SourcePatcher.Contains(
-                MeticaPaths.Combine(scripts, "DelayedAction/DelayedActionManager.cs"), "float delay, bool ignoreTimeScale)");
+            var shape = ReadShape();
+            var interstitialHasClose = shape["interstitialHasClose"];
+            var bannerHasReposition = shape["bannerHasReposition"];
+            var bannerLoadIsPublic = shape["bannerLoadIsPublic"];
+            var mrecHasReposition = shape["mrecHasReposition"];
+            var consentCanAdd = shape["consentCanAdd"];
+            var addNeedsTimeScale = shape["addNeedsTimeScale"];
 
             const string pre530 = "Pre530/";
 
@@ -74,7 +67,8 @@ namespace GameDistrict.MeticaIntegrationTools
                 MeticaPaths.Combine(ads, "MeticaRewarded.cs"));
             yield return (bannerHasReposition ? "MeticaBanner.cs.txt"
                     : bannerLoadIsPublic ? pre530 + "MeticaBanner.cs.txt"
-                    : pre530 + "MeticaBanner.Before502.cs.txt",
+                    : AdsManagerSetsTopPriority() ? pre530 + "MeticaBanner.Before502.cs.txt"
+                    : pre530 + BannerNoPriorityTemplate,
                 MeticaPaths.Combine(ads, "MeticaBanner.cs"));
             yield return (mrecHasReposition ? "MeticaMRec.cs.txt" : pre530 + "MeticaMRec.cs.txt",
                 MeticaPaths.Combine(ads, "MeticaMRec.cs"));
@@ -83,6 +77,104 @@ namespace GameDistrict.MeticaIntegrationTools
             yield return (consentCanAdd ? "MeticaConsentSettings.cs.txt" : pre530 + "MeticaConsentSettings.cs.txt",
                 MeticaPaths.Combine(scripts, "Consent/Services/MeticaConsentSettings.cs"));
         }
+
+        // ── 5.0.0 – 5.0.1 banner: who sets IsTopPriority ───────────────────────
+
+        private const string BannerNoPriorityTemplate = "MeticaBanner.Before502.NoPriority.cs.txt";
+
+        private static readonly Regex AssignsTopPriority = new Regex(@"\bIsTopPriority\s*=(?!=)");
+
+        /// <summary>The load handler of the 5.0.0 – 5.0.1 banner, as the tool first wrote it.</summary>
+        private const string BannerWaitsForPriority =
+            "                if (IsTopPriority)\n" +
+            "                {\n" +
+            "                    ShowBanner();\n" +
+            "                    AdsManager.HideAllBannersExcept(this);\n" +
+            "                }\n";
+
+        private const string BannerAsksAdsManagerMarker = "Nothing in this AdsManager sets IsTopPriority";
+
+        private const string BannerAsksAdsManager =
+            "                // Nothing in this AdsManager sets IsTopPriority (its ShowBanner shows the first\n" +
+            "                // network whose HasBanner() is true), so ask it again now this banner is ready:\n" +
+            "                // it picks, shows and hides the others the game's own way.\n" +
+            "                AdsManager.ShowBanner();\n";
+
+        /// <summary>
+        /// True when the project's AdsManager assigns IsTopPriority somewhere outside a comment,
+        /// as stock 5.0.0 – 5.0.1 does in ShowBanner. Builds that never do (5.0.0-beta5 commented
+        /// that loop out) get the banner that asks AdsManager.ShowBanner() once it has loaded —
+        /// one that waits for IsTopPriority never shows there. No AdsManager: assume stock.
+        /// </summary>
+        internal static bool AdsManagerSetsTopPriority()
+        {
+            var path = MeticaPaths.AdsManager;
+            if (!SourcePatcher.Exists(path)) return true;
+            return AssignsTopPriority.IsMatch(CSharpSource.Mask(SourcePatcher.ReadAll(path)));
+        }
+
+        private static string BannerTarget => MeticaPaths.Combine(MeticaPaths.AdsMeticaFolder, "MeticaBanner.cs");
+
+        /// <summary>
+        /// A MeticaBanner already written that waits for IsTopPriority, in a project whose
+        /// AdsManager never sets it: the banner loads but never shows.
+        /// </summary>
+        internal static bool BannerNeverShows() =>
+            MeticaPaths.RuntimeScripts != null
+            && SourcePatcher.Exists(BannerTarget)
+            && !AdsManagerSetsTopPriority()
+            && Lines(SourcePatcher.ReadAll(BannerTarget)).Contains(BannerWaitsForPriority);
+
+        private static string Lines(string text) => text.Replace("\r\n", "\n");
+
+        /// <summary>Swaps the IsTopPriority wait for the AdsManager.ShowBanner() call, line endings kept.</summary>
+        private static string FixBanner()
+        {
+            if (!BannerNeverShows()) return null;
+
+            var text = SourcePatcher.ReadAll(BannerTarget);
+            var newline = text.Contains("\r\n") ? "\r\n" : "\n";
+            var outcome = SourcePatcher.ReplaceFirst(BannerTarget, BannerAsksAdsManagerMarker,
+                BannerWaitsForPriority.Replace("\n", newline), BannerAsksAdsManager.Replace("\n", newline));
+
+            return outcome == SourcePatcher.Outcome.Applied
+                ? "MeticaBanner: shows once loaded through AdsManager.ShowBanner() — this AdsManager never sets IsTopPriority"
+                : "MeticaBanner waits for IsTopPriority, which this AdsManager never sets — change its load handler by hand " +
+                  "to call AdsManager.ShowBanner() instead.";
+        }
+
+        /// <summary>
+        /// What the templates are picked by: the shape of this project's GD SDK base classes,
+        /// read from the code. Also handed to the integration review as facts.
+        /// </summary>
+        internal static Dictionary<string, bool> ReadShape()
+        {
+            var scripts = MeticaPaths.RuntimeScripts;
+            var baseClasses = MeticaPaths.Combine(scripts, "Ads/Abstraction");
+            var bannerBase = MeticaPaths.Combine(baseClasses, "BannerAdUnit.cs");
+
+            return new Dictionary<string, bool>
+            {
+                ["interstitialHasClose"] = SourcePatcher.Contains(
+                    MeticaPaths.Combine(baseClasses, "IntersitialAdUnit.cs"), "Action onClosed"),
+                ["bannerHasReposition"] = SourcePatcher.Contains(bannerBase, "RepositionBanner"),
+                ["bannerLoadIsPublic"] = SourcePatcher.Contains(bannerBase, "public abstract void LoadBanner"),
+                ["mrecHasReposition"] = SourcePatcher.Contains(
+                    MeticaPaths.Combine(baseClasses, "MRecAdUnit.cs"), "RepositionMRec"),
+                ["consentCanAdd"] = SourcePatcher.Contains(MeticaPaths.ConsentManager, "AddAndUpdateConsentService"),
+
+                // 5.0–5.2: Add(Action, float, bool ignoreTimeScale), no default — the units' retries differ.
+                ["addNeedsTimeScale"] = SourcePatcher.Contains(
+                    MeticaPaths.Combine(scripts, "DelayedAction/DelayedActionManager.cs"), "float delay, bool ignoreTimeScale)"),
+
+                // 5.0.0–5.0.1 banner model: AdsManager.ShowBanner sets each unit's IsTopPriority.
+                ["bannerBaseHasIsTopPriority"] = SourcePatcher.Exists(bannerBase)
+                                                 && DeclaresTopPriority.IsMatch(CSharpSource.Mask(SourcePatcher.ReadAll(bannerBase))),
+                ["adsManagerSetsIsTopPriority"] = AdsManagerSetsTopPriority()
+            };
+        }
+
+        private static readonly Regex DeclaresTopPriority = new Regex(@"\bbool\s+IsTopPriority\b");
 
         public override IEnumerable<string> TouchedPaths => Files().Select(file => file.target);
 
@@ -159,6 +251,11 @@ namespace GameDistrict.MeticaIntegrationTools
             var skipped = InitializerSkipReason();
             if (skipped != null) result.Note(skipped);
 
+            if (BannerNeverShows())
+                result.Problem("MeticaBanner waits for IsTopPriority, but nothing in this project's AdsManager sets it, " +
+                               "so the Metica banner loads and never shows. Run the step to make it call " +
+                               "AdsManager.ShowBanner() once loaded.");
+
             // Members the game added to the SDK's base classes: missing ones stop the build,
             // stubbed ones compile but do nothing until filled in.
             var gaps = MissingMembers();
@@ -212,6 +309,13 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var skipped = InitializerSkipReason();
             if (skipped != null) MeticaIntegrationLog.Record(Title, skipped);
+
+            var bannerFix = FixBanner();
+            if (bannerFix != null)
+            {
+                MeticaIntegrationLog.Record(Title, bannerFix);
+                AssetDatabase.Refresh();
+            }
 
             AddStubs();
         }

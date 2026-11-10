@@ -179,6 +179,13 @@ namespace GameDistrict.MeticaIntegrationTools
             EditorApplication.update += tick;
         }
 
+        /// <summary>Re-verifies every open window on the next tick — for work that finishes outside a click.</summary>
+        internal static void RefreshOpenWindows()
+        {
+            foreach (var window in Resources.FindObjectsOfTypeAll<MeticaIntegrationWindow>())
+                if (window != null) window.QueueRefresh();
+        }
+
         /// <summary>Re-verifies on the next editor tick. Extra calls in the same frame fold into one.</summary>
         private void QueueRefresh()
         {
@@ -1128,6 +1135,11 @@ namespace GameDistrict.MeticaIntegrationTools
                     case StepCheck check:
                         buttons = null;
                         block.Add(CheckRow(check));
+                        break;
+
+                    case StepCaption caption:
+                        buttons = null;
+                        block.Add(Text(caption.Text, "mi-caption"));
                         break;
 
                     case StepChoice choice:

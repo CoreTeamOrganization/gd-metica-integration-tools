@@ -48,7 +48,7 @@ The wrapper sources are taken from GDSDK `v6.2.4`.
 
 The tool looks for the GD Monetization SDK and picks a run from what it finds.
 
-**With the GD SDK** — eight steps, below (nine while AppLovin MAX is below 8.0.1). Metica is
+**With the GD SDK** — nine steps, below (ten while AppLovin MAX is below 8.0.1). Metica is
 wired into the ads layer that is already there.
 
 **Without it** — four steps (five with the MAX step). There is nothing to patch, no remote flag
@@ -66,6 +66,7 @@ ads runtime to `Assets/MeticaAds/`:
 | 5 | Patch: start Metica or MAX | Optional. Pick the script and the function that start AppLovin MAX. Adds `public static bool UseMetica` to that class, set first thing from `MeticaRemoteConfig.ShouldInitialize(MeticaAdsConfig.Load())`; the function's MAX statements move to `<Function>_Max()`, its AdMob statements to `<Function>_AdMob()`, and in their place `if (UseMetica) { MeticaAdsManager.Initialize(); <Function>_AdMob(); } else { <Function>_Max(); <Function>_AdMob(); }`. Everything else stays. A local used only by MAX code moves with it; code inside `#if`, a non-void or coroutine function, or a local shared by both sides is left for a hand edit |
 | 6 – 9 | Patch: interstitial / rewarded / banner / MREC calls | Optional, one step per format. Lists every game function that makes the format's MAX calls (untick to leave one on MAX). Ready checks become `(UseMetica ? MeticaAdsManager.HasX(false) : MaxSdk.IsXReady(id))`; each run of MAX calls becomes `if (UseMetica) { Metica } else { MAX }` — the game's checks around it stay. Metica's close / reward callbacks call the game's own MAX `OnAdHiddenEvent` / `OnAdReceivedRewardEvent` handlers (rewarded: `ShowRewarded(placement, onComplete, onClosed)`). Create / destroy / position / refresh calls stay MAX-only. Load, display and click callbacks are not mapped. Patched functions with "Max" in the name are renamed with every call (`ShowMaxInterstitial` → `ShowInterstitial`), unless the name is taken, used by another class, or wired in a scene / prefab — then it is reported. Warns about flags like `isMaxInitialized` guarding a patched call |
 | 10 | Patch: Metica ad revenue | Optional. `MeticaAdsHooks.OnAdRevenue += OnMeticaAdRevenue;` right before `MeticaAdsManager.Initialize()`, and an empty `OnMeticaAdRevenue(AdRevenueInfo info)` with a TODO for the game's own reporting |
+| 11 | Integration review | Optional, as in the GD SDK run — see [Integration review](#integration-review) |
 
 The ad units, ad network and initializer are the GD SDK's, unchanged in everything that
 faces Metica. What they leaned on the SDK for — the ad unit base classes, the logger,
@@ -161,9 +162,10 @@ integration by hand.
 | 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the `UseMetica` remote flag and the `MainAdNetwork` preference it feeds (`Unassigned` / `MAX` / `Metica` — set only when the fetched `AdsSettings` has `UseMetica`; a project on the older `UseMetica` bool preference, this tool's or GD SDK 6.2.1+'s own, is moved over with every user starting `Unassigned`), the `AdsManager` network switch (reads it once at ads init, Metica only for `Metica`, and sends `GameData` { `MainAdNetwork` }); plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
 | 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.MainAdNetwork` (and adds the `GameData` event) instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
 | 5 | Metica settings asset | Creates `MeticaSettings.asset` with the App ID and API Key typed into the step — Android, plus iOS when Enable iOS is on. Blank keys are a warning, never a block |
-| 6 | Metica ad units | Copies the Applovin App Key and the Interstitial, Rewarded, Banner and MRec ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values. App-Open, and any other format, is left out (Metica serves only those four); one an earlier copy put there is flagged and taken out on the next copy |
+| 6 | Metica ad units | Copies the Applovin App Key and the Interstitial, Rewarded, Banner and MRec ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values. App-Open, and any other format, is left out (Metica serves only those four); one an earlier copy put there is flagged and taken out on the next copy. GD SDK 6 keeps Android and iOS values: only the build target's are copied and checked |
 | 7 | Finish up | Teaches the Remove SDK menu about Metica. The Metica on/off switch stays on remote config — there is no local override |
 | 8 | Dependencies & troubleshooting | One optional checklist, see below. Never blocks |
+| 9 | Integration review | Optional. Claude reviews every change the integration made, see [Integration review](#integration-review) |
 
 ### Dependencies & troubleshooting
 
@@ -184,6 +186,51 @@ An optional step has a **Skip this step** button that unlocks the next one witho
 verifying. The skip is remembered, reversible from the same button, and cleared by **Reset
 sign-offs**. A step you have finished or skipped stays open: expand it any time to see
 where it stands now and run its action again.
+
+## Integration review
+
+The steps check what they know to look for. A build can pass all of them and still not
+work: GD SDK 5.0.0-beta5 (a withdrawn release) had the `AdsManager` loop that sets
+`IsTopPriority` commented out, so a Metica banner waiting for it compiled, verified, and never
+showed. (The Wrapper files step now catches that one: see below.) The optional last step has
+Claude read everything instead.
+
+1. **Build bundle and run review** writes `MeticaIntegrationReview/<time>/` at the project root
+   (git-ignored, like the backups):
+   - `review.md` — the index: scenario, GD SDK version (an **unknown build** — beta, fork,
+     withdrawn release — is called out), the base-class shape that picked the templates, the
+     template each wrapper came from, every step's own check and the files it touches;
+   - `facts.json` — the same as data;
+   - `sdk-diffs/`, `sdk-original/` — every GD SDK file that differs from its original release,
+     marked "by tool" or not;
+   - `git-diff.patch`, `git-log.txt` — the working tree against the commit before the
+     integration (the tool's install commit, else the parent of the first commit that added a
+     tool-written file, or a commit typed into the step), C#, asmdefs and the ads settings assets;
+     untracked C# files are listed.
+2. It installs the `metica-integration-review` skill (shipped in `Skills~/`) into the game's
+   `.claude/skills/`, and runs `claude -p` in the project folder. Claude may read anything and
+   run `git diff / log / show / blame`, and write only inside `MeticaIntegrationReview/`.
+3. The skill picks the scenario file (5.0.0–5.0.1, 5.0.2–5.2, 5.3–5.5, 6.0–6.2.0, 6.2.1+,
+   standalone, unknown), traces each format end to end, finds the code that **writes** every
+   value the Metica code **reads** (nothing writes it → blocker), compares the Metica units with
+   the game's own AppLovin units, and writes `result.json` (blockers, warnings, info, each with
+   file:line, evidence and fix).
+4. The step lists the findings. It passes when there are no blockers, or each one is ticked
+   **Acknowledged** (kept per bundle). Without the CLI, **Build bundle only** copies the prompt
+   to paste into Claude Code in the project folder; the step picks up `result.json` the same way.
+
+The run is a separate process: it survives a recompile, and **Stop the review** ends it.
+
+### The 5.0.0 – 5.0.1 banner without IsTopPriority
+
+`Pre530/MeticaBanner.Before502.cs.txt` shows on load only `if (IsTopPriority)`, which stock
+5.0.0 – 5.0.1 set in `AdsManager.ShowBanner`. When nothing in the project's `AdsManager`
+assigns `IsTopPriority` outside comments, the step writes
+`Pre530/MeticaBanner.Before502.NoPriority.cs.txt` instead: on load, if the banner is wanted, it
+calls `AdsManager.ShowBanner()`, so the game's own `ShowBanner` picks it, shows it and hides the
+others (and runs whatever the game added there). An existing `MeticaBanner.cs` that still waits
+for `IsTopPriority` in such a project is a problem on the step; running it swaps just that
+block.
 
 ## Supported GD SDK versions
 
@@ -331,8 +378,12 @@ SdkCompare.cs                the whole GD SDK against its original release (Comp
 StockFiles.cs                reads Stock/ (the untouched GD SDK copies, every v5 and v6 release)
 Stock/                       exported by Tools~/ExportStockFiles.ps1, .txt so they never compile
 Steps/                       one file per step
+Review/                      the integration review: bundle, Claude Code run, result.json
 Templates/                   wrapper sources, .cs.txt so they never compile from here
-```
+```n
+The review skill lives at the package root, in `Skills~/metica-integration-review/` (`~` so
+Unity never imports it): `SKILL.md` plus `references/` — one file per scenario, a shared
+checklist and the `result.json` format.
 
 The window (`Editor/UI/`), the flow engine, `MeticaStep`, `MeticaPaths`, `SourcePatcher`,
 `TemplateWriter` and the log live in `Editor/Shared/` and `Editor/UI/`.

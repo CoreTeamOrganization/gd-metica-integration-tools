@@ -51,7 +51,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         internal static string ProjectDirOverride { get; set; }
 
-        private static string ProjectDir => ProjectDirOverride ?? Path.GetDirectoryName(Application.dataPath);
+        internal static string ProjectDir => ProjectDirOverride ?? Path.GetDirectoryName(Application.dataPath);
 
         /// <summary>
         /// The step's uncommitted changes. False, with the reason, when there is no git to
@@ -288,7 +288,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         // ── Process ────────────────────────────────────────────────────────────
 
-        private static (int exit, string output, string error, bool missing) Git(string workDir, string args, int timeoutMs)
+        internal static (int exit, string output, string error, bool missing) Git(string workDir, string args, int timeoutMs)
         {
             var info = new ProcessStartInfo("git", args)
             {

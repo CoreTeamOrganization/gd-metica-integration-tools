@@ -193,6 +193,17 @@ namespace GameDistrict.MeticaIntegrationTools
         }
     }
 
+    /// <summary>A paragraph of plain text, such as a review finding's explanation.</summary>
+    internal sealed class StepCaption : StepControl
+    {
+        public readonly string Text;
+
+        public StepCaption(string text)
+        {
+            Text = text;
+        }
+    }
+
     /// <summary>A labelled dropdown, with an optional one-line caption under it.</summary>
     internal sealed class StepChoice : StepControl
     {

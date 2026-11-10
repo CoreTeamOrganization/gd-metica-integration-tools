@@ -32,7 +32,8 @@ namespace GameDistrict.MeticaIntegrationTools
             new MeticaSettingsStep(),
             new AdUnitsStep(),
             new FinishUpStep(),
-            new TroubleshootingStep()
+            new TroubleshootingStep(),
+            new IntegrationReviewStep()
         };
 
         private static readonly MeticaStep[] StandaloneSteps =
@@ -50,8 +51,14 @@ namespace GameDistrict.MeticaIntegrationTools
             new RewardedPatchStep(),
             new BannerPatchStep(),
             new MRecPatchStep(),
-            new RevenueLoggingStep()
+            new RevenueLoggingStep(),
+
+            // Optional, after everything that changes code: reviews all of it.
+            new IntegrationReviewStep()
         };
+
+        /// <summary>The steps of the run this project gets — what the integration review lists.</summary>
+        internal static IReadOnlyList<MeticaStep> CurrentSteps => MeticaPaths.HasGDSdk ? GDSdkSteps : StandaloneSteps;
 
         /// <summary>Every Ads step id, both lists — what Reset sign-offs clears.</summary>
         public static IEnumerable<string> AllStepIds => GDSdkSteps.Concat(StandaloneSteps).Select(s => s.Id);

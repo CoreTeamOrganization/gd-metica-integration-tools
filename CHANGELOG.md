@@ -453,3 +453,22 @@
   Async) choice on the patch step. The async plumbing it deleted is unused but harmless, and on
   GD SDK 6 the step could break the build (it did not check the SDK's own AdNetworkMetica).
   Async plumbing a project has is now always left alone.
+- GD SDK 5.0.0 – 5.0.1 banner: when nothing in the project's AdsManager sets `IsTopPriority`
+  (outside comments) — GD SDK 5.0.0-beta5 commented that loop out — the Wrapper files step writes
+  `Pre530/MeticaBanner.Before502.NoPriority.cs.txt`, whose load handler calls
+  `AdsManager.ShowBanner()` instead of waiting for `IsTopPriority`. The banner that waited never
+  showed there. A MeticaBanner already written that way is flagged, and the step's action fixes it
+  in place (the rest of the file kept).
+- Metica ad units (GD SDK 6): only the build target's platform is copied and checked. An iOS
+  game no longer fails on empty Android IDs (and the other way round); Metica's other-platform
+  values are left as they were.
+- New optional last step in both Ads runs, **Integration review**: builds
+  `MeticaIntegrationReview/<time>/` (git-ignored) — scenario and GD SDK version (unknown builds
+  flagged), the code shape that picked the templates, each wrapper's template, every step's own
+  check, the GD SDK against its original release (diffs and originals), the git diff since before
+  the integration — installs the `metica-integration-review` skill (`Skills~/`) into the game's
+  `.claude/skills/`, and runs the Claude Code CLI on it (`claude -p`, read-only except the bundle
+  folder). The skill traces each format, finds a writer for every value the Metica code waits
+  for, compares with the game's AppLovin units, and writes `result.json`; the step lists the
+  findings and passes when no blocker is left unacknowledged. Copy prompt when the CLI isn't
+  installed.
