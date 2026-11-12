@@ -483,3 +483,6 @@
   `firebase_app_instance_id` (like the muid) and `UpdateFirebaseInfo` on the genre asset, so every
   Metica event carries `firebaseAppInstanceId`. GD SDK: `FirebaseAnalyticsNetwork.cs`; custom SDK: the
   file calling `FirebaseApp.CheckAndFixDependenciesAsync()`, or Copy the code.
+- Standalone: `MeticaRemoteConfig.ShouldInitialize` logs the saved pref once per session when ads initialize —
+  `MainAdNetwork = <Unassigned / MAX / Metica> from saved pref → <Metica / AppLovin> this session` (a warning, so it prints
+  with logging off). Rewrite the runtime to get it.

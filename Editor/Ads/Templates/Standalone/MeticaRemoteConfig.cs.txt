@@ -39,10 +39,15 @@ namespace MeticaIntegration
         private const string Key = "Metica_MainAdNetwork";
 
         private static bool _reported;
+        private static bool _logged;
 
         /// <summary>Once per session, also in the Editor with domain reload off.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetSession() => _reported = false;
+        private static void ResetSession()
+        {
+            _reported = false;
+            _logged = false;
+        }
 
         /// <summary>True once a remote value has ever been stored on this device.</summary>
         public static bool HasStoredValue => PlayerPrefs.HasKey(Key);
@@ -81,7 +86,8 @@ namespace MeticaIntegration
         /// true; with it on it is the network stored last session, or the config's default
         /// until a fetch has ever landed.
         ///
-        /// <para>The first call in a session also reports the network, through
+        /// <para>The first call in a session logs the saved pref ("MainAdNetwork = Metica from
+        /// saved pref → Metica this session") and reports the network, through
         /// <see cref="MeticaAdsHooks.OnEvent"/>: "GameData" with { "MainAdNetwork": "Unassigned" /
         /// "MAX" / "Metica" } — the same event the GD Monetization SDK sends.</para>
         /// </summary>
@@ -98,6 +104,17 @@ namespace MeticaIntegration
             {
                 reported = MainAdNetwork;
                 useMetica = reported == Unassigned ? config.DefaultUseMetica : reported == Metica;
+            }
+
+            // Once per session, at ads init: the saved pref as stored ("Unassigned", "MAX" or
+            // "Metica"), and the network it gives this session. A warning, so it prints with
+            // logging off too.
+            if (!_logged)
+            {
+                _logged = true;
+                MeticaAdsLog.LogWarning($"MainAdNetwork = {MainAdNetwork} from saved pref → " +
+                                        (useMetica ? "Metica" : "AppLovin") + " this session" +
+                                        (config == null || !config.UseRemoteSwitch ? " (remote switch off: Metica always)" : ""));
             }
 
             // Wire MeticaAdsHooks.OnEvent before ads start (BeforeSceneLoad), or this one is missed.

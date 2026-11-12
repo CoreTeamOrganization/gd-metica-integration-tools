@@ -143,7 +143,7 @@ fetched `AdsSettings` carries `UseMetica`, and takes effect the session after.
 On device (GD SDK, tag SDK): `Using Metica as main AdNetwork (Metica)` once at ads init — or
 `Using AppLovin as main AdNetwork (MAX)` / `(Unassigned)`; and after each fetch either
 `Remote Switch saved: Metica as pref` or `Remote AdsSettings has no UseMetica, MainAdNetwork stays
-Unassigned`. Standalone: `[Metica] Remote switch stored: MainAdNetwork = Metica`.
+Unassigned`. Standalone: `[Metica] MainAdNetwork = Metica from saved pref → Metica this session` once per session when ads initialize (or `Unassigned` / `MAX … → AppLovin`; with Use Remote Switch off it adds `(remote switch off: Metica always)`), and `[Metica] Remote switch stored: MainAdNetwork = Metica` when a fetch is applied.
 
 **If the tool will not do it**, `Documentation/Metica-Standalone/` in the
 `Monetization-SDK-Unity` repo has the same files as ordinary `.cs` (outside `Assets/`, so

@@ -46,6 +46,8 @@ cover all of the list below.
 - [ ] A 5.x game patched by the earlier tool (UseMetica bool), and a GD SDK 6.2.1+ game: the step
       shows the bool lines missing; Apply moves them; every user starts Unassigned.
 - [ ] GD SDK 6.0–6.2.0: Remote Metica switch writes the MainAdNetwork read and a GameData event.
+- [ ] Standalone: at ads init, once per session, `[Metica] MainAdNetwork = Metica from saved pref →
+      Metica this session` (`Unassigned` / `MAX` → AppLovin), from the patched init too.
 - [ ] Standalone: rewrite the runtime (Overwrite on); OnEvent gets GameData once per session;
       MeticaRemoteConfig.Apply(true) → next session Metica.
 - [ ] Logs (GD SDK): after a fetch, "Remote Switch saved: Metica as pref" (or "Remote AdsSettings
