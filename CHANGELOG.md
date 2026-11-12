@@ -477,3 +477,9 @@
   for, compares with the game's AppLovin units, and writes `result.json`; the step lists the
   findings and passes when no blocker is left unacknowledged. Copy prompt when the CLI isn't
   installed.
+- Analytics: genre creator v2.1.1 (2.1.0 added `UpdateFirebaseInfo`; an older one is flagged with Update).
+  New step **Send the Firebase instance ID**, as GD SDK 6.2.6 does: once Firebase's dependencies are
+  available, `GetAnalyticsInstanceIdAsync()` → Adjust global callback parameter
+  `firebase_app_instance_id` (like the muid) and `UpdateFirebaseInfo` on the genre asset, so every
+  Metica event carries `firebaseAppInstanceId`. GD SDK: `FirebaseAnalyticsNetwork.cs`; custom SDK: the
+  file calling `FirebaseApp.CheckAndFixDependenciesAsync()`, or Copy the code.

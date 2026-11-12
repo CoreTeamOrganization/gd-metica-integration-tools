@@ -196,13 +196,16 @@ namespace GameDistrict.MeticaIntegrationTools
     ///
     /// <para>That code has no public entry point other than its window, so it is called by name
     /// (reflection): GenreExcelParser.GetSheetNames / Parse and GenreAssetCreator.CreateFiles,
-    /// the same calls its window makes. Checked against 1.0.0 and 2.0.0. If a later version
+    /// the same calls its window makes. Checked against 1.0.0, 2.0.0 and 2.1.1. If a later version
     /// renames them, <see cref="ApiProblem"/> says so instead of guessing.</para>
     /// </summary>
     internal static class GenreCreatorPackage
     {
         public const string PackageName = "com.gamedistrict.metica-genre-creator";
-        public const string Version = "2.0.0";
+        public const string Version = "2.1.1";
+
+        /// <summary>The first version with UpdateFirebaseInfo (firebaseAppInstanceId on every event).</summary>
+        public const string MinimumVersion = "2.1.0";
         public const string GitUrl = "https://github.com/CoreTeamOrganization/gd-analytics-genre-creator.git#v" + Version;
 
         public const string RuntimeAssembly = "GameDistrict.MeticaAnalytics.Runtime";
@@ -291,6 +294,24 @@ namespace GameDistrict.MeticaIntegrationTools
                 throw e.InnerException;
             }
         }
+
+        /// <summary>
+        /// Installed, but older than <see cref="MinimumVersion"/>: its genre asset has no
+        /// UpdateFirebaseInfo, so events can't carry firebaseAppInstanceId. Read from the code,
+        /// so an embedded copy counts by what it has, not its version string.
+        /// </summary>
+        public static bool IsOutdated
+        {
+            get
+            {
+                var runtime = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == RuntimeAssembly);
+                var asset = runtime?.GetType("GameDistrict.MeticaAnalytics.GDMeticaAnalytics");
+                return asset != null && asset.GetMethod("UpdateFirebaseInfo", BindingFlags.Public | BindingFlags.Instance) == null;
+            }
+        }
+
+        /// <summary>An embedded copy in Packages/: Package Manager can't update it, it's replaced by hand.</summary>
+        public static bool Embedded => MeticaPaths.DirectoryExists("Packages/" + PackageName);
 
         private static Assembly EditorAssemblyLoaded() =>
             AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == EditorAssembly);

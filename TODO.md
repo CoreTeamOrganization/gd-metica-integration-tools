@@ -197,7 +197,7 @@ cover all of the list below.
 ### Analytics Integration (custom SDK game, and a GD SDK 5.x game)
 
 - [ ] Steps 1–3: Metica SDK (Android libraries resolved), abstractions (.tgz download →
-      Packages/ + manifest), genre creator #v2.0.0; the project compiles after each; each
+      Packages/ + manifest), genre creator #v2.1.1; the project compiles after each; each
       commits on its own.
 - [ ] "Pick .tgz instead…" works with a local copy.
 - [ ] Step 4: Create stays disabled until the name is valid and Excel chosen; name error under
@@ -220,6 +220,13 @@ cover all of the list below.
 - [ ] Step 5: GD SDK — AdjustAnalyticsNetwork.cs patched and compiles; custom SDK — the
       Adjust.InitSdk file found / picked; .asmdef reference added when inside one.
 - [ ] On device: Adjust callbacks carry `muid`; the genre asset gets the Adjust ID.
+- [ ] Genre creator 2.0.0 installed: step 3 says it's older than 2.1.0; Update to v2.1.1 moves the
+      manifest entry and it compiles.
+- [ ] Send the Firebase instance ID — GD SDK 5.0–5.2 (in `Initialize`) and 5.3+ (in
+      `CheckAndFixDependenciesAsync`), and a custom SDK game: the lines go first in the
+      dependencies-available block and compile; on device the log / Adjust callbacks carry
+      `firebase_app_instance_id` and Metica events carry `firebaseAppInstanceId` (empty only before
+      Firebase answers). A game without Firebase Analytics passes with a note.
 - [ ] Step 7 passes only with Gradle 8.6, JDK 17, Kotlin and AGP 8.4.0 set.
 
 ## Known issues

@@ -105,7 +105,10 @@ namespace GameDistrict.MeticaIntegrationTools
             "CoreTeamOrganization GitHub org). A copy already embedded in Packages/ counts. The tool hands the game " +
             "name and the Excel file to it in the next step.";
 
-        public override string ActionLabel => GenreCreatorPackage.Present ? null : Title;
+        public override string ActionLabel =>
+            !GenreCreatorPackage.Present ? Title
+            : GenreCreatorPackage.IsOutdated && !GenreCreatorPackage.Embedded ? $"Update to v{GenreCreatorPackage.Version}"
+            : null;
 
         /// <summary>
         /// ProjectSettings.asset too: once installed, the genre creator adds the METICA_ANALYTICS
@@ -134,6 +137,14 @@ namespace GameDistrict.MeticaIntegrationTools
             result.Note($"Installed {GenreCreatorPackage.InstalledVersion ?? "(version unknown)"}");
             var apiProblem = GenreCreatorPackage.ApiProblem;
             if (apiProblem != null) result.Problem(apiProblem);
+
+            // 2.1.0 added UpdateFirebaseInfo: every event carries firebaseAppInstanceId.
+            if (GenreCreatorPackage.IsOutdated)
+                result.Problem(GenreCreatorPackage.Embedded
+                    ? $"The embedded genre creator is older than {GenreCreatorPackage.MinimumVersion} (no UpdateFirebaseInfo) — " +
+                      $"replace Packages/{GenreCreatorPackage.PackageName} with v{GenreCreatorPackage.Version}."
+                    : $"Older than {GenreCreatorPackage.MinimumVersion} (no UpdateFirebaseInfo, so events can't carry " +
+                      $"firebaseAppInstanceId) — update to v{GenreCreatorPackage.Version}.");
 
             // The genre creator adds the define on the editor load after it arrives.
             if (!MeticaAnalyticsDefine.HasAndroid) result.Wait("Waiting for the genre creator to add METICA_ANALYTICS…");

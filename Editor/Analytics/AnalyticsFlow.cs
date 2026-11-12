@@ -30,6 +30,7 @@ namespace GameDistrict.MeticaIntegrationTools
             new AddGenreCreatorStep(),
             new GenreFilesStep(),
             new AdjustWiringStep(),
+            new FirebaseWiringStep(),
             new AnalyticsStartupStep(),
             new PerformanceEventsStep(),
             new AnalyticsBuildSetupStep()
