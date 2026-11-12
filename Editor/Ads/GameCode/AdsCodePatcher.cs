@@ -690,6 +690,8 @@ namespace GameDistrict.MeticaIntegrationTools
                 $"{memberIndent}private static void {RevenueHandler}(MeticaIntegration.AdRevenueInfo info)" + newline +
                 $"{memberIndent}{{" + newline +
                 $"{memberIndent}{unit}// TODO: report info.Revenue (USD), info.Format, info.NetworkName, info.AdUnitId, info.Placement." + newline +
+                $"{memberIndent}{unit}// info.Format is MeticaIntegration.AdFormat (Interstitial, Rewarded, Banner, MRec): switch on the enum." + newline +
+                $"{memberIndent}{unit}// Its ToString() is \"Interstitial\", not MAX's \"INTER\" / \"BANNER\" / \"REWARDED\", so string checks never match." + newline +
                 $"{memberIndent}}}";
 
             var patched = new StringBuilder(text);

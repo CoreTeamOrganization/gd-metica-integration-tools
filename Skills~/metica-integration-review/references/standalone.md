@@ -57,6 +57,11 @@ Metica runtime to `Assets/MeticaAds/` and (optionally) patched the game's own ad
    ad, pausing audio) that now has no Metica counterpart.
 8. `OnMeticaAdRevenue` is not empty — or the game reports revenue some other way; otherwise
    Metica revenue reaches no analytics (**blocker** if the MAX path reports revenue).
+   If it maps `info.Format`, it must use the enum (`AdFormat.Interstitial` / `Rewarded` /
+   `Banner` / `MRec`). Comparing `info.Format.ToString()` to MAX strings (`"INTER"`,
+   `"BANNER"`, `"REWARDED"`, `"APPOPEN"`) never matches, so every impression reaches Adjust,
+   AppMetrica and any other analytics with the fallback format (e.g. `Other`) → **warning**.
+   Check every analytics call in the handler, not just one. Metica has no app open format.
 9. `MeticaAdsHooks.OnEvent` is wired before ads start, if the game wants `GameData`.
 10. Consent: `HasUserConsent` reflects the game's consent flow.
 11. `MeticaAdsConfig` has the App ID / API Key and the MAX SDK key; the ad unit IDs match MAX's

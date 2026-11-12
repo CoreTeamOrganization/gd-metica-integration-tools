@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Standalone: the generated `OnMeticaAdRevenue` stub now says `info.Format` is the
+  `AdFormat` enum (Interstitial, Rewarded, Banner, MRec) and must not be compared to MAX's
+  `"INTER"` / `"BANNER"` strings; the integration review flags that mistake. A custom SDK game
+  logged every Metica impression to Adjust and AppMetrica with the wrong format this way.
 - Patch step no longer gets stuck on "PersistRemoteToggles doesn't log the remote switch" when
   the old `MainAdNetwork.Set(...)` line already has a hand-added `Remote Switch saved: ` log
   next to it. Verify now flags an old line only while its log marker is absent — the same rule
