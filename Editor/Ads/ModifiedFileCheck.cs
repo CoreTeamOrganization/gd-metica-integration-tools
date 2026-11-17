@@ -168,12 +168,15 @@ namespace GameDistrict.MeticaIntegrationTools
         /// of them, or some, since patching the project copy in memory then lands on the same
         /// result as patching the original. A file with any other change is "modified", even
         /// when it happens to contain this tool's marker strings.
+        ///
+        /// <para>The remote switch has two patched forms (<see cref="MeticaPatchSet.RemoteSwitchForms"/>);
+        /// a file is the tool's when it matches either, as it is or once patched to either.</para>
         /// </summary>
         internal static List<(string path, FileState state)> Classify(
             Dictionary<string, string> original, Dictionary<string, string> project)
         {
-            var patchedOriginal = PatchInMemory(original);
-            var patchedProject = PatchInMemory(project);
+            var patchedOriginals = PatchVariants(original);
+            var patchedProjects = PatchVariants(project);
 
             var states = new List<(string, FileState)>();
             foreach (var path in original.Keys)
@@ -185,8 +188,10 @@ namespace GameDistrict.MeticaIntegrationTools
                 if (projectText == null) state = stockText == null ? FileState.Stock : FileState.Missing;
                 else if (stockText == null) state = FileState.Modified;
                 else if (FileText.Same(projectText, stockText)) state = FileState.Stock;
-                else if (FileText.Same(projectText, patchedOriginal[path])
-                         || FileText.Same(patchedProject[path], patchedOriginal[path])) state = FileState.Patched;
+                else if (patchedOriginals.Any(patched =>
+                             FileText.Same(projectText, patched[path])
+                             || patchedProjects.Any(patchedProject => FileText.Same(patchedProject[path], patched[path]))))
+                    state = FileState.Patched;
                 else state = FileState.Modified;
 
                 states.Add((path, state));
@@ -195,15 +200,19 @@ namespace GameDistrict.MeticaIntegrationTools
             return states;
         }
 
+        /// <summary><paramref name="files"/> patched in memory, once per form of the remote switch.</summary>
+        internal static List<Dictionary<string, string>> PatchVariants(Dictionary<string, string> files) =>
+            MeticaPatchSet.RemoteSwitchForms.Select(form => PatchInMemory(files, form)).ToList();
+
         /// <summary>Runs every patch on copies of <paramref name="files"/> in memory.</summary>
-        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files)
+        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files, RemoteSwitchForm remoteSwitch)
         {
             var memory = files
                 .Where(file => file.Value != null)
                 .ToDictionary(file => MeticaPaths.Combine(MeticaPaths.GDRoot, file.Key), file => file.Value);
 
             using (SourcePatcher.InMemory(memory))
-                MeticaPatchSet.ApplyAll();
+                MeticaPatchSet.ApplyAll(remoteSwitch);
 
             return files.Keys.ToDictionary(path => path,
                 path => memory.TryGetValue(MeticaPaths.Combine(MeticaPaths.GDRoot, path), out var text) ? text : null);

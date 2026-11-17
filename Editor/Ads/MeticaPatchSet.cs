@@ -10,10 +10,17 @@ namespace GameDistrict.MeticaIntegrationTools
     /// </summary>
     internal static class MeticaPatchSet
     {
-        public static List<string> ApplyAll()
+        /// <summary>
+        /// The two remote switches a patched project can have — "MainAdNetwork" only, or with
+        /// the old "UseMetica" key kept. A file counts as the tool's when it matches either.
+        /// </summary>
+        public static readonly RemoteSwitchForm[] RemoteSwitchForms = { RemoteSwitchForm.New, RemoteSwitchForm.Both };
+
+        /// <param name="remoteSwitch">The remote switch to patch to: New or Both.</param>
+        public static List<string> ApplyAll(RemoteSwitchForm remoteSwitch)
         {
             var log = new List<string>();
-            log.AddRange(PatchCoreFilesStep.ApplyPatches());
+            log.AddRange(PatchCoreFilesStep.ApplyPatches(remoteSwitch));
             log.AddRange(RemoteSwitchStep.ApplyPatches());
             log.AddRange(FinishUpStep.ApplyPatches());
             return log;

@@ -11,8 +11,10 @@ and `MeticaSettings`. The switch, though, is **build-time**: a `UseMetica` flag 
 - **Remote Metica switch** step: points `AdsManager` at `MonetizationPreferences.MainAdNetwork`
   (read once at ads init, Metica only for `Metica`), adds the `GameData { MainAdNetwork }` event
   and the `(mainAdNetwork)` in the "as main AdNetwork" log, and drops the dead `SDKConfiguration`
-  field. The patch step adds `MainAdNetwork`, `RemoteConfiguration.UseMetica` and
-  `PersistRemoteToggles` as in 5.x.
+  field. The patch step adds the `MainAdNetwork` preference and the remote switch
+  (`PersistRemoteToggles` calling `PersistMainAdNetwork`, which reads `AdsSettings`'
+  `"MainAdNetwork"`) as in 5.x — see `gd-5.3-5.5.md`. These releases have no remote `UseMetica`
+  of their own, so a first-time game here is in the New state.
 - The tool's `MeticaInitializer` must **not** exist next to the SDK's async `AdNetworkMetica` —
   it would shadow `Analytics.MeticaInitializer` (6.2.x) or is unused (6.0.x initializes inline).
   The wrapper step skips it and fails if one is there.

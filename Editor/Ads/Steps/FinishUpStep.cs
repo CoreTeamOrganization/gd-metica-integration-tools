@@ -6,8 +6,8 @@ namespace GameDistrict.MeticaIntegrationTools
     /// <summary>
     /// The last mile: teach the Remove SDK menu about Metica. Whether Metica actually serves
     /// ads in production is a remote config decision, kept there deliberately — this step does
-    /// not expose a local UseMetica override, so there is nothing here to drift from what
-    /// remote config says.
+    /// not expose a local override of the main ad network, so there is nothing here to drift
+    /// from what remote config says.
     /// </summary>
     public sealed class FinishUpStep : MeticaStep
     {
@@ -18,9 +18,11 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Summary => "Add the Metica folders to the Remove SDK menu.";
 
         public override string Why =>
-            "So the GD SDK's own Remove SDK menu also deletes Metica. After this, set UseMetica in the " +
-            "Monetization Firebase Remote Config payload — ads start about 2s after launch, before the " +
-            "fetch lands, so a flipped value applies on the next launch (same as v6.2.4). Then build to a " +
+            "So the GD SDK's own Remove SDK menu also deletes Metica. After this, set \"MainAdNetwork\" in " +
+            "Firebase Remote Config's AdsSettings JSON to \"Metica\", \"MAX\" or \"Unassigned\" — e.g. " +
+            "{\"MainAdNetwork\":\"Metica\"}; paste it, a misspelt value is refused on the device (the old " +
+            "\"UseMetica\": true / false only works in a project whose patch step kept both). Ads start about 2s " +
+            "after launch, before the fetch lands, so a changed value applies on the next launch. Then build to a " +
             "device and look for the Metica tag: SDK version, \"Metica initialization completed\" and the " +
             "TRIAL / HOLDOUT user group.";
 

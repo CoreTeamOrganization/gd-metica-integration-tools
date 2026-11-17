@@ -15,10 +15,14 @@ Metica runtime to `Assets/MeticaAds/` and (optionally) patched the game's own ad
   thread.
 - `MeticaRemoteConfig` — the switch. Config asset `Resources/MeticaAdsConfig.asset`: **Use
   Remote Switch** on and **Default Use Metica** off by default, so Metica is off until the game
-  calls `MeticaRemoteConfig.Apply(true)`; the value applies from the **next** session.
-  `ShouldInitialize(config)` is what the patched init reads. Stored as `MainAdNetwork`
-  (`Unassigned` until `Apply`), reported once per session through `MeticaAdsHooks.OnEvent` as
-  `GameData { MainAdNetwork }`.
+  hands it its remote config's value; the value applies from the **next** session. Three ways in:
+  `Apply(string)` — `"Unassigned"`, `"MAX"` or `"Metica"`, any casing; anything else is refused
+  (returns false, error log), an empty value changes nothing; `ApplyAdsSettings(json)` — the same
+  out of an `AdsSettings` JSON (`{"MainAdNetwork":"Metica"}`), falling back to the earlier
+  `{"UseMetica":true}`; and `Apply(bool)` for a true / false flag. An older runtime has only
+  `Apply(bool)`. `ShouldInitialize(config)` is what the patched init reads. Stored as
+  `MainAdNetwork` (`Unassigned` until `Apply`, or when remote says so), reported once per session
+  through `MeticaAdsHooks.OnEvent` as `GameData { MainAdNetwork }`.
 - Stand-ins for the GD SDK pieces the units lean on (`AdUnitBase`, logger, `AdRevenueInfo`,
   `ThreadDispatcher` via `MeticaAdsRunner`).
 
@@ -38,9 +42,12 @@ Metica runtime to `Assets/MeticaAds/` and (optionally) patched the game's own ad
 
 ## What to check, hard
 
-1. **`MeticaRemoteConfig.Apply` is called somewhere that runs** — from the game's remote config,
-   only when the key exists. If nothing calls it and Use Remote Switch is on → **blocker**:
-   Metica never runs.
+1. **`MeticaRemoteConfig.Apply` / `ApplyAdsSettings` is called somewhere that runs** — from the
+   game's remote config, after a fetch. If nothing calls it and Use Remote Switch is on →
+   **blocker**: Metica never runs. With `Apply(bool)`, it must only be called when the key exists
+   (a `GetBool` default of false would assign every user to MAX). With `Apply(string)`, what is
+   passed must be the remote value itself — not a hard-coded word, not a bool's `ToString()`
+   (`"True"` is refused).
 2. `UseMetica` is set before any patched show/ready check can run, and nothing else writes it.
 3. With `UseMetica` true, **no** MAX init and no MAX show for the four formats; with it false, no
    Metica. Search game code for `MaxSdk.` calls the patches did not cover (other scripts,

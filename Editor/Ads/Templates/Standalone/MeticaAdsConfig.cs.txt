@@ -54,7 +54,7 @@ namespace MeticaIntegration
 
         [Header("Remote switch")]
         [Tooltip("Gate Metica on a value from your own remote config. On (the default): Metica stays " +
-                 "off until the backend turns it on through MeticaRemoteConfig.Apply(true). Unticked: " +
+                 "off until the backend turns it on through MeticaRemoteConfig.Apply(\"Metica\"). Unticked: " +
                  "Metica is always on, and MeticaRemoteConfig is never consulted.")]
         public bool UseRemoteSwitch = true;
 

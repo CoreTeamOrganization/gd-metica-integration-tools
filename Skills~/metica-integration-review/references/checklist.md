@@ -12,6 +12,11 @@ code**; answer it from the code, with file:line.
 - [ ] The switch is read once, at ads start, from a stored value; the remote value is stored
       only when the fetched config actually has the key (users outside the test stay
       Unassigned → MAX).
+- [ ] Only `Unassigned`, `MAX` or `Metica` can ever be stored: the remote value (the
+      `"MainAdNetwork"` string, or the earlier `"UseMetica"` bool) is checked against those three
+      before it is saved, and a wrong one is refused and logged — not stored as typed, and not
+      turned into MAX. Code that stores the raw remote string, or compares it with `==` to one
+      exact spelling, is a **warning**: a casing slip in Firebase silently serves MAX.
 - [ ] The stored value is written by the remote-config code that really runs in this game
       (the fetch callback the game uses, not one it replaced or never subscribes to).
 - [ ] `GameData` { `MainAdNetwork` } (or the game's equivalent) is sent once per session.

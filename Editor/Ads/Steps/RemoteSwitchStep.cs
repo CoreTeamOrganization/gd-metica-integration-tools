@@ -8,9 +8,10 @@ namespace GameDistrict.MeticaIntegrationTools
     /// Moves the Metica on/off switch from a build-time flag to remote config.
     ///
     /// <para>Only v6.0.0–v6.2.0 need this. Those releases read the flag straight off
-    /// SDKConfiguration, so turning Metica off meant shipping a build. v6.2.1 changed it to
-    /// MonetizationPreferences.UseMetica, fed from RemoteConfiguration — the patch step already adds
-    /// that plumbing, so all that is left here is to make AdsManager read it.</para>
+    /// SDKConfiguration, so turning Metica off meant shipping a build. v6.2.1 changed it to a
+    /// preference fed from remote config — the patch step already adds that plumbing
+    /// (MonetizationPreferences.MainAdNetwork, from AdsSettings' "MainAdNetwork"), so all that
+    /// is left here is to make AdsManager read it.</para>
     ///
     /// <para>On v5 (AdsManager was written fresh by the patch step) and on v6.2.1+ (already remote)
     /// there is nothing to do.</para>

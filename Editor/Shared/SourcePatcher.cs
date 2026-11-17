@@ -305,7 +305,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// Locates the opening brace at or after <paramref name="declaration"/> and its match.
         /// String literals are blanked first so a brace inside one cannot skew the count.
         /// </summary>
-        private static bool TryFindBlock(List<string> lines, int declaration, out int open, out int close)
+        internal static bool TryFindBlock(List<string> lines, int declaration, out int open, out int close)
         {
             open = close = -1;
 

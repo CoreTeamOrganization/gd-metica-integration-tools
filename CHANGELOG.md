@@ -490,3 +490,33 @@
 - Standalone: `MeticaRemoteConfig.ShouldInitialize` logs the saved pref once per session when ads initialize —
   `MainAdNetwork = <Unassigned / MAX / Metica> from saved pref → <Metica / AppLovin> this session` (a warning, so it prints
   with logging off). Rewrite the runtime to get it.
+- Remote switch: Firebase's `AdsSettings` now carries `"MainAdNetwork"`, a string with the same three
+  words the app stores and reports — `"Unassigned"`, `"MAX"`, `"Metica"` — instead of only the
+  `"UseMetica"` bool.
+  - GD SDK: `PersistRemoteToggles` calls the new `RemoteConfigManager.PersistMainAdNetwork`, which
+    reads the string from the fetched JSON (a fresh object per fetch: JsonUtility cannot read an enum
+    by name, and `m_Configuration` keeps the last fetch's value when a later one lacks the key),
+    matches it against the `MainAdNetwork` enum's names ignoring case and outer spaces, and saves the
+    enum's own spelling. `"Unassigned"` is saved too — it takes a device back out of the test, which
+    was not possible before. A value that is none of the three is refused: nothing saved, error log
+    `Remote MainAdNetwork "…" is not one of Unassigned, MAX, Metica, MainAdNetwork stays …`.
+  - **New, or keep both.** A first-time integration gets that code and nothing about `UseMetica`,
+    with no question (and no `UseMetica` field on `RemoteConfiguration`). A project that has the
+    old remote switch code — any earlier form of `PersistRemoteToggles`: the bool preference of GD
+    SDK 6.2.1+ and this tool's first patch, this tool's `UseMetica`-only lines with or without
+    logs — is asked in the patch step, never decided for: **Keep both** (one more line and a small
+    `EarlierUseMetica` method, so `"UseMetica": true / false` still counts when `MainAdNetwork`
+    isn't there — a game already live on it keeps working; with both keys `MainAdNetwork` wins) or
+    **Implement new** (`MainAdNetwork` only). Until one is picked, Apply patches does the rest and
+    leaves the remote switch alone. A project that kept both can move to Implement new later.
+    Lines a game added inside `PersistRemoteToggles` stay. Compare counts either form as the tool's.
+  - The "no switch" log is now `Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays …`;
+    Keep both logs `Remote AdsSettings has the old UseMetica key, not MainAdNetwork: …` when it
+    falls back.
+  - Standalone: `MeticaRemoteConfig.Apply(string)` (`"Unassigned"` / `"MAX"` / `"Metica"`, any casing;
+    returns false and logs an error for anything else; empty changes nothing) and
+    `ApplyAdsSettings(json)` for the same `AdsSettings` JSON, with the `UseMetica` fallback.
+    `Apply(bool)` stays. Rewrite the runtime to get them.
+  - Checked in Unity 2022.3 against JsonUtility: a build with the bool reads `"UseMetica":"Metica"`
+    as false and stores MAX — hence a new key, never a string under `UseMetica`; such builds ignore
+    `MainAdNetwork`, so both can sit in `AdsSettings` while they are live.

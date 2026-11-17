@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -11,20 +12,22 @@ namespace MeticaIntegration
     /// <para>The awkward part, and the reason this is not just a bool: remote config arrives
     /// well after the point where Metica has to be initialized. Waiting for the fetch would
     /// delay every ad in the session, and initializing first would make the switch useless.
-    /// So the value is <b>persisted</b>: <see cref="Apply"/> writes what your remote config
-    /// says, and the next session reads it at boot. The same trade the GD Monetization SDK
-    /// makes — a change takes effect on the session after the one that received it.</para>
+    /// So the value is <b>persisted</b>: <see cref="Apply(string)"/> writes what your remote
+    /// config says, and the next session reads it at boot. The same trade the GD Monetization
+    /// SDK makes — a change takes effect on the session after the one that received it.</para>
     ///
     /// <para>What is stored is the main ad network: <see cref="Unassigned"/> until a fetch
-    /// carrying the switch lands, then <see cref="Max"/> or <see cref="Metica"/>. Users still
-    /// Unassigned get the config's default network, but are reported as Unassigned, so a
-    /// Metica-vs-MAX comparison can leave them out instead of counting them as MAX.</para>
+    /// carrying the switch lands, then what it says — <see cref="Max"/>, <see cref="Metica"/>,
+    /// or Unassigned again. Remote config carries those same three words, and nothing else is
+    /// ever stored. Users still Unassigned get the config's default network, but are reported
+    /// as Unassigned, so a Metica-vs-MAX comparison can leave them out instead of counting
+    /// them as MAX.</para>
     ///
     /// <para>Metica is off by default: MeticaAdsConfig has <c>UseRemoteSwitch</c> on and
     /// <c>DefaultUseMetica</c> off, so Metica stays off until your remote config calls
-    /// <see cref="Apply"/> with true — and then from the next session. A game that never
-    /// calls Apply never runs Metica. Unticking <c>UseRemoteSwitch</c> skips all of this and
-    /// Metica always initializes.</para>
+    /// <see cref="Apply(string)"/> with "Metica" — and then from the next session. A game that
+    /// never calls Apply never runs Metica. Unticking <c>UseRemoteSwitch</c> skips all of this
+    /// and Metica always initializes.</para>
     /// </summary>
     public static class MeticaRemoteConfig
     {
@@ -32,9 +35,12 @@ namespace MeticaIntegration
         public const string Max = "MAX";
         public const string Metica = "Metica";
 
+        /// <summary>The three values remote config may carry — the only ones ever stored.</summary>
+        private static readonly string[] Names = { Unassigned, Max, Metica };
+
         /// <summary>
-        /// Holds "MAX" or "Metica". An earlier version stored a bool under "Metica_UseMetica";
-        /// that is left unread, so every user starts Unassigned.
+        /// Holds "Unassigned", "MAX" or "Metica". An earlier version stored a bool under
+        /// "Metica_UseMetica"; that is left unread, so every user starts Unassigned.
         /// </summary>
         private const string Key = "Metica_MainAdNetwork";
 
@@ -49,28 +55,110 @@ namespace MeticaIntegration
             _logged = false;
         }
 
-        /// <summary>True once a remote value has ever been stored on this device.</summary>
+        /// <summary>True once remote config has said anything on this device — an explicit Unassigned included.</summary>
         public static bool HasStoredValue => PlayerPrefs.HasKey(Key);
 
         /// <summary>"Unassigned", "MAX" or "Metica" — what this device has stored.</summary>
         public static string MainAdNetwork => HasStoredValue ? PlayerPrefs.GetString(Key, Unassigned) : Unassigned;
 
         /// <summary>
-        /// Records what your remote config says. Call it whenever a fetch completes — the
-        /// value is for the next session, not this one. Only call it when the fetched config
-        /// actually has the switch: a user outside the test should stay Unassigned.
+        /// Records what your remote config says the main ad network is: "Unassigned", "MAX" or
+        /// "Metica", in any casing. Call it whenever a fetch completes — the value is for the
+        /// next session, not this one.
+        ///
+        /// <para>"Unassigned" takes the device back out of the test. A value that is none of
+        /// the three is refused: nothing changes, and an error is logged. An empty value (your
+        /// remote config has no such key for this user) changes nothing either, so a user
+        /// outside the test stays as they are.</para>
         /// </summary>
-        public static void Apply(bool useMetica)
+        /// <returns>True when the value was one of the three and is now stored.</returns>
+        public static bool Apply(string mainAdNetwork)
         {
-            var value = useMetica ? Metica : Max;
+            if (string.IsNullOrWhiteSpace(mainAdNetwork))
+            {
+                MeticaAdsLog.Log($"Remote has no MainAdNetwork, MainAdNetwork stays {MainAdNetwork}");
+                return false;
+            }
+
+            var value = Array.Find(Names, name => string.Equals(name, mainAdNetwork.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (value == null)
+            {
+                MeticaAdsLog.LogError($"Remote MainAdNetwork \"{mainAdNetwork}\" is not one of {string.Join(", ", Names)}, " +
+                                      $"MainAdNetwork stays {MainAdNetwork}");
+                return false;
+            }
+
+            Store(value, null);
+            return true;
+        }
+
+        /// <summary>
+        /// The earlier switch, a bool: true stores "Metica", false stores "MAX" — for a remote
+        /// config that has a true / false flag. Only call it when the fetched config actually
+        /// has the flag: a user outside the test should stay Unassigned.
+        /// </summary>
+        public static void Apply(bool useMetica) => Store(useMetica ? Metica : Max, null);
+
+        /// <summary>
+        /// Reads the switch out of an AdsSettings JSON — the Firebase parameter GD SDK games
+        /// use, {"MainAdNetwork":"Metica"} — and applies it as <see cref="Apply(string)"/> does.
+        /// Without that key the earlier {"UseMetica":true} still counts; with neither, nothing
+        /// changes.
+        /// </summary>
+        /// <returns>True when a value was stored.</returns>
+        public static bool ApplyAdsSettings(string adsSettingsJson)
+        {
+            AdsSettings settings = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(adsSettingsJson)) settings = JsonUtility.FromJson<AdsSettings>(adsSettingsJson);
+            }
+            catch (ArgumentException)
+            {
+                MeticaAdsLog.LogError($"Remote AdsSettings is not valid JSON, MainAdNetwork stays {MainAdNetwork}");
+                return false;
+            }
+
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.MainAdNetwork))
+                return Apply(settings.MainAdNetwork);
+
+            // The earlier key. JsonUtility hands a JSON bool to a string field as "true" / "false".
+            var useMetica = settings?.UseMetica?.Trim().ToLowerInvariant();
+            if (useMetica == "true" || useMetica == "1" || useMetica == "false" || useMetica == "0")
+            {
+                Store(useMetica == "true" || useMetica == "1" ? Metica : Max, " (from the earlier UseMetica key)");
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(useMetica))
+            {
+                MeticaAdsLog.LogError($"Remote UseMetica \"{settings.UseMetica}\" is not true or false, " +
+                                      $"MainAdNetwork stays {MainAdNetwork}");
+                return false;
+            }
+
+            MeticaAdsLog.Log($"Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays {MainAdNetwork}");
+            return false;
+        }
+
+        /// <summary>The two fields of AdsSettings this reads; a fresh one per fetch, so a missing key reads as null.</summary>
+        [Serializable]
+        private sealed class AdsSettings
+        {
+            public string MainAdNetwork = null;
+            public string UseMetica = null;
+        }
+
+        private static void Store(string value, string note)
+        {
             var changed = MainAdNetwork != value;
 
             PlayerPrefs.SetString(Key, value);
             PlayerPrefs.Save();
 
-            MeticaAdsLog.Log(changed
+            MeticaAdsLog.Log((changed
                 ? $"Remote switch stored: MainAdNetwork = {value}"
-                : $"Remote switch unchanged: MainAdNetwork = {value}");
+                : $"Remote switch unchanged: MainAdNetwork = {value}") + note);
         }
 
         /// <summary>Forgets the stored value, so the next session is Unassigned again.</summary>

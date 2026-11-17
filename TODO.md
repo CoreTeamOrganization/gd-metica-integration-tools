@@ -41,19 +41,45 @@ cover all of the list below.
 
 - [ ] GD SDK 5.x, fresh: Patch the existing SDK files compiles; first session logs
       "main AdNetwork (Unassigned)" and AppMetrica gets GameData { MainAdNetwork: Unassigned }.
-- [ ] Firebase AdsSettings with "UseMetica": true → next session Metica, GameData "Metica";
-      false → "MAX". AdsSettings without UseMetica → stays Unassigned.
-- [ ] A 5.x game patched by the earlier tool (UseMetica bool), and a GD SDK 6.2.1+ game: the step
-      shows the bool lines missing; Apply moves them; every user starts Unassigned.
+- [ ] Firebase AdsSettings `{"MainAdNetwork":"Metica"}` → log "Remote Switch saved: Metica as
+      pref", next session Metica, GameData "Metica"; `"MAX"` → MAX; `"metica"` / `" MAX "` work too.
+- [ ] `{"MainAdNetwork":"Unassigned"}` on a device that was Metica → "Remote Switch saved:
+      Unassigned as pref"; next session AppLovin, GameData "Unassigned".
+- [ ] A wrong value (`"Mettica"`, `true`, `2`) → error log `Remote MainAdNetwork "Mettica" is not
+      one of Unassigned, MAX, Metica, MainAdNetwork stays …`, pref unchanged.
+- [ ] No MainAdNetwork in AdsSettings → "Remote AdsSettings has no MainAdNetwork, MainAdNetwork
+      stays …", pref unchanged — also right after a fetch that had it, in the same session.
+- [ ] A first-time game (GD SDK 5.x – 6.2.0): no question in the patch step; the code has
+      `PersistMainAdNetwork` and nothing about UseMetica (RemoteConfiguration has no UseMetica
+      field); `{"UseMetica":true}` in Firebase does nothing ("has no MainAdNetwork").
+- [ ] A game with old remote switch code — patched by the earlier tool (the game integrated on
+      2026-11-16 has the form with logs), or stock GD SDK 6.2.1+: the step says "Old remote switch
+      code found… Pick Keep both or Implement new", and shows the Remote switch dropdown with both
+      one-line summaries. Apply patches with nothing picked: everything else is patched,
+      RemoteConfigManager untouched, the step still asks.
+- [ ] Pick **Implement new** → Apply: PersistRemoteToggles is the two lines, PersistMainAdNetwork
+      added, no EarlierUseMetica; it compiles; lines the game added in PersistRemoteToggles stay;
+      the dropdown is gone; the step notes "Remote switch: MainAdNetwork only".
+- [ ] Pick **Keep both** → Apply: the same plus the `EarlierUseMetica` line and method; it
+      compiles; `{"UseMetica":true}` alone → "Remote AdsSettings has the old UseMetica key, not
+      MainAdNetwork: Metica" then "Remote Switch saved: Metica as pref"; with
+      `"MainAdNetwork":"MAX"` next to it → MAX. The dropdown stays, on Keep both; the step passes.
+- [ ] A Keep both project later: pick Implement new → the step shows "Implement new picked — the
+      old UseMetica key is still read"; Apply removes the line and the method; it compiles.
+- [ ] From the bool preference (GD SDK 6.2.1+, the first tool patch): every user starts Unassigned.
+- [ ] Compare with original GD SDK: RemoteConfigManager / RemoteConfiguration show as the tool's
+      on both forms.
 - [ ] GD SDK 6.0–6.2.0: Remote Metica switch writes the MainAdNetwork read and a GameData event.
 - [ ] Standalone: at ads init, once per session, `[Metica] MainAdNetwork = Metica from saved pref →
       Metica this session` (`Unassigned` / `MAX` → AppLovin), from the patched init too.
 - [ ] Standalone: rewrite the runtime (Overwrite on); OnEvent gets GameData once per session;
-      MeticaRemoteConfig.Apply(true) → next session Metica.
-- [ ] Logs (GD SDK): after a fetch, "Remote Switch saved: Metica as pref" (or "Remote AdsSettings
-      has no UseMetica, MainAdNetwork stays Unassigned"); next launch "Using Metica as main
-      AdNetwork (Metica)". GD 6.x shows the value in brackets too. A project patched before the
-      logs: the patch step flags them missing and adds them.
+      `MeticaRemoteConfig.Apply("Metica")` → next session Metica; `Apply("Unassigned")` → back to
+      Unassigned; `Apply("Mettica")` → false, error log, nothing stored; `Apply("")` → nothing.
+- [ ] Standalone: `MeticaRemoteConfig.ApplyAdsSettings(json)` with the Firebase AdsSettings value —
+      `{"MainAdNetwork":"Metica"}`, and the earlier `{"UseMetica":true}`; a game still calling
+      `Apply(true)` compiles and works as before.
+- [ ] Logs (GD SDK): next launch after a saved value, "Using Metica as main AdNetwork (Metica)".
+      GD 6.x shows the value in brackets too.
 
 ### GD SDK 5.0.0-beta5 banner (IsTopPriority never set)
 

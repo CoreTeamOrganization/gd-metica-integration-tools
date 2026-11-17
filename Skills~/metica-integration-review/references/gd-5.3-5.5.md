@@ -17,10 +17,29 @@ used MAX's ad info.
 - `AdRevenueInfo.RevenuePayload` (+ constructor parameter) — Metica's payload rides along.
 - `AdUnitsConfiguration.Metica` section.
 - `MonetizationPreferences.MainAdNetwork` (`Unassigned` / `MAX` / `Metica`) and the enum.
-- `RemoteConfiguration.UseMetica` (part of the `AdsSettings` JSON) and in `RemoteConfigManager`
-  a `PersistRemoteToggles` handler on the fetch-complete event: if the fetched `AdsSettings`
-  contains `"UseMetica"`, store `Metica` or `MAX` and log `Remote Switch saved: … as pref`;
-  otherwise log `… MainAdNetwork stays …` and store nothing.
+- The remote switch, in `RemoteConfigManager`: a `PersistRemoteToggles` handler on the
+  fetch-complete event calls `PersistMainAdNetwork(GetRemoteValue<string>(REMOTE_KEY).Value)`.
+  That reads `"MainAdNetwork"` out of the fetched `AdsSettings` JSON — a **string**, one of the
+  `MainAdNetwork` enum's names (`"Unassigned"`, `"MAX"`, `"Metica"`), matched ignoring case and
+  outer spaces — and stores the enum's own spelling, logging `Remote Switch saved: … as pref`.
+  - `"Unassigned"` is stored too: it takes the device back out of the test.
+  - A value that is none of the three is refused: nothing stored, error log
+    `Remote MainAdNetwork "…" is not one of Unassigned, MAX, Metica, MainAdNetwork stays …`.
+  - Without the key: nothing stored, log `Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays …`.
+  The project is in one of three states — say which in an **info** finding:
+  - **New**: only the above. `"UseMetica"` in Firebase does nothing here.
+  - **Keep both**: `PersistMainAdNetwork` has one more line,
+    `if (string.IsNullOrWhiteSpace(remote)) remote = EarlierUseMetica(adsSettings);`, and there is
+    an `EarlierUseMetica` method that reads `RemoteConfiguration.UseMetica` (only when the fetched
+    text has the key) and logs `Remote AdsSettings has the old UseMetica key, not MainAdNetwork: …`.
+    So `"UseMetica": true / false` still counts when `MainAdNetwork` isn't there; with both,
+    `MainAdNetwork` wins. `RemoteConfiguration` must have `public bool UseMetica` — without it this
+    doesn't compile.
+  - **Old**: `PersistRemoteToggles` has the lines inline and reads only `UseMetica` (or, earlier
+    still, `MonetizationPreferences.UseMetica.Set(...)`). Fine for a game whose Firebase uses
+    `UseMetica`, but it ignores `"MainAdNetwork"`. You can't see the game's Firebase, so report it
+    as a **warning**: this build only understands `"UseMetica": true / false`; the patch step
+    offers Keep both or Implement new to move it.
 - `AdsManager`: builds `metica = new AdNetworkController({MeticaInterstitial, MeticaRewarded,
   MeticaBanner, MeticaMRec}, new AdNetworkMetica(), adUnits.Metica)`, reads `MainAdNetwork` once,
   `useMetica = mainAdNetwork == "Metica"`, `adNetworks = useMetica ? {metica, admob} :

@@ -25,10 +25,16 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Why =>
             "Additions only: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
-            "AdRevenueInfo payload, the AdUnits Metica section, the UseMetica remote flag and the " +
-            "MainAdNetwork preference it feeds (Unassigned / MAX / Metica — set only when the fetched AdsSettings " +
-            "has UseMetica, so users outside the test stay Unassigned; a project on the older UseMetica bool " +
-            "preference is moved over, every user starting Unassigned), the AdsManager network switch (reads " +
+            "AdRevenueInfo payload, the AdUnits Metica section, the remote switch and the MainAdNetwork " +
+            "preference it feeds: Firebase's AdsSettings carries \"MainAdNetwork\": \"Unassigned\", \"MAX\" or " +
+            "\"Metica\" (any casing), saved after each fetch — \"Unassigned\" takes a device back out of the test, a " +
+            "value that is none of the three is refused with an error log, and without the key nothing is saved, " +
+            "so users outside the test stay as they are. A project that already has the old remote switch code " +
+            "(it reads only \"UseMetica\": this tool's earlier patch, or GD SDK 6.2.1+'s own) is asked here, never " +
+            "decided for — Keep both (MainAdNetwork, and the old UseMetica when it's missing: for a game already " +
+            "live on UseMetica) or Implement new (MainAdNetwork only); one that kept both can move to the new one " +
+            "later. A project on the older UseMetica bool preference has it moved to MainAdNetwork, every user " +
+            "starting Unassigned. Then the AdsManager network switch (reads " +
             "MainAdNetwork once at ads init, Metica only for Metica, and reports it in the GameData event), a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
             "(\"applovin_max_sdk\" — without it Adjust drops Metica revenue), and on GD SDK 5.0–5.2 " +
             "MeticaConsentSettings in ConsentManager's fixed consent list. OnAdRevenuePaidEvent stays " +
@@ -50,16 +56,6 @@ namespace GameDistrict.MeticaIntegrationTools
         private const string MarkerAdUnits = "AdNetworkInfo Metica";
         private const string MarkerPreference = "GDPrefs_MainAdNetwork";
         private const string MarkerEnum = "enum MainAdNetwork";
-        private const string MarkerRemoteFlag = "public bool UseMetica";
-        private const string MarkerPersistHook = "PersistRemoteToggles;";
-        private const string MarkerPersistMethod = "static void PersistRemoteToggles";
-        private const string MarkerPersistMainAdNetwork = "MonetizationPreferences.MainAdNetwork.Set(";
-        private const string MarkerPersistSaveLog = "Remote Switch saved: ";
-        private const string MarkerPersistNoSwitchLog = "Remote AdsSettings has no UseMetica, MainAdNetwork stays ";
-
-        // PersistRemoteToggles' lines before the logs were added.
-        private const string OldPersistNoSwitch = "if (string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\")) return;";
-        private const string OldPersistSave = "MonetizationPreferences.MainAdNetwork.Set((m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString());";
 
         // AdsManager's "which network" log: GD 6.x's stock form, and with the stored value.
         private const string OldMainNetworkLog = " as main AdNetwork\");";
@@ -70,7 +66,6 @@ namespace GameDistrict.MeticaIntegrationTools
         private const string MarkerGameData = "{ \"MainAdNetwork\", mainAdNetwork }";
 
         // The UseMetica bool preference: this tool's earlier patch, and GD SDK 6.2.1+'s own.
-        private const string OldPersist = "MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);";
         internal const string OldAdsManagerRead = "var useMetica = MonetizationPreferences.UseMetica.Get();";
         private const string OldGameData = "{ \"UseMetica\", useMetica }";
         private const string MarkerAdsManager = "new AdNetworkMetica()";
@@ -143,9 +138,6 @@ namespace GameDistrict.MeticaIntegrationTools
                 (MeticaPaths.AdUnitsConfiguration, MarkerAdUnits, "AdUnitsConfiguration.Metica"),
                 (MeticaPaths.Preferences, MarkerPreference, "MonetizationPreferences.MainAdNetwork"),
                 (MeticaPaths.Preferences, MarkerEnum, "MainAdNetwork enum (Unassigned / MAX / Metica)"),
-                (MeticaPaths.RemoteConfiguration, MarkerRemoteFlag, "RemoteConfiguration.UseMetica"),
-                (MeticaPaths.RemoteConfigManager, MarkerPersistHook, "PersistRemoteToggles subscription"),
-                (MeticaPaths.RemoteConfigManager, MarkerPersistMainAdNetwork, "PersistRemoteToggles sets MainAdNetwork"),
                 (MeticaPaths.AdsManager, MarkerAdsManager, "AdsManager Metica network")
             };
 
@@ -153,6 +145,12 @@ namespace GameDistrict.MeticaIntegrationTools
                 .Where(c => !SourcePatcher.Contains(c.path, c.marker))
                 .Select(c => c.what)
                 .ToList();
+
+            // The remote switch. Old code there: nothing is decided for the project — it has to
+            // be picked, Keep both or Implement new, and the pick only lives until it is applied.
+            var remoteSwitch = RemoteSwitchPatch.Form();
+            if (remoteSwitch != RemoteSwitchForm.Old && remoteSwitch != RemoteSwitchForm.Both) _remoteSwitch = null;
+            missing.AddRange(RemoteSwitchPatch.Missing(_remoteSwitch));
 
             if (RevenueDispatchWrapped())
                 missing.Add("OnAdRevenuePaidEvent is inside ThreadDispatcher — it has to be invoked directly");
@@ -163,12 +161,9 @@ namespace GameDistrict.MeticaIntegrationTools
             if (SourcePatcher.Contains(MeticaPaths.AdsManager, OldGameData))
                 missing.Add("AdsManager's GameData event sends UseMetica — it has to send MainAdNetwork");
 
-            // Patched before the logs were added. An old line counts only while its log is
-            // absent — the same rule Apply uses, so a hand-added log next to it doesn't leave
-            // this step failing with nothing for Apply to do.
-            if (OldFormWithoutMarker(MeticaPaths.RemoteConfigManager, OldPersistNoSwitch, MarkerPersistNoSwitchLog)
-                || OldFormWithoutMarker(MeticaPaths.RemoteConfigManager, OldPersistSave, MarkerPersistSaveLog))
-                missing.Add("PersistRemoteToggles doesn't log the remote switch");
+            // The stock "which network" log, without the stored value. It counts only while the
+            // new form is absent — the same rule Apply uses, so a hand-added log next to it
+            // doesn't leave this step failing with nothing for Apply to do.
             if (SourcePatcher.Contains(MeticaPaths.AdsManager, MainAdNetworkRead)
                 && OldFormWithoutMarker(MeticaPaths.AdsManager, OldMainNetworkLog, MarkerMainNetworkLog))
                 missing.Add("AdsManager's \"as main AdNetwork\" log doesn't show MainAdNetwork");
@@ -182,12 +177,22 @@ namespace GameDistrict.MeticaIntegrationTools
             if (missing.Count == 0)
             {
                 result.Note("All patches in place");
+                result.Note(remoteSwitch == RemoteSwitchForm.Both
+                    ? "Remote switch: MainAdNetwork, and the old UseMetica when it's missing"
+                    : "Remote switch: MainAdNetwork only");
                 return result.Seal();
             }
 
+            // Old remote switch code and nothing picked yet: that comes first, it is what the
+            // developer has to do before Apply can finish.
+            if (remoteSwitch == RemoteSwitchForm.Old && _remoteSwitch == null)
+                result.Problem($"Old remote switch code found — it reads only UseMetica. Pick {RemoteSwitchPatch.KeepBothLabel} " +
+                               $"or {RemoteSwitchPatch.NewLabel} below, then Apply patches.");
+
             // One count up front; the list itself goes under "Why?" as the extra problems.
-            // The direct-invoke rule and the Adjust ad source count as patches too.
-            result.Problem($"{missing.Count} of {checks.Length + 4 + (ConsentListIsFixed ? 1 : 0)} patches missing.");
+            // The direct-invoke rule and the Adjust ad source count as patches too, and the
+            // remote switch as three (the subscription, PersistRemoteToggles, PersistMainAdNetwork).
+            result.Problem($"{missing.Count} of {checks.Length + 4 + 3 + (ConsentListIsFixed ? 1 : 0)} patches missing.");
             foreach (var what in missing)
                 result.Problem($"Missing: {what}");
 
@@ -198,9 +203,41 @@ namespace GameDistrict.MeticaIntegrationTools
         private static bool OldFormWithoutMarker(string path, string oldForm, string marker) =>
             SourcePatcher.Contains(path, oldForm) && !SourcePatcher.Contains(path, marker);
 
+        // ── The remote switch: new, or keep both ───────────────────────────────
+
+        /// <summary>
+        /// What was picked for a project that has the old remote switch code: New or Both, or
+        /// null while nothing has been. Never decided from the code — only asked.
+        /// </summary>
+        private RemoteSwitchForm? _remoteSwitch;
+
+        /// <summary>
+        /// The two options, only where the old UseMetica code is: a project still on it has to
+        /// pick one, and one that kept both can still move to the new one. A project where the
+        /// switch was never integrated gets the new form with no question.
+        /// </summary>
+        internal override IEnumerable<StepControl> Controls(VerifyResult result)
+        {
+            var form = RemoteSwitchPatch.Form();
+            var caption = RemoteSwitchPatch.KeepBothSummary + "\n" + RemoteSwitchPatch.NewSummary;
+
+            if (form == RemoteSwitchForm.Old)
+                yield return new StepChoice("Remote switch",
+                    new[] { "Pick one…", RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
+                    _remoteSwitch == RemoteSwitchForm.Both ? 1 : _remoteSwitch == RemoteSwitchForm.New ? 2 : 0,
+                    index => _remoteSwitch = index == 1 ? RemoteSwitchForm.Both : index == 2 ? RemoteSwitchForm.New : (RemoteSwitchForm?)null,
+                    caption);
+            else if (form == RemoteSwitchForm.Both)
+                yield return new StepChoice("Remote switch",
+                    new[] { RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
+                    _remoteSwitch == RemoteSwitchForm.New ? 1 : 0,
+                    index => _remoteSwitch = index == 1 ? RemoteSwitchForm.New : RemoteSwitchForm.Both,
+                    caption);
+        }
+
         public override void Apply()
         {
-            MeticaIntegrationLog.Record(Title, ApplyPatches());
+            MeticaIntegrationLog.Record(Title, ApplyPatches(_remoteSwitch));
             AssetDatabase.Refresh();
         }
 
@@ -208,7 +245,11 @@ namespace GameDistrict.MeticaIntegrationTools
         /// The edits themselves, through <see cref="SourcePatcher"/> only, so they run the same
         /// on disk or in memory (<see cref="MeticaPatchSet"/>). Returns what happened.
         /// </summary>
-        internal static List<string> ApplyPatches()
+        /// <param name="remoteSwitch">
+        /// The remote switch to end up with, New or Both; null leaves a project that has the old
+        /// code as it is. See <see cref="RemoteSwitchPatch.Apply"/>.
+        /// </param>
+        internal static List<string> ApplyPatches(RemoteSwitchForm? remoteSwitch)
         {
             var log = new List<string>();
 
@@ -235,7 +276,7 @@ namespace GameDistrict.MeticaIntegrationTools
             PatchAdRevenueInfo(log);
             PatchAdUnitsConfiguration(log);
             PatchPreferences(log);
-            PatchRemoteConfig(log);
+            RemoteSwitchPatch.Apply(log, remoteSwitch);
             PatchAdsManager(log);
             PatchAnalyticsManager(log);
             PatchAdjustAnalyticsNetwork(log);
@@ -288,8 +329,9 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>
-        /// MainAdNetwork, a string preference: "Unassigned" until a fetch that carries UseMetica
-        /// lands, then "MAX" or "Metica"; the enum names the three. Before v5.3.0 there is no
+        /// MainAdNetwork, a string preference: "Unassigned" until a fetch that carries the switch
+        /// lands, then what it says — "MAX", "Metica", or "Unassigned" again; the enum names the
+        /// three, and is the list a remote value has to match. Before v5.3.0 there is no
         /// RestorePurchaseOnce to sit after, and Preferences takes only a key — Get() then gives
         /// null for an unset string, which AdsManager reads as Unassigned.
         ///
@@ -315,7 +357,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             Run(log, "MainAdNetwork enum",
                 AppendToFile(path, MarkerEnum,
-                    "/// <summary>The network that serves this user's ads, from remote config — stored by name. Unassigned until a fetch carrying UseMetica lands.</summary>\n" +
+                    EnumComment + "\n" +
                     "public enum MainAdNetwork\n" +
                     "{\n" +
                     "    Unassigned,\n" +
@@ -323,28 +365,17 @@ namespace GameDistrict.MeticaIntegrationTools
                     "    Metica\n" +
                     "}"),
                 path, "add at the end of the file: public enum MainAdNetwork { Unassigned, MAX, Metica }");
+
+            // The enum's comment from before remote config carried these names.
+            if (SourcePatcher.Contains(path, OldEnumComment))
+                SourcePatcher.ReplaceFirst(path, EnumComment, OldEnumComment, EnumComment);
         }
 
-        /// <summary>PersistRemoteToggles' lines after its early return; the first line goes where the indent already is.</summary>
-        private static string PersistBody(string indent) =>
-            "// Metica Integration Tools: MainAdNetwork, only when the fetched AdsSettings has UseMetica — users outside the test stay Unassigned.\n" +
-            $"{indent}var adsSettings = GetRemoteValue<string>(REMOTE_KEY).Value;\n" +
-            $"{indent}" + PersistNoSwitch(indent) + "\n" +
-            $"{indent}" + PersistSave(indent);
+        private const string EnumComment =
+            "/// <summary>The network that serves this user's ads: the values remote config's \"MainAdNetwork\" may carry, and how it is stored. Unassigned until a fetch says otherwise.</summary>";
 
-        /// <summary>No UseMetica in the fetched AdsSettings: log what stays stored, and stop.</summary>
-        private static string PersistNoSwitch(string indent) =>
-            "if (string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\"))\n" +
-            $"{indent}{{\n" +
-            $"{indent}    Message.Log(Tag.SDK, \"{MarkerPersistNoSwitchLog}\" + (MonetizationPreferences.MainAdNetwork.Get() ?? MainAdNetwork.Unassigned.ToString()));\n" +
-            $"{indent}    return;\n" +
-            $"{indent}}}";
-
-        /// <summary>Store MAX or Metica, and log it.</summary>
-        private static string PersistSave(string indent) =>
-            "var mainAdNetwork = (m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString();\n" +
-            $"{indent}MonetizationPreferences.MainAdNetwork.Set(mainAdNetwork);\n" +
-            $"{indent}Message.Log(Tag.SDK, \"{MarkerPersistSaveLog}\" + mainAdNetwork + \" as pref\");";
+        private const string OldEnumComment =
+            "/// <summary>The network that serves this user's ads, from remote config — stored by name. Unassigned until a fetch carrying UseMetica lands.</summary>";
 
         /// <summary>
         /// The AdsManager line that says which network won, with the stored value added. GD 6.x
@@ -352,65 +383,6 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         internal static O LogMainAdNetwork(string path) =>
             SourcePatcher.ReplaceFirst(path, MarkerMainNetworkLog, OldMainNetworkLog, MarkerMainNetworkLog);
-
-        private static void PatchRemoteConfig(List<string> log)
-        {
-            Run(log, "RemoteConfiguration.UseMetica",
-                SourcePatcher.InsertAfterLine(MeticaPaths.RemoteConfiguration, MarkerRemoteFlag,
-                    "NextInterstitialDelay", "        public bool UseMetica;"),
-                MeticaPaths.RemoteConfiguration, "add: public bool UseMetica;");
-
-            // OnFetchCompleteWithSuccess (bool, string) arrived in v5.3.6. Before that the only
-            // event is OnFetchComplete, with no arguments — the same one CreateAndUpdateConfig
-            // uses there, which does not know about success either.
-            var path = MeticaPaths.RemoteConfigManager;
-            var withSuccess = SourcePatcher.Contains(path, "OnFetchCompleteWithSuccess");
-
-            Run(log, "PersistRemoteToggles subscription",
-                SourcePatcher.InsertAfterLine(path, MarkerPersistHook,
-                    "+= CreateAndUpdateConfig;",
-                    withSuccess
-                        ? "            OnFetchCompleteWithSuccess += PersistRemoteToggles;"
-                        : "            OnFetchComplete += PersistRemoteToggles;"),
-                path,
-                "subscribe PersistRemoteToggles alongside CreateAndUpdateConfig");
-
-            const string body = "            ";
-            Run(log, "PersistRemoteToggles method",
-                SourcePatcher.InsertBeforeLine(path, MarkerPersistMethod,
-                    "public static void AddOrUpdateValue",
-                    (withSuccess
-                        ? "        static void PersistRemoteToggles(bool success, string message)\n" +
-                          "        {\n" +
-                          "            if (!success || m_Configuration == null) return;\n"
-                        : "        static void PersistRemoteToggles()\n" +
-                          "        {\n" +
-                          "            if (m_Configuration == null) return;\n") +
-                    body + PersistBody(body) + "\n" +
-                    "        }\n"),
-                path,
-                "add a PersistRemoteToggles method that sets MonetizationPreferences.MainAdNetwork");
-
-            // Already there with the bool (an earlier patch, or GD SDK 6.2.1+): MainAdNetwork instead.
-            Run(log, "PersistRemoteToggles sets MainAdNetwork",
-                SourcePatcher.Contains(path, OldPersist)
-                    ? SourcePatcher.ReplaceFirst(path, MarkerPersistMainAdNetwork, OldPersist, Lines(path, PersistBody(body)))
-                    : SourcePatcher.Contains(path, MarkerPersistMainAdNetwork) ? O.AlreadyApplied : O.AnchorNotFound,
-                path, $"in PersistRemoteToggles, set MonetizationPreferences.MainAdNetwork instead of UseMetica");
-
-            // An earlier patch, without the logs: add them.
-            if (SourcePatcher.Contains(path, OldPersistNoSwitch))
-                Run(log, "PersistRemoteToggles logs a fetch without UseMetica",
-                    SourcePatcher.ReplaceFirst(path, MarkerPersistNoSwitchLog, OldPersistNoSwitch, Lines(path, PersistNoSwitch(body))),
-                    path, "log the stored MainAdNetwork before the early return");
-            if (SourcePatcher.Contains(path, OldPersistSave))
-                Run(log, "PersistRemoteToggles logs the saved MainAdNetwork",
-                    SourcePatcher.ReplaceFirst(path, MarkerPersistSaveLog, OldPersistSave, Lines(path, PersistSave(body))),
-                    path, $"log \"{MarkerPersistSaveLog}\" + mainAdNetwork + \" as pref\" after the Set");
-
-            if (SourcePatcher.Contains(path, "Message.Log("))
-                SourcePatcher.EnsureUsing(path, "using Monetization.Runtime.Logger;");
-        }
 
         private static void PatchAdsManager(List<string> log)
         {

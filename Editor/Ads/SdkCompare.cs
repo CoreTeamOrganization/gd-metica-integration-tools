@@ -161,12 +161,14 @@ namespace GameDistrict.MeticaIntegrationTools
                     .Select(c => c.path));
 
                 // Earlier versions of this tool added a using at the top instead of after the
-                // last one; the same edit in another using order is still the tool's.
-                var patchedOriginals = ModifiedFileCheck.PatchInMemory(originals);
-                var patchedCurrent = ModifiedFileCheck.PatchInMemory(current);
-                foreach (var path in patched.Where(p => !tooled.Contains(p) && current[p] != null && patchedOriginals[p] != null))
-                    if (SameIgnoringUsingOrder(current[path], patchedOriginals[path])
-                        || SameIgnoringUsingOrder(patchedCurrent[path], patchedOriginals[path]))
+                // last one; the same edit in another using order is still the tool's. Against
+                // both forms of the remote switch, as ModifiedFileCheck.Classify does.
+                var patchedOriginals = ModifiedFileCheck.PatchVariants(originals);
+                var patchedCurrents = ModifiedFileCheck.PatchVariants(current);
+                foreach (var path in patched.Where(p => !tooled.Contains(p) && current[p] != null))
+                    if (patchedOriginals.Any(original => original[path] != null
+                            && (SameIgnoringUsingOrder(current[path], original[path])
+                                || patchedCurrents.Any(patchedCurrent => SameIgnoringUsingOrder(patchedCurrent[path], original[path])))))
                         tooled.Add(path);
             }
 

@@ -45,7 +45,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string ReviewHint =>
             "One new asset. Check each ad unit id is under the right platform. Metica stays off until " +
-            "the game calls MeticaRemoteConfig.Apply(true).";
+            "the game calls MeticaRemoteConfig.Apply(\"Metica\") with its remote config's MainAdNetwork.";
 
         public override VerifyResult Verify()
         {
@@ -88,7 +88,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             return fallback.boolValue
                 ? "Remote switch on, default on — Metica on until the backend turns it off"
-                : "Remote switch on, default off — Metica off until MeticaRemoteConfig.Apply(true), from the next session";
+                : "Remote switch on, default off — Metica off until MeticaRemoteConfig.Apply(\"Metica\"), from the next session";
         }
 
         private static void CheckKeys(ScriptableObject asset, VerifyResult result)
