@@ -520,3 +520,17 @@
   - Checked in Unity 2022.3 against JsonUtility: a build with the bool reads `"UseMetica":"Metica"`
     as false and stores MAX — hence a new key, never a string under `UseMetica`; such builds ignore
     `MainAdNetwork`, so both can sit in `AdsSettings` while they are live.
+- Remote switch, where the value is: a new **Remote value** dropdown in the patch step — **Parameter**
+  (`MainAdNetwork` is a Firebase parameter of its own, String; with Keep both, `UseMetica` too, Boolean)
+  or **JSON (AdsSettings)**. Always asked before the switch is written (a first-time integration too).
+  The Parameter version reads `GetRemoteValue<string>("MainAdNetwork")` and counts it only when it came
+  from the fetch (`RemoteValue.Source == FetchSource.RemoteValue`, there in every release), so an in-app
+  default never assigns a user; Keep both reads `GetRemoteValue<bool>("UseMetica")` the same way. Logs:
+  `Remote config has no MainAdNetwork parameter, MainAdNetwork stays …`, `Remote config has the old
+  UseMetica parameter, not MainAdNetwork: …`.
+- Converting: once the switch is in place, both dropdowns stay in the step and show what the code has;
+  picking the other option converts it — Parameter ↔ JSON, Keep both ↔ Implement new, or both — on Apply
+  patches (the step says `Convert the remote switch: … Apply patches to convert, or set the dropdown
+  back.` until then). A `PersistMainAdNetwork` changed by hand isn't converted, it is reported.
+- The old remote switch code is also found when a game sets the `UseMetica` bool preference from a
+  parameter (`MonetizationPreferences.UseMetica.Set(GetRemoteValue<bool>("UseMetica").Value)`).

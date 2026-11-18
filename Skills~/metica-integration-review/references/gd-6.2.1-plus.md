@@ -17,8 +17,8 @@ The patch step moves it to the three-state `MainAdNetwork` (`Unassigned` / `MAX`
   casing; anything else refused with an error log). The SDK ships the old `"UseMetica"` code
   itself, so the patch step asks here even on a brand-new game: **Keep both** (`"UseMetica"` still
   read when `MainAdNetwork` isn't there, through `EarlierUseMetica`) or **Implement new**
-  (`MainAdNetwork` only). Until one is picked the SDK's own line stays. See `gd-5.3-5.5.md` for
-  the three states, the details and the logs.
+  (`MainAdNetwork` only), and **Parameter** or **JSON** for where the values are. Until both are
+  picked the SDK's own line stays. See `gd-5.3-5.5.md` for the states, the details and the logs.
 - Every user starts `Unassigned` after the update (the bool is not carried over — by design).
 - The **stock** SDK (not patched by the tool) reads only `"UseMetica"`: a Firebase set up with
   `"MainAdNetwork"` does nothing there.

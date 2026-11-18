@@ -169,8 +169,8 @@ namespace GameDistrict.MeticaIntegrationTools
         /// result as patching the original. A file with any other change is "modified", even
         /// when it happens to contain this tool's marker strings.
         ///
-        /// <para>The remote switch has two patched forms (<see cref="MeticaPatchSet.RemoteSwitchForms"/>);
-        /// a file is the tool's when it matches either, as it is or once patched to either.</para>
+        /// <para>The remote switch has several patched forms (<see cref="MeticaPatchSet.RemoteSwitches"/>);
+        /// a file is the tool's when it matches any, as it is or once patched to any.</para>
         /// </summary>
         internal static List<(string path, FileState state)> Classify(
             Dictionary<string, string> original, Dictionary<string, string> project)
@@ -202,17 +202,18 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary><paramref name="files"/> patched in memory, once per form of the remote switch.</summary>
         internal static List<Dictionary<string, string>> PatchVariants(Dictionary<string, string> files) =>
-            MeticaPatchSet.RemoteSwitchForms.Select(form => PatchInMemory(files, form)).ToList();
+            MeticaPatchSet.RemoteSwitches.Select(variant => PatchInMemory(files, variant.form, variant.source)).ToList();
 
         /// <summary>Runs every patch on copies of <paramref name="files"/> in memory.</summary>
-        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files, RemoteSwitchForm remoteSwitch)
+        internal static Dictionary<string, string> PatchInMemory(Dictionary<string, string> files,
+            RemoteSwitchForm remoteSwitch, RemoteSwitchSource remoteSource)
         {
             var memory = files
                 .Where(file => file.Value != null)
                 .ToDictionary(file => MeticaPaths.Combine(MeticaPaths.GDRoot, file.Key), file => file.Value);
 
             using (SourcePatcher.InMemory(memory))
-                MeticaPatchSet.ApplyAll(remoteSwitch);
+                MeticaPatchSet.ApplyAll(remoteSwitch, remoteSource);
 
             return files.Keys.ToDictionary(path => path,
                 path => memory.TryGetValue(MeticaPaths.Combine(MeticaPaths.GDRoot, path), out var text) ? text : null);

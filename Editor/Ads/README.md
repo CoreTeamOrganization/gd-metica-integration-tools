@@ -138,45 +138,47 @@ config said; at the first ads start of a session it is reported through `MeticaA
 Every session sends `GameData` with `MainAdNetwork` — `Unassigned`, `MAX` or `Metica` — read once
 when ads start, so it always names the network that served that session. (GD SDK: AppMetrica, and
 Firebase from 5.3; standalone: `MeticaAdsHooks.OnEvent`.) The stored value changes only when a
-fetched `AdsSettings` carries the switch, and takes effect the session after.
+fetch carries the switch, and takes effect the session after.
 
-**The switch in Firebase.** `AdsSettings` (JSON) carries `"MainAdNetwork"`, a string with the same
-three words the app stores and reports:
+**The switch in Firebase.** `"MainAdNetwork"`, a string with the same three words the app stores and
+reports — either a **parameter** of its own (type String), or a field of the **`AdsSettings` JSON**,
+as picked in the patch step (below):
 
-| `AdsSettings` | The device stores | Next session |
+| Firebase says | The device stores | Next session |
 |---|---|---|
-| `{"MainAdNetwork":"Metica"}` | `Metica` | Metica |
-| `{"MainAdNetwork":"MAX"}` | `MAX` | AppLovin MAX |
-| `{"MainAdNetwork":"Unassigned"}` | `Unassigned` — back out of the test | AppLovin MAX, reported as `Unassigned` |
-| no `MainAdNetwork` | nothing — it keeps what it has | as before |
-| a value that is none of the three (`"Mettica"`, `true`, `2`) | nothing, and an error log naming the three | as before |
+| `Metica` (parameter `MainAdNetwork` = `Metica`, or `{"MainAdNetwork":"Metica"}`) | `Metica` | Metica |
+| `MAX` | `MAX` | AppLovin MAX |
+| `Unassigned` | `Unassigned` — back out of the test | AppLovin MAX, reported as `Unassigned` |
+| nothing (no such parameter / key; an in-app default doesn't count) | nothing — it keeps what it has | as before |
+| a value that is none of the three (`Mettica`, `true`, `2`) | nothing, and an error log naming the three | as before |
 
 - Casing and outer spaces don't matter (`metica`, `Max`, ` MAX `); the app stores the enum's own
   spelling, so nothing else ever reaches the preference or `GameData`. Paste the value, don't type
-  it: Firebase's JSON editor catches broken JSON, not a misspelt word.
-- A test: baseline `"MAX"`, variant `"Metica"`. Everyone else: no key, or `"Unassigned"`.
+  it: Firebase catches broken JSON, not a misspelt word.
+- A test: baseline `MAX`, variant `Metica`. Everyone else: nothing, or `Unassigned`.
 
-**New, or keep both (GD SDK).** A game integrating Metica for the first time gets the code that
-reads `MainAdNetwork` and nothing else — `PersistRemoteToggles` calls `PersistMainAdNetwork`, which
-reads, checks and saves. No question is asked: nothing live can depend on anything else.
+**The two dropdowns (GD SDK patch step).**
 
-A project that already has the old remote switch code — it reads only `"UseMetica": true / false`:
-this tool's earlier patch, or GD SDK 6.2.1+'s own — is asked in the patch step, and nothing is
-decided for it:
-
-| Option | What it writes | For |
+| Dropdown | Options | Asked |
 |---|---|---|
-| **Keep both** | The same code, plus one line and a small `EarlierUseMetica` method: without `MainAdNetwork`, `UseMetica` is read as before (true → `Metica`, false → `MAX`). With both keys, `MainAdNetwork` wins | A game already live on `UseMetica` — its Firebase keeps working |
-| **Implement new** | `MainAdNetwork` only | A game moving to `MainAdNetwork`: switch Firebase to it, and keep `UseMetica` there too while older builds are live |
+| **Remote value** | **Parameter** — `MainAdNetwork` is a Firebase parameter of its own (String); with Keep both, `UseMetica` too (Boolean). **JSON (AdsSettings)** — they are fields of the `AdsSettings` JSON | Always, before the switch is written |
+| **Remote switch** | **Keep both** — reads `MainAdNetwork`, and the old `UseMetica` when it's missing (one more line and a small `EarlierUseMetica` method; with both, `MainAdNetwork` wins): for a game already live on `UseMetica`. **Implement new** — `MainAdNetwork` only: switch Firebase to it, and keep `UseMetica` there while older builds are live | Only where old remote switch code is found — it reads only `UseMetica`: this tool's earlier patch, GD SDK 6.2.1+'s own, or a game's own line setting that bool preference. A first-time integration gets Implement new |
 
-Until one is picked, Apply patches does everything else and leaves the remote switch as it is. A
-project that kept both still has the old key's code, so the options stay there and it can move to
-Implement new later. Lines a game added inside `PersistRemoteToggles` stay where they are.
+Nothing is decided from the code: until what is asked is picked, Apply patches does everything else
+and leaves the remote switch as it is. Lines a game added inside `PersistRemoteToggles` stay where
+they are.
+
+**Converting.** Once the switch is in place, both dropdowns stay in the step and show what the code
+has. Pick the other option — Parameter ↔ JSON, Keep both ↔ Implement new, or both at once — and the
+step says `Convert the remote switch: JSON (AdsSettings) → Parameter. Apply patches to convert, or set
+the dropdown back.`; Apply patches converts it. A `PersistMainAdNetwork` changed by hand isn't converted
+— it is reported, to change by hand. Switching Firebase over is up to the game: convert, ship, then
+move the value in Firebase (keep the old one too while older builds are live).
 
 - A build from before this change only knows `UseMetica` and ignores `MainAdNetwork`. While such
-  builds are live, `AdsSettings` can carry both: `{"UseMetica":true,"MainAdNetwork":"Metica"}`.
-  Never put a string under `UseMetica`: those builds read it as false and switch to MAX.
-- Stock GD SDK 6.2.1+ (not patched by this tool) reads only `UseMetica`.
+  builds are live, Firebase can carry both. Never put a string under `UseMetica`: those builds read
+  it as false and switch to MAX.
+- Stock GD SDK 6.2.1+ (not patched by this tool) reads only `UseMetica`, from the `AdsSettings` JSON.
 
 - **Compare per session, not per user**: a user's first session (or the one before a fetch lands)
   is `Unassigned`, later ones `MAX` / `Metica`.
@@ -189,9 +191,11 @@ Implement new later. Lines a game added inside `PersistRemoteToggles` stay where
 On device (GD SDK, tag SDK): `Using Metica as main AdNetwork (Metica)` once at ads init — or
 `Using AppLovin as main AdNetwork (MAX)` / `(Unassigned)`; and after each fetch one of:
 `Remote Switch saved: Metica as pref`, `Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays
-Unassigned`, or the error `Remote MainAdNetwork "Mettica" is not one of Unassigned, MAX, Metica,
-MainAdNetwork stays Unassigned`. A project that kept both also logs `Remote AdsSettings has the old
-UseMetica key, not MainAdNetwork: Metica` right before the saved line, when that is what it read.
+Unassigned` (Parameter: `Remote config has no MainAdNetwork parameter, MainAdNetwork stays Unassigned`),
+or the error `Remote MainAdNetwork "Mettica" is not one of Unassigned, MAX, Metica, MainAdNetwork stays
+Unassigned`. A project that kept both also logs `Remote AdsSettings has the old UseMetica key, not
+MainAdNetwork: Metica` (Parameter: `Remote config has the old UseMetica parameter, not MainAdNetwork:
+Metica`) right before the saved line, when that is what it read.
 Standalone: `[Metica] MainAdNetwork = Metica from saved pref → Metica this session` once per session when ads initialize (or `Unassigned` / `MAX … → AppLovin`; with Use Remote Switch off it adds `(remote switch off: Metica always)`), and when a fetch is applied `[Metica] Remote switch stored: MainAdNetwork = Metica` (or `unchanged`), `[Metica] Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays …`, or the same "is not one of" error.
 
 **If the tool will not do it**, `Documentation/Metica-Standalone/` in the
@@ -208,7 +212,7 @@ integration by hand.
 | 1 | Metica SDK | Downloads and imports the **pinned target version** from `meticalabs/metica-unity-package`. Any other Metica is removed first, wherever it is: another version in Assets, Metica v1 or 2.x from the Package Manager (`com.metica.unity` / `com.metica.sdk.unity`, also embedded), v1's `Assets/Metica/Data/MeticaSdkConfiguration.asset` — one dialog lists it all. `com.metica.analytics.abstractions` and this tool are never touched. A project already on it is left alone; any other version is **removed first**, since importing over it leaves the old files behind. Then resolves: External Dependency Manager's Force Resolve pulls every Android library the project's SDKs declare into `mainTemplate.gradle` (turning Custom Main Gradle Template on if needed), and the step only passes once all of them are there. **Enable iOS** also enables the xcframework for iOS |
 | 2 | Wrapper files | Writes `AdNetworkMetica` (plain `IAdNetworkService`), `MeticaInitializer` (callback-based init), the four ad units, `MeticaConfiguration`, `MeticaConsentSettings` |
 | – | Game additions to carry over | **Only when the game added lines to its AppLovin units**; optional. Compares each AppLovin unit with the original release, method by method (comments, whitespace, usings and Metica v1 code ignored), and lists every added line with where it goes in the Metica unit: show → show, hidden → hidden, reward → reward, revenue → revenue, loaded / failed → loaded / failed, displayed → `OnAdShowSuccess` (the handler and its subscription are added). A tick box per line, unticked; log lines tagged. Lines using MAX's ad info are adapted — `arg2.NetworkName` → `meticaAd.networkName`, a whole `AdInfo` → `MeticaMaxAdInfo.From(meticaAd)` (written next to the units when needed) — and go in with a TODO. A stock line the game edited, a line in a method or block the Metica unit lacks, or one using MAX-only names, is listed to add by hand. Every carried line is marked; the Metica units are backed up; the AppLovin and AdMob units are untouched. Passes when the ticked lines are in and nothing but logs is left; skip it when Metica needs none |
-| 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the remote switch and the `MainAdNetwork` preference it feeds — `RemoteConfigManager.PersistMainAdNetwork`, called after every fetch, saves `AdsSettings`' `"MainAdNetwork"` (`"Unassigned"` / `"MAX"` / `"Metica"`, any casing; a value that is none of the three is refused with an error log; without the key nothing is saved — see [the switch in Firebase](#reading-the-metica-vs-max-test-mainadnetwork)). A first-time integration gets that with no question; a project that has the old remote switch code (it reads only `UseMetica`: this tool's earlier patch, or GD SDK 6.2.1+'s own) picks **Keep both** or **Implement new** in the step — the `AdsManager` network switch (reads it once at ads init, Metica only for `Metica`, and sends `GameData` { `MainAdNetwork` }); plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
+| 3 | Patch the existing SDK files | Nine ads-layer edits: `AdPlatforms.METICA`, `Tag.Metica`, the settings resource path, `AdRevenueInfo.RevenuePayload`, `AdUnitsConfiguration.Metica`, the remote switch and the `MainAdNetwork` preference it feeds — `RemoteConfigManager.PersistMainAdNetwork`, called after every fetch, saves the remote `"MainAdNetwork"` (`"Unassigned"` / `"MAX"` / `"Metica"`, any casing; a value that is none of the three is refused with an error log; without it nothing is saved — see [the switch in Firebase](#reading-the-metica-vs-max-test-mainadnetwork)), read from a **Parameter** or the **AdsSettings JSON**, as picked in the step. A project that has the old remote switch code (it reads only `UseMetica`) also picks **Keep both** or **Implement new**; once in place, either dropdown converts it — the `AdsManager` network switch (reads it once at ads init, Metica only for `Metica`, and sends `GameData` { `MainAdNetwork` }); plus a `METICA` case in `AdjustAnalyticsNetwork.GetAdSource` (`"applovin_max_sdk"`), without which Adjust drops Metica revenue. `AdNetworkController`, `AdNetworkAdmob` and `AdNetworkAppLovin` are untouched |
 | 4 | Remote Metica switch | Points `AdsManager` at `MonetizationPreferences.MainAdNetwork` (and adds the `GameData` event) instead of the build-time flag on `SDKConfiguration`, and drops the dead field. Only v6.0.0–v6.2.0 need it; a no-op everywhere else |
 | 5 | Metica settings asset | Creates `MeticaSettings.asset` with the App ID and API Key typed into the step — Android, plus iOS when Enable iOS is on. Blank keys are a warning, never a block |
 | 6 | Metica ad units | Copies the Applovin App Key and the Interstitial, Rewarded, Banner and MRec ad unit IDs into the Metica section — Metica runs through MAX, so they are the same values. App-Open, and any other format, is left out (Metica serves only those four); one an earlier copy put there is flagged and taken out on the next copy. GD SDK 6 keeps Android and iOS values: only the build target's are copied and checked |
@@ -422,7 +426,7 @@ project and needs nothing from the package at runtime.
 ```
 AdsFlow.cs                   the two step lists (GD SDK / standalone)
 MeticaPatchSet.cs            every GD SDK edit, in step order (runs on disk or in memory)
-RemoteSwitchPatch.cs         the remote switch in RemoteConfigManager: MainAdNetwork only, or with the old UseMetica kept
+RemoteSwitchPatch.cs         the remote switch in RemoteConfigManager: Keep both / Implement new × Parameter / JSON, and conversions
 ModifiedFileCheck.cs         stock / patched / modified / missing, per patched file
 SdkCompare.cs                the whole GD SDK against its original release (Compare window)
 StockFiles.cs                reads Stock/ (the untouched GD SDK copies, every v5 and v6 release)

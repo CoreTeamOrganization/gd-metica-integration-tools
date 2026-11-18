@@ -4,7 +4,7 @@ using O = GameDistrict.MeticaIntegrationTools.SourcePatcher.Outcome;
 
 namespace GameDistrict.MeticaIntegrationTools
 {
-    /// <summary>What a project's remote switch reads from Firebase's AdsSettings.</summary>
+    /// <summary>Which keys a project's remote switch reads.</summary>
     internal enum RemoteSwitchForm
     {
         /// <summary>No PersistRemoteToggles at all: Metica's remote switch was never in this project.</summary>
@@ -12,7 +12,8 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary>
         /// The old code: it reads only the "UseMetica" bool. GD SDK 6.2.1+'s own bool preference
-        /// (this tool's first patch too), or this tool's lines from before "MainAdNetwork".
+        /// (this tool's first patch too), this tool's lines from before "MainAdNetwork", or a
+        /// game's own line setting that bool preference from a parameter.
         /// </summary>
         Old,
 
@@ -23,34 +24,47 @@ namespace GameDistrict.MeticaIntegrationTools
         Both
     }
 
+    /// <summary>Where in Firebase Remote Config the remote switch's value is.</summary>
+    internal enum RemoteSwitchSource
+    {
+        /// <summary>Firebase parameters of their own: "MainAdNetwork" (string), "UseMetica" (bool).</summary>
+        Parameter,
+
+        /// <summary>Fields of the "AdsSettings" JSON parameter, as the GD SDK's other remote settings.</summary>
+        Json
+    }
+
     /// <summary>
     /// The remote switch in the GD SDK's RemoteConfigManager: which ad network remote config asks
     /// for, saved to MonetizationPreferences.MainAdNetwork after every fetch.
     ///
-    /// <para>Firebase's AdsSettings carries "MainAdNetwork", a string holding one of the
-    /// MainAdNetwork enum's names. PersistRemoteToggles hands the fetched JSON to
-    /// PersistMainAdNetwork, which reads the string into a fresh object (JsonUtility cannot read
-    /// an enum by name, and m_Configuration keeps the last fetch's value when a later one lacks
-    /// the key), matches it against the enum's names ignoring case and outer spaces, and saves
-    /// the enum's own spelling — so nothing but "Unassigned", "MAX" or "Metica" ever reaches the
-    /// preference or the GameData event. "Unassigned" is saved like the others: it takes the
-    /// device back out of the test. A value that matches none is refused, with an error log.
-    /// Without the key nothing is saved: users outside the test keep what they have.</para>
+    /// <para>The value is "MainAdNetwork": one of the MainAdNetwork enum's names, matched
+    /// ignoring case and outer spaces, saved by the enum's own spelling — so nothing but
+    /// "Unassigned", "MAX" or "Metica" ever reaches the preference or the GameData event.
+    /// "Unassigned" is saved like the others: it takes the device back out of the test. A value
+    /// that matches none is refused, with an error log. Without the value nothing is saved:
+    /// users outside the test keep what they have.</para>
     ///
-    /// <para><b>Two forms.</b> A project where the switch was never integrated gets the new
-    /// form, with no question: nothing live can depend on anything else. A project that has the
-    /// old code — it read the "UseMetica" bool — is asked, in the patch step, and nothing is
-    /// decided for it: <i>Keep both</i> adds one line and a small method, EarlierUseMetica, so
-    /// "UseMetica" still counts when "MainAdNetwork" isn't there (a game already live on it
-    /// keeps working); <i>Implement new</i> reads "MainAdNetwork" only. A project on Keep both
-    /// still has the old key's code, so it can move to Implement new later.</para>
+    /// <para><b>Where it is</b> (<see cref="RemoteSwitchSource"/>), always asked: a field of the
+    /// AdsSettings JSON — read into a fresh object on every fetch, since JsonUtility cannot read
+    /// an enum by name and m_Configuration keeps the last fetch's value when a later one lacks
+    /// the key — or a Firebase parameter of its own, which counts only when it came from the
+    /// fetch (RemoteValue.Source), not from an in-app default.</para>
     ///
-    /// <para>Everything goes through <see cref="SourcePatcher"/>, so it runs on disk or in
-    /// memory alike.</para>
+    /// <para><b>Which keys</b> (<see cref="RemoteSwitchForm"/>). A project where the switch was
+    /// never integrated reads "MainAdNetwork" only, with no question. A project that has the old
+    /// code — it read the "UseMetica" bool — is asked, never decided for: <i>Keep both</i> adds one
+    /// line and a small method, EarlierUseMetica, so "UseMetica" still counts when
+    /// "MainAdNetwork" isn't there (a game already live on it keeps working); <i>Implement
+    /// new</i> reads "MainAdNetwork" only.</para>
+    ///
+    /// <para>Once in place, either can be converted: Keep both ↔ Implement new, and Parameter ↔
+    /// JSON. Everything goes through <see cref="SourcePatcher"/>, so it runs on disk or in memory
+    /// alike.</para>
     /// </summary>
     internal static class RemoteSwitchPatch
     {
-        // ── The two options, as the step shows them ────────────────────────────
+        // ── The options, as the step shows them ────────────────────────────────
 
         public const string KeepBothLabel = "Keep both";
         public const string NewLabel = "Implement new";
@@ -61,88 +75,99 @@ namespace GameDistrict.MeticaIntegrationTools
         public const string NewSummary =
             "Implement new: reads only MainAdNetwork. Switch Firebase to MainAdNetwork, and keep UseMetica there while older builds are live.";
 
+        public const string ParameterLabel = "Parameter";
+        public const string JsonLabel = "JSON (AdsSettings)";
+
+        public const string ParameterSummary =
+            "Parameter: MainAdNetwork is a Firebase parameter of its own (string); with Keep both, UseMetica too (bool).";
+
+        public const string JsonSummary =
+            "JSON: MainAdNetwork is a field in the AdsSettings JSON, e.g. {\"MainAdNetwork\":\"Metica\"}; with Keep both, UseMetica too.";
+
+        public static string Label(RemoteSwitchForm form) => form == RemoteSwitchForm.Both ? KeepBothLabel : NewLabel;
+
+        public static string Label(RemoteSwitchSource source) => source == RemoteSwitchSource.Parameter ? ParameterLabel : JsonLabel;
+
         // ── What is in the file ────────────────────────────────────────────────
 
         private const string Hook = "PersistRemoteToggles;";
         private const string Method = "static void PersistRemoteToggles";
 
-        /// <summary>PersistRemoteToggles' one line: the fetched AdsSettings goes to PersistMainAdNetwork.</summary>
-        internal const string Call = "PersistMainAdNetwork(GetRemoteValue<string>(REMOTE_KEY).Value);";
-        internal const string Reader = "static void PersistMainAdNetwork(string adsSettings)";
-
-        /// <summary>The line of PersistMainAdNetwork that reads the string out of the JSON.</summary>
-        private const string ReadLine = "JsonUtility.FromJson<MainAdNetworkRemote>(adsSettings)?.MainAdNetwork;";
-
-        // Keep both: one line in PersistMainAdNetwork, and the method it calls.
-        private const string OldKeyCall = "remote = EarlierUseMetica(adsSettings);";
-        private const string OldKeyMethod = "static string EarlierUseMetica(string adsSettings)";
-
-        /// <summary>RemoteConfiguration's bool, which EarlierUseMetica reads.</summary>
-        private const string RemoteFlag = "public bool UseMetica";
-
         /// <summary>Everything new goes in before this method of RemoteConfigManager, in order.</summary>
         private const string Anchor = "public static void AddOrUpdateValue";
 
-        // PersistRemoteToggles' own lines in the old forms, first line and last: GD SDK 6.2.1+'s
-        // bool preference (this tool's first patch too), then this tool's lines from when only
-        // the UseMetica bool was read from remote config, without and with their logs.
-        private const string OldPersist = "MonetizationPreferences.UseMetica.Set(m_Configuration.UseMetica);";
+        /// <summary>RemoteConfiguration's bool, which the JSON EarlierUseMetica reads.</summary>
+        private const string RemoteFlag = "public bool UseMetica";
+
+        /// <summary>PersistRemoteToggles' one line, which hands over to PersistMainAdNetwork.</summary>
+        internal static string CallStatement(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "PersistMainAdNetwork();"
+                : "PersistMainAdNetwork(GetRemoteValue<string>(REMOTE_KEY).Value);";
+
+        private static string CallComment(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "// Metica Integration Tools: save the main ad network the fetched MainAdNetwork parameter asks for (see PersistMainAdNetwork)."
+                : "// Metica Integration Tools: save the main ad network the fetched AdsSettings asks for (see PersistMainAdNetwork).";
+
+        internal static string ReaderDeclaration(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "static void PersistMainAdNetwork()"
+                : "static void PersistMainAdNetwork(string adsSettings)";
+
+        /// <summary>The line of PersistMainAdNetwork that reads the value; Keep both's line goes after it.</summary>
+        private static string ReadLine(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "var remote = parameter.Source == FetchSource.RemoteValue ? parameter.Value : null;"
+                : "JsonUtility.FromJson<MainAdNetworkRemote>(adsSettings)?.MainAdNetwork;";
+
+        private static string OldKeyCall(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "remote = EarlierUseMetica();"
+                : "remote = EarlierUseMetica(adsSettings);";
+
+        private static string OldKeyDeclaration(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "static string EarlierUseMetica()"
+                : "static string EarlierUseMetica(string adsSettings)";
+
+        // PersistRemoteToggles' own lines in the old forms, first line and last: a line setting
+        // the UseMetica bool preference (GD SDK 6.2.1+'s own and this tool's first patch, from
+        // the JSON; or a game's own, from a parameter), then this tool's lines from when only the
+        // UseMetica bool was read from remote config, without and with their logs.
+        private const string OldBoolPreference = "MonetizationPreferences.UseMetica.Set(";
 
         private static readonly string[] OldFirstLine =
         {
-            OldPersist,
+            OldBoolPreference,
             "Metica Integration Tools: MainAdNetwork, only when the fetched AdsSettings has UseMetica",
             "var adsSettings = GetRemoteValue<string>(REMOTE_KEY).Value;"
         };
 
         private static readonly string[] OldLastLine =
         {
-            OldPersist,
+            OldBoolPreference,
             "MonetizationPreferences.MainAdNetwork.Set(",
             "Remote Switch saved: "
         };
 
         // ── What gets written ──────────────────────────────────────────────────
 
-        /// <summary>
-        /// PersistRemoteToggles' own two lines: a comment, and the fetched AdsSettings handed to
-        /// PersistMainAdNetwork. Each line carries <paramref name="indent"/>.
-        /// </summary>
-        internal static string CallLines(string indent) =>
-            $"{indent}// Metica Integration Tools: save the main ad network the fetched AdsSettings asks for (see PersistMainAdNetwork).\n" +
-            $"{indent}{Call}";
+        /// <summary>PersistRemoteToggles' own two lines: a comment and the call. Each line carries <paramref name="indent"/>.</summary>
+        internal static string CallLines(string indent, RemoteSwitchSource source) =>
+            $"{indent}{CallComment(source)}\n" +
+            $"{indent}{CallStatement(source)}";
 
         /// <summary>
-        /// PersistMainAdNetwork and the class it reads the JSON into, as members of
-        /// RemoteConfigManager: read, check, save. No try around the read — a broken AdsSettings
-        /// makes the SDK's own CreateAndUpdateConfig throw first, on the same text, so this is
-        /// never reached with one.
+        /// PersistMainAdNetwork (and, for the JSON, the class it reads the JSON into), as members
+        /// of RemoteConfigManager: read, check, save. No try around the JSON read — a broken
+        /// AdsSettings makes the SDK's own CreateAndUpdateConfig throw first, on the same text,
+        /// so this is never reached with one.
         /// </summary>
-        internal const string ReaderBlock =
-            "        // Metica Integration Tools: the main ad network, from remote config.\n" +
-            "        //\n" +
-            "        // AdsSettings carries \"MainAdNetwork\": \"Unassigned\", \"MAX\" or \"Metica\" (any casing). It is\n" +
-            "        // saved here and read at the next ads init. \"Unassigned\" takes the device back out of the\n" +
-            "        // test. A value that is none of the three is refused. Without the key nothing changes, so\n" +
-            "        // users outside the test keep what they have.\n" +
-            "        [System.Serializable]\n" +
-            "        sealed class MainAdNetworkRemote\n" +
-            "        {\n" +
-            "            public string MainAdNetwork = null;\n" +
-            "        }\n" +
-            "\n" +
-            "        " + Reader + "\n" +
-            "        {\n" +
-            "            var stored = MonetizationPreferences.MainAdNetwork.Get();\n" +
-            "            if (string.IsNullOrEmpty(stored)) stored = MainAdNetwork.Unassigned.ToString();\n" +
-            "\n" +
-            "            var remote = string.IsNullOrEmpty(adsSettings) ? null : " + ReadLine + "\n" +
-            "            if (string.IsNullOrWhiteSpace(remote))\n" +
-            "            {\n" +
-            "                Message.Log(Tag.SDK, \"Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays \" + stored);\n" +
-            "                return;\n" +
-            "            }\n" +
-            "\n" +
+        internal static string ReaderBlock(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter ? ParameterReader : JsonReader;
+
+        private const string Validate =
             "            var names = System.Enum.GetNames(typeof(MainAdNetwork));\n" +
             "            var mainAdNetwork = System.Array.Find(names, name => string.Equals(name, remote.Trim(), System.StringComparison.OrdinalIgnoreCase));\n" +
             "            if (mainAdNetwork == null)\n" +
@@ -155,52 +180,132 @@ namespace GameDistrict.MeticaIntegrationTools
             "            Message.Log(Tag.SDK, \"Remote Switch saved: \" + mainAdNetwork + \" as pref\");\n" +
             "        }\n";
 
-        /// <summary>Keep both: the line that goes right after PersistMainAdNetwork reads the JSON.</summary>
-        internal const string OldKeyLine =
-            "            if (string.IsNullOrWhiteSpace(remote)) " + OldKeyCall + " // the old key, when MainAdNetwork isn't there";
+        private const string Stored =
+            "            var stored = MonetizationPreferences.MainAdNetwork.Get();\n" +
+            "            if (string.IsNullOrEmpty(stored)) stored = MainAdNetwork.Unassigned.ToString();\n" +
+            "\n";
+
+        private const string JsonReader =
+            "        // Metica Integration Tools: the main ad network, from remote config.\n" +
+            "        //\n" +
+            "        // AdsSettings carries \"MainAdNetwork\": \"Unassigned\", \"MAX\" or \"Metica\" (any casing). It is\n" +
+            "        // saved here and read at the next ads init. \"Unassigned\" takes the device back out of the\n" +
+            "        // test. A value that is none of the three is refused. Without the key nothing changes, so\n" +
+            "        // users outside the test keep what they have.\n" +
+            "        [System.Serializable]\n" +
+            "        sealed class MainAdNetworkRemote\n" +
+            "        {\n" +
+            "            public string MainAdNetwork = null;\n" +
+            "        }\n" +
+            "\n" +
+            "        static void PersistMainAdNetwork(string adsSettings)\n" +
+            "        {\n" +
+            Stored +
+            "            var remote = string.IsNullOrEmpty(adsSettings) ? null : JsonUtility.FromJson<MainAdNetworkRemote>(adsSettings)?.MainAdNetwork;\n" +
+            "            if (string.IsNullOrWhiteSpace(remote))\n" +
+            "            {\n" +
+            "                Message.Log(Tag.SDK, \"Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays \" + stored);\n" +
+            "                return;\n" +
+            "            }\n" +
+            "\n" +
+            Validate;
+
+        private const string ParameterReader =
+            "        // Metica Integration Tools: the main ad network, from remote config.\n" +
+            "        //\n" +
+            "        // The Firebase parameter \"MainAdNetwork\" (a string) carries \"Unassigned\", \"MAX\" or \"Metica\"\n" +
+            "        // (any casing). It is saved here and read at the next ads init. \"Unassigned\" takes the device\n" +
+            "        // back out of the test. A value that is none of the three is refused. Without the parameter\n" +
+            "        // (an in-app default doesn't count) nothing changes, so users outside the test keep what they have.\n" +
+            "        static void PersistMainAdNetwork()\n" +
+            "        {\n" +
+            Stored +
+            "            var parameter = GetRemoteValue<string>(\"MainAdNetwork\");\n" +
+            "            var remote = parameter.Source == FetchSource.RemoteValue ? parameter.Value : null;\n" +
+            "            if (string.IsNullOrWhiteSpace(remote))\n" +
+            "            {\n" +
+            "                Message.Log(Tag.SDK, \"Remote config has no MainAdNetwork parameter, MainAdNetwork stays \" + stored);\n" +
+            "                return;\n" +
+            "            }\n" +
+            "\n" +
+            Validate;
+
+        /// <summary>Keep both: the line that goes right after PersistMainAdNetwork reads the value.</summary>
+        private static string OldKeyLine(RemoteSwitchSource source) =>
+            "            if (string.IsNullOrWhiteSpace(remote)) " + OldKeyCall(source) +
+            (source == RemoteSwitchSource.Parameter
+                ? " // the old parameter, when MainAdNetwork isn't there"
+                : " // the old key, when MainAdNetwork isn't there");
 
         /// <summary>
-        /// Keep both: the old key, read as it always was — RemoteConfiguration's bool, and only
-        /// when the fetched text has the key, since the bool cannot tell false from absent.
+        /// Keep both: the old key, read as it always was. JSON: RemoteConfiguration's bool, and
+        /// only when the fetched text has the key, since the bool cannot tell false from absent.
+        /// Parameter: the "UseMetica" parameter, only when it came from the fetch.
         /// </summary>
-        internal const string OldKeyBlock =
-            "        // Metica Integration Tools: the old remote key, \"UseMetica\": true / false, for a game whose\n" +
-            "        // Firebase still has it. Read only when AdsSettings has no MainAdNetwork. Gives \"Metica\" or\n" +
-            "        // \"MAX\"; null when the fetched AdsSettings doesn't have this key either.\n" +
-            "        " + OldKeyMethod + "\n" +
-            "        {\n" +
-            "            if (m_Configuration == null || string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\")) return null;\n" +
-            "\n" +
-            "            var mainAdNetwork = (m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString();\n" +
-            "            Message.Log(Tag.SDK, \"Remote AdsSettings has the old UseMetica key, not MainAdNetwork: \" + mainAdNetwork);\n" +
-            "            return mainAdNetwork;\n" +
-            "        }\n";
+        private static string OldKeyBlock(RemoteSwitchSource source) =>
+            source == RemoteSwitchSource.Parameter
+                ? "        // Metica Integration Tools: the old remote parameter, \"UseMetica\" (true / false), for a game\n" +
+                  "        // whose Firebase still has it. Read only when there is no MainAdNetwork parameter. Gives\n" +
+                  "        // \"Metica\" or \"MAX\"; null when the fetched config doesn't have this parameter either.\n" +
+                  "        static string EarlierUseMetica()\n" +
+                  "        {\n" +
+                  "            var parameter = GetRemoteValue<bool>(\"UseMetica\");\n" +
+                  "            if (parameter.Source != FetchSource.RemoteValue) return null;\n" +
+                  "\n" +
+                  "            var mainAdNetwork = (parameter.Value ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString();\n" +
+                  "            Message.Log(Tag.SDK, \"Remote config has the old UseMetica parameter, not MainAdNetwork: \" + mainAdNetwork);\n" +
+                  "            return mainAdNetwork;\n" +
+                  "        }\n"
+                : "        // Metica Integration Tools: the old remote key, \"UseMetica\": true / false, for a game whose\n" +
+                  "        // Firebase still has it. Read only when AdsSettings has no MainAdNetwork. Gives \"Metica\" or\n" +
+                  "        // \"MAX\"; null when the fetched AdsSettings doesn't have this key either.\n" +
+                  "        static string EarlierUseMetica(string adsSettings)\n" +
+                  "        {\n" +
+                  "            if (m_Configuration == null || string.IsNullOrEmpty(adsSettings) || !adsSettings.Contains(\"\\\"UseMetica\\\"\")) return null;\n" +
+                  "\n" +
+                  "            var mainAdNetwork = (m_Configuration.UseMetica ? MainAdNetwork.Metica : MainAdNetwork.MAX).ToString();\n" +
+                  "            Message.Log(Tag.SDK, \"Remote AdsSettings has the old UseMetica key, not MainAdNetwork: \" + mainAdNetwork);\n" +
+                  "            return mainAdNetwork;\n" +
+                  "        }\n";
 
         // ── Reading the project ────────────────────────────────────────────────
 
-        /// <summary>What the project's RemoteConfigManager has now.</summary>
+        private static string Path => MeticaPaths.RemoteConfigManager;
+
+        /// <summary>True when the project has a RemoteConfigManager to put the switch in.</summary>
+        public static bool Present => SourcePatcher.Exists(Path);
+
+        /// <summary>Which keys the project's remote switch reads now.</summary>
         public static RemoteSwitchForm Form()
         {
-            var path = MeticaPaths.RemoteConfigManager;
-            if (!SourcePatcher.Exists(path) || !SourcePatcher.Contains(path, Method)) return RemoteSwitchForm.None;
-            if (!SourcePatcher.Contains(path, Call)) return RemoteSwitchForm.Old;
-
-            return SourcePatcher.Contains(path, OldKeyCall) || SourcePatcher.Contains(path, OldKeyMethod)
-                ? RemoteSwitchForm.Both
-                : RemoteSwitchForm.New;
+            if (!SourcePatcher.Exists(Path) || !SourcePatcher.Contains(Path, Method)) return RemoteSwitchForm.None;
+            if (Source() == null) return RemoteSwitchForm.Old;
+            return HasOldKey() ? RemoteSwitchForm.Both : RemoteSwitchForm.New;
         }
 
-        /// <summary>
-        /// What the step's check still finds missing. <paramref name="picked"/> is the option
-        /// picked in the step (New or Both), or null when none has been.
-        /// </summary>
-        public static List<string> Missing(RemoteSwitchForm? picked)
+        /// <summary>Where the project's remote switch reads its value now; null without the tool's switch.</summary>
+        public static RemoteSwitchSource? Source()
         {
-            var path = MeticaPaths.RemoteConfigManager;
+            if (!SourcePatcher.Exists(Path)) return null;
+            if (SourcePatcher.Contains(Path, CallStatement(RemoteSwitchSource.Json))) return RemoteSwitchSource.Json;
+            if (SourcePatcher.Contains(Path, CallStatement(RemoteSwitchSource.Parameter))) return RemoteSwitchSource.Parameter;
+            return null;
+        }
+
+        private static bool HasOldKey() =>
+            new[] { RemoteSwitchSource.Json, RemoteSwitchSource.Parameter }.Any(source =>
+                SourcePatcher.Contains(Path, OldKeyCall(source)) || SourcePatcher.Contains(Path, OldKeyDeclaration(source)));
+
+        /// <summary>
+        /// What the step's check still finds missing. <paramref name="pickedForm"/> and
+        /// <paramref name="pickedSource"/> are the dropdowns as picked in the step; null when not.
+        /// </summary>
+        public static List<string> Missing(RemoteSwitchForm? pickedForm, RemoteSwitchSource? pickedSource)
+        {
             var missing = new List<string>();
             var form = Form();
 
-            if (!SourcePatcher.Contains(path, Hook)) missing.Add("PersistRemoteToggles subscription");
+            if (!SourcePatcher.Contains(Path, Hook)) missing.Add("PersistRemoteToggles subscription");
 
             switch (form)
             {
@@ -210,24 +315,29 @@ namespace GameDistrict.MeticaIntegrationTools
                     break;
 
                 case RemoteSwitchForm.Old:
-                    missing.Add(picked == RemoteSwitchForm.Both ? $"MainAdNetwork read by the remote switch ({KeepBothLabel} picked)"
-                        : picked == RemoteSwitchForm.New ? $"MainAdNetwork read by the remote switch ({NewLabel} picked)"
-                        : $"MainAdNetwork read by the remote switch — it reads only the old UseMetica; pick {KeepBothLabel} or {NewLabel}");
+                    missing.Add("MainAdNetwork read by the remote switch — the old code reads only UseMetica" +
+                                (pickedForm != null && pickedSource != null ? $" ({Label(pickedForm.Value)}, {Label(pickedSource.Value)} picked)" : ""));
                     break;
 
                 default:
-                    if (!SourcePatcher.Contains(path, Reader)) missing.Add("PersistMainAdNetwork method");
-                    if (form != RemoteSwitchForm.Both) break;
+                    var source = Source() ?? RemoteSwitchSource.Json;
+                    var wantBoth = (pickedForm ?? form) == RemoteSwitchForm.Both;
+                    var converting = pickedSource != null && pickedSource != source;
 
-                    if (picked == RemoteSwitchForm.New)
-                    {
-                        missing.Add($"The old UseMetica key no longer read ({NewLabel} picked)");
-                        break;
-                    }
+                    if (converting)
+                        missing.Add($"The remote value read from the {Label(pickedSource.Value)} — converting from the {Label(source)}");
+                    if (form == RemoteSwitchForm.Both && !wantBoth)
+                        missing.Add($"The old UseMetica no longer read — converting to {NewLabel}");
+                    if (form == RemoteSwitchForm.New && wantBoth)
+                        missing.Add($"The old UseMetica read when MainAdNetwork is missing — converting to {KeepBothLabel}");
+                    if (converting) break;
 
-                    if (!SourcePatcher.Contains(path, OldKeyCall)) missing.Add("PersistMainAdNetwork's call to EarlierUseMetica");
-                    if (!SourcePatcher.Contains(path, OldKeyMethod)) missing.Add("EarlierUseMetica method");
-                    if (!SourcePatcher.Contains(MeticaPaths.RemoteConfiguration, RemoteFlag))
+                    if (!SourcePatcher.Contains(Path, ReaderDeclaration(source))) missing.Add("PersistMainAdNetwork method");
+                    if (form != RemoteSwitchForm.Both || !wantBoth) break;
+
+                    if (!SourcePatcher.Contains(Path, OldKeyCall(source))) missing.Add("PersistMainAdNetwork's call to EarlierUseMetica");
+                    if (!SourcePatcher.Contains(Path, OldKeyDeclaration(source))) missing.Add("EarlierUseMetica method");
+                    if (source == RemoteSwitchSource.Json && !SourcePatcher.Contains(MeticaPaths.RemoteConfiguration, RemoteFlag))
                         missing.Add("RemoteConfiguration.UseMetica — EarlierUseMetica reads it");
                     break;
             }
@@ -238,38 +348,50 @@ namespace GameDistrict.MeticaIntegrationTools
         // ── Writing ────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Brings the remote switch to <paramref name="target"/> (New or Both).
+        /// Brings the remote switch to <paramref name="targetForm"/> reading from
+        /// <paramref name="targetSource"/>.
         ///
-        /// <para>Null means "not picked": a project without the switch gets New; one with the
-        /// old code is left exactly as it is, and told to pick; one already on New or Both stays
-        /// there (and gets back anything of it that went missing).</para>
+        /// <para>Null means "not picked". A project without the switch needs the source picked
+        /// (the keys are MainAdNetwork only, unless Both is asked for); one with the old code needs
+        /// both picked; until then it is left exactly as it is. One already on the tool's switch
+        /// keeps what null leaves out — and is converted to what is picked.</para>
         /// </summary>
-        public static void Apply(List<string> log, RemoteSwitchForm? target)
+        public static void Apply(List<string> log, RemoteSwitchForm? targetForm, RemoteSwitchSource? targetSource)
         {
-            var path = MeticaPaths.RemoteConfigManager;
             var form = Form();
+
+            // Nothing goes in, the subscription included, until there is something to call.
+            if (form == RemoteSwitchForm.None && targetSource == null)
+            {
+                log.Add("Remote switch: not written yet — pick where the remote value is in Firebase (Parameter or JSON) " +
+                        "in the step, then apply again.");
+                return;
+            }
 
             // OnFetchCompleteWithSuccess (bool, string) arrived in v5.3.6. Before that the only
             // event is OnFetchComplete, with no arguments — the same one CreateAndUpdateConfig
             // uses there, which does not know about success either.
-            var withSuccess = SourcePatcher.Contains(path, "OnFetchCompleteWithSuccess");
+            var withSuccess = SourcePatcher.Contains(Path, "OnFetchCompleteWithSuccess");
 
             Run(log, "PersistRemoteToggles subscription",
-                SourcePatcher.InsertAfterLine(path, Hook,
+                SourcePatcher.InsertAfterLine(Path, Hook,
                     "+= CreateAndUpdateConfig;",
                     withSuccess
                         ? "            OnFetchCompleteWithSuccess += PersistRemoteToggles;"
                         : "            OnFetchComplete += PersistRemoteToggles;"),
-                path,
+                Path,
                 "subscribe PersistRemoteToggles alongside CreateAndUpdateConfig");
 
             switch (form)
             {
                 case RemoteSwitchForm.None:
+                {
+                    var source = targetSource.Value;
+
                     // Both go in before AddOrUpdateValue, the method first — so PersistMainAdNetwork
                     // sits in the same place whether PersistRemoteToggles is new or was there already.
                     Run(log, "PersistRemoteToggles method",
-                        SourcePatcher.InsertBeforeLine(path, Method, Anchor,
+                        SourcePatcher.InsertBeforeLine(Path, Method, Anchor,
                             (withSuccess
                                 ? "        static void PersistRemoteToggles(bool success, string message)\n" +
                                   "        {\n" +
@@ -277,92 +399,127 @@ namespace GameDistrict.MeticaIntegrationTools
                                 : "        static void PersistRemoteToggles()\n" +
                                   "        {\n" +
                                   "            if (m_Configuration == null) return;\n") +
-                            CallLines("            ") + "\n" +
+                            CallLines("            ", source) + "\n" +
                             "        }\n"),
-                        path,
-                        "add a PersistRemoteToggles method that calls " + Call);
-                    AddReader(log);
-                    if (target == RemoteSwitchForm.Both) AddOldKey(log);
+                        Path,
+                        "add a PersistRemoteToggles method that calls " + CallStatement(source));
+                    AddReader(log, source);
+                    if (targetForm == RemoteSwitchForm.Both) AddOldKey(log, source);
                     break;
+                }
 
                 case RemoteSwitchForm.Old:
-                    if (target != RemoteSwitchForm.New && target != RemoteSwitchForm.Both)
+                {
+                    if (targetForm == null || targetSource == null)
                     {
-                        log.Add($"Remote switch: {path} has the old code, which reads only UseMetica. Left as it is — " +
-                                $"pick {KeepBothLabel} or {NewLabel} in the step, then apply again.");
+                        log.Add($"Remote switch: {Path} has the old code, which reads only UseMetica. Left as it is — pick " +
+                                $"{KeepBothLabel} or {NewLabel}, and {ParameterLabel} or {JsonLabel}, in the step, then apply again.");
                         return;
                     }
 
                     // The call goes in only once the method it calls is in the file — otherwise
                     // the old lines, which work, stay.
-                    AddReader(log);
-                    if (!SourcePatcher.Contains(path, Reader))
+                    var source = targetSource.Value;
+                    AddReader(log, source);
+                    if (!SourcePatcher.Contains(Path, ReaderDeclaration(source)))
                     {
-                        log.Add($"PersistRemoteToggles in {path} still saves the remote switch the old way — add PersistMainAdNetwork first (above).");
+                        log.Add($"PersistRemoteToggles in {Path} still saves the remote switch the old way — add PersistMainAdNetwork first (above).");
                         return;
                     }
 
-                    Run(log, "PersistRemoteToggles saves the remote MainAdNetwork", RewriteOldLines(path), path,
-                        "in PersistRemoteToggles, replace the lines that save UseMetica / MainAdNetwork with " + Call);
-                    if (target == RemoteSwitchForm.Both && SourcePatcher.Contains(path, Call)) AddOldKey(log);
+                    Run(log, "PersistRemoteToggles saves the remote MainAdNetwork", RewriteOldLines(source), Path,
+                        "in PersistRemoteToggles, replace the lines that save UseMetica / MainAdNetwork with " + CallStatement(source));
+                    if (targetForm == RemoteSwitchForm.Both && SourcePatcher.Contains(Path, CallStatement(source))) AddOldKey(log, source);
                     break;
+                }
 
-                case RemoteSwitchForm.New:
-                    AddReader(log);
-                    if (target == RemoteSwitchForm.Both) AddOldKey(log);
-                    break;
+                default:
+                {
+                    var current = Source() ?? RemoteSwitchSource.Json;
+                    var source = targetSource ?? current;
+                    var wantBoth = (targetForm ?? form) == RemoteSwitchForm.Both;
 
-                case RemoteSwitchForm.Both:
-                    AddReader(log);
-                    if (target == RemoteSwitchForm.New) RemoveOldKey(log);
-                    else AddOldKey(log);
+                    if (source != current && !Convert(log, current, source)) return;
+
+                    AddReader(log, source);
+                    if (wantBoth) AddOldKey(log, source);
+                    else if (HasOldKey() && RemoveOldKey(source))
+                        log.Add($"{Path}: the old UseMetica is no longer read ({NewLabel})");
                     break;
+                }
             }
 
             // PersistMainAdNetwork logs through Message / Tag.
-            if (SourcePatcher.Contains(path, Reader))
-                SourcePatcher.EnsureUsing(path, "using Monetization.Runtime.Logger;");
+            if (SourcePatcher.Contains(Path, ReaderDeclaration(RemoteSwitchSource.Json))
+                || SourcePatcher.Contains(Path, ReaderDeclaration(RemoteSwitchSource.Parameter)))
+                SourcePatcher.EnsureUsing(Path, "using Monetization.Runtime.Logger;");
         }
 
-        private static void AddReader(List<string> log) =>
+        private static void AddReader(List<string> log, RemoteSwitchSource source) =>
             Run(log, "PersistMainAdNetwork method",
-                SourcePatcher.InsertBeforeLine(MeticaPaths.RemoteConfigManager, Reader, Anchor, ReaderBlock),
-                MeticaPaths.RemoteConfigManager,
-                "add the PersistMainAdNetwork method (and its MainAdNetworkRemote class) to RemoteConfigManager — " +
-                "it saves AdsSettings' \"MainAdNetwork\" to MonetizationPreferences.MainAdNetwork");
+                SourcePatcher.InsertBeforeLine(Path, ReaderDeclaration(source), Anchor, ReaderBlock(source)),
+                Path,
+                "add the PersistMainAdNetwork method to RemoteConfigManager — it saves the remote " +
+                "\"MainAdNetwork\" to MonetizationPreferences.MainAdNetwork");
 
-        /// <summary>Keep both: RemoteConfiguration's bool, the line in PersistMainAdNetwork, and EarlierUseMetica after it.</summary>
-        private static void AddOldKey(List<string> log)
+        /// <summary>
+        /// Keep both: the line in PersistMainAdNetwork and EarlierUseMetica after it — and, for
+        /// the JSON, RemoteConfiguration's bool, which it reads.
+        /// </summary>
+        private static void AddOldKey(List<string> log, RemoteSwitchSource source)
         {
-            var path = MeticaPaths.RemoteConfigManager;
+            if (source == RemoteSwitchSource.Json)
+                Run(log, "RemoteConfiguration.UseMetica",
+                    SourcePatcher.InsertAfterLine(MeticaPaths.RemoteConfiguration, RemoteFlag,
+                        "NextInterstitialDelay", "        public bool UseMetica;"),
+                    MeticaPaths.RemoteConfiguration, "add: public bool UseMetica;");
 
-            Run(log, "RemoteConfiguration.UseMetica",
-                SourcePatcher.InsertAfterLine(MeticaPaths.RemoteConfiguration, RemoteFlag,
-                    "NextInterstitialDelay", "        public bool UseMetica;"),
-                MeticaPaths.RemoteConfiguration, "add: public bool UseMetica;");
-
-            Run(log, "PersistMainAdNetwork reads the old UseMetica key",
-                SourcePatcher.InsertAfterLine(path, OldKeyCall, ReadLine, OldKeyLine),
-                path, "in PersistMainAdNetwork, right after the line that reads the JSON, add: " + OldKeyLine.Trim());
+            Run(log, "PersistMainAdNetwork reads the old UseMetica",
+                SourcePatcher.InsertAfterLine(Path, OldKeyCall(source), ReadLine(source), OldKeyLine(source)),
+                Path, "in PersistMainAdNetwork, right after the line that reads the value, add: " + OldKeyLine(source).Trim());
 
             Run(log, "EarlierUseMetica method",
-                SourcePatcher.InsertBeforeLine(path, OldKeyMethod, Anchor, OldKeyBlock),
-                path, "add the EarlierUseMetica method to RemoteConfigManager");
+                SourcePatcher.InsertBeforeLine(Path, OldKeyDeclaration(source), Anchor, OldKeyBlock(source)),
+                Path, "add the EarlierUseMetica method to RemoteConfigManager");
         }
 
         /// <summary>
-        /// Implement new, on a project that kept both: the line and the method go.
-        /// RemoteConfiguration's bool stays — GD SDK 6.2.1+ ships it, and game code may read it.
+        /// The line and the method of Keep both, for <paramref name="source"/>. RemoteConfiguration's
+        /// bool stays — GD SDK 6.2.1+ ships it, and game code may read it. True when anything went.
         /// </summary>
-        private static void RemoveOldKey(List<string> log)
+        private static bool RemoveOldKey(RemoteSwitchSource source)
         {
-            var path = MeticaPaths.RemoteConfigManager;
-            var lines = SourcePatcher.RemoveLinesContaining(path, OldKeyCall);
-            var method = SourcePatcher.RemoveBlockContaining(path, OldKeyMethod);
+            var lines = SourcePatcher.RemoveLinesContaining(Path, OldKeyCall(source));
+            var method = SourcePatcher.RemoveBlockContaining(Path, OldKeyDeclaration(source));
+            return lines > 0 || method;
+        }
 
-            log.Add(lines > 0 || method
-                ? $"{path}: the old UseMetica key is no longer read ({NewLabel})"
-                : $"{path}: no old UseMetica key to stop reading");
+        /// <summary>
+        /// Moves the tool's switch from reading <paramref name="from"/> to <paramref name="to"/>:
+        /// the call, PersistMainAdNetwork and (Keep both) EarlierUseMetica, swapped for their
+        /// other version. Only when PersistMainAdNetwork is exactly as the tool wrote it —
+        /// otherwise nothing changes, and it is reported for a hand edit.
+        /// </summary>
+        private static bool Convert(List<string> log, RemoteSwitchSource from, RemoteSwitchSource to)
+        {
+            var text = SourcePatcher.ReadAll(Path).Replace("\r\n", "\n");
+            var reader = string.Join("\n", text.Split('\n').Where(line => !line.Contains(OldKeyCall(from))));
+            if (!reader.Contains(ReaderBlock(from)) || !text.Contains(CallStatement(from)))
+            {
+                log.Add($"Remote switch: PersistMainAdNetwork in {Path} isn't as the tool wrote it (changed by hand?), so it " +
+                        $"isn't converted to the {Label(to)}. Convert it by hand, or restore the original RemoteConfigManager.cs " +
+                        "(Compare → Replace with original) and apply again.");
+                return false;
+            }
+
+            RemoveOldKey(from);
+            SourcePatcher.ReplaceFirst(Path, ReaderDeclaration(to),
+                PatchCoreFilesStep.Lines(Path, ReaderBlock(from)), PatchCoreFilesStep.Lines(Path, ReaderBlock(to)));
+            SourcePatcher.ReplaceFirst(Path, CallStatement(to), CallStatement(from), CallStatement(to));
+            SourcePatcher.ReplaceFirst(Path, CallComment(to), CallComment(from), CallComment(to));
+
+            log.Add($"{Path}: the remote value is now read from the {Label(to)} (was the {Label(from)})");
+            return true;
         }
 
         /// <summary>
@@ -370,12 +527,13 @@ namespace GameDistrict.MeticaIntegrationTools
         /// first and last line inside the method, so lines a game added before or after them
         /// stay where they are.
         /// </summary>
-        private static O RewriteOldLines(string path)
+        private static O RewriteOldLines(RemoteSwitchSource source)
         {
-            if (!SourcePatcher.Exists(path)) return O.FileMissing;
+            if (!SourcePatcher.Exists(Path)) return O.FileMissing;
 
-            var text = SourcePatcher.ReadAll(path);
-            if (text.Contains(Call)) return O.AlreadyApplied;
+            var text = SourcePatcher.ReadAll(Path);
+            if (text.Contains(CallStatement(RemoteSwitchSource.Json)) || text.Contains(CallStatement(RemoteSwitchSource.Parameter)))
+                return O.AlreadyApplied;
 
             var newline = text.Contains("\r\n") ? "\r\n" : "\n";
             var lines = text.Replace("\r\n", "\n").Split('\n').ToList();
@@ -391,9 +549,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var indent = lines[first].Substring(0, lines[first].Length - lines[first].TrimStart().Length);
             lines.RemoveRange(first, last - first + 1);
-            lines.InsertRange(first, CallLines(indent).Split('\n'));
+            lines.InsertRange(first, CallLines(indent, source).Split('\n'));
 
-            SourcePatcher.WriteWithBackup(path, string.Join(newline, lines));
+            SourcePatcher.WriteWithBackup(Path, string.Join(newline, lines));
             return O.Applied;
         }
 

@@ -26,15 +26,17 @@ namespace GameDistrict.MeticaIntegrationTools
         public override string Why =>
             "Additions only: AdPlatforms.METICA, Tag.Metica, the MeticaSettings resource path, the " +
             "AdRevenueInfo payload, the AdUnits Metica section, the remote switch and the MainAdNetwork " +
-            "preference it feeds: Firebase's AdsSettings carries \"MainAdNetwork\": \"Unassigned\", \"MAX\" or " +
-            "\"Metica\" (any casing), saved after each fetch — \"Unassigned\" takes a device back out of the test, a " +
-            "value that is none of the three is refused with an error log, and without the key nothing is saved, " +
-            "so users outside the test stay as they are. A project that already has the old remote switch code " +
-            "(it reads only \"UseMetica\": this tool's earlier patch, or GD SDK 6.2.1+'s own) is asked here, never " +
-            "decided for — Keep both (MainAdNetwork, and the old UseMetica when it's missing: for a game already " +
-            "live on UseMetica) or Implement new (MainAdNetwork only); one that kept both can move to the new one " +
-            "later. A project on the older UseMetica bool preference has it moved to MainAdNetwork, every user " +
-            "starting Unassigned. Then the AdsManager network switch (reads " +
+            "preference it feeds: Firebase carries \"MainAdNetwork\": \"Unassigned\", \"MAX\" or \"Metica\" (any " +
+            "casing), saved after each fetch — \"Unassigned\" takes a device back out of the test, a value that is " +
+            "none of the three is refused with an error log, and without it nothing is saved, so users outside the " +
+            "test stay as they are. Remote value: where it is in Firebase — a Parameter of its own, or a field of " +
+            "the AdsSettings JSON — always asked before the switch is written. Remote switch: a project that already " +
+            "has the old code (it reads only \"UseMetica\": this tool's earlier patch, or GD SDK 6.2.1+'s own) is " +
+            "asked, never decided for — Keep both (MainAdNetwork, and the old UseMetica when it's missing: for a " +
+            "game already live on UseMetica) or Implement new (MainAdNetwork only); a first-time integration gets " +
+            "Implement new. Once in place, both dropdowns show what the code has, and picking the other converts it " +
+            "(Parameter ↔ JSON, Keep both ↔ Implement new). A project on the older UseMetica bool preference has it " +
+            "moved to MainAdNetwork, every user starting Unassigned. Then the AdsManager network switch (reads " +
             "MainAdNetwork once at ads init, Metica only for Metica, and reports it in the GameData event), a METICA case in AdjustAnalyticsNetwork.GetAdSource " +
             "(\"applovin_max_sdk\" — without it Adjust drops Metica revenue), and on GD SDK 5.0–5.2 " +
             "MeticaConsentSettings in ConsentManager's fixed consent list. OnAdRevenuePaidEvent stays " +
@@ -146,11 +148,10 @@ namespace GameDistrict.MeticaIntegrationTools
                 .Select(c => c.what)
                 .ToList();
 
-            // The remote switch. Old code there: nothing is decided for the project — it has to
-            // be picked, Keep both or Implement new, and the pick only lives until it is applied.
+            // The remote switch: what the dropdowns ask for against what the code has.
             var remoteSwitch = RemoteSwitchPatch.Form();
-            if (remoteSwitch != RemoteSwitchForm.Old && remoteSwitch != RemoteSwitchForm.Both) _remoteSwitch = null;
-            missing.AddRange(RemoteSwitchPatch.Missing(_remoteSwitch));
+            var remoteSource = RemoteSwitchPatch.Source();
+            missing.AddRange(RemoteSwitchPatch.Missing(_remoteSwitch, _remoteSource));
 
             if (RevenueDispatchWrapped())
                 missing.Add("OnAdRevenuePaidEvent is inside ThreadDispatcher — it has to be invoked directly");
@@ -177,17 +178,17 @@ namespace GameDistrict.MeticaIntegrationTools
             if (missing.Count == 0)
             {
                 result.Note("All patches in place");
-                result.Note(remoteSwitch == RemoteSwitchForm.Both
-                    ? "Remote switch: MainAdNetwork, and the old UseMetica when it's missing"
-                    : "Remote switch: MainAdNetwork only");
+                if (remoteSource != null)
+                    result.Note((remoteSwitch == RemoteSwitchForm.Both
+                                    ? "Remote switch: MainAdNetwork, and the old UseMetica when it's missing"
+                                    : "Remote switch: MainAdNetwork only") +
+                                $" — from the {RemoteSwitchPatch.Label(remoteSource.Value)}");
                 return result.Seal();
             }
 
-            // Old remote switch code and nothing picked yet: that comes first, it is what the
-            // developer has to do before Apply can finish.
-            if (remoteSwitch == RemoteSwitchForm.Old && _remoteSwitch == null)
-                result.Problem($"Old remote switch code found — it reads only UseMetica. Pick {RemoteSwitchPatch.KeepBothLabel} " +
-                               $"or {RemoteSwitchPatch.NewLabel} below, then Apply patches.");
+            // What the developer has to do about the remote switch comes first: pick, or convert.
+            var remoteSwitchTodo = RemoteSwitchTodo(remoteSwitch, remoteSource);
+            if (remoteSwitchTodo != null) result.Problem(remoteSwitchTodo);
 
             // One count up front; the list itself goes under "Why?" as the extra problems.
             // The direct-invoke rule and the Adjust ad source count as patches too, and the
@@ -203,41 +204,99 @@ namespace GameDistrict.MeticaIntegrationTools
         private static bool OldFormWithoutMarker(string path, string oldForm, string marker) =>
             SourcePatcher.Contains(path, oldForm) && !SourcePatcher.Contains(path, marker);
 
-        // ── The remote switch: new, or keep both ───────────────────────────────
+        // ── The remote switch: which keys, and where in Firebase ───────────────
 
         /// <summary>
-        /// What was picked for a project that has the old remote switch code: New or Both, or
-        /// null while nothing has been. Never decided from the code — only asked.
+        /// The "Remote switch" dropdown — Keep both or Implement new — or null while it shows
+        /// what the code has. Never decided from the code: asked where the old UseMetica code is,
+        /// and changed by the developer to convert one that is in place.
         /// </summary>
         private RemoteSwitchForm? _remoteSwitch;
 
         /// <summary>
-        /// The two options, only where the old UseMetica code is: a project still on it has to
-        /// pick one, and one that kept both can still move to the new one. A project where the
-        /// switch was never integrated gets the new form with no question.
+        /// The "Remote value" dropdown — Parameter or JSON — or null while it shows what the code
+        /// has. Always asked before the switch is written; changed to convert one in place.
+        /// </summary>
+        private RemoteSwitchSource? _remoteSource;
+
+        /// <summary>
+        /// The one line about the remote switch the developer has to act on: what to pick, or the
+        /// conversion the dropdowns ask for. Null when there is nothing.
+        /// </summary>
+        private string RemoteSwitchTodo(RemoteSwitchForm form, RemoteSwitchSource? source)
+        {
+            const string where = "where the remote value is (" + RemoteSwitchPatch.ParameterLabel + " or " + RemoteSwitchPatch.JsonLabel + ")";
+            const string which = RemoteSwitchPatch.KeepBothLabel + " or " + RemoteSwitchPatch.NewLabel;
+
+            switch (form)
+            {
+                case RemoteSwitchForm.None:
+                    return _remoteSource == null ? $"Pick {where} in Firebase below, then Apply patches." : null;
+
+                case RemoteSwitchForm.Old:
+                    var picks = new[] { _remoteSwitch == null ? which : null, _remoteSource == null ? where : null }
+                        .Where(pick => pick != null).ToList();
+                    return picks.Count == 0 ? null
+                        : $"Old remote switch code found — it reads only UseMetica. Pick {string.Join(", and ", picks)} below, then Apply patches.";
+
+                default:
+                    var changes = new List<string>();
+                    if (_remoteSwitch != null && _remoteSwitch != form)
+                        changes.Add($"{RemoteSwitchPatch.Label(form)} → {RemoteSwitchPatch.Label(_remoteSwitch.Value)}");
+                    if (_remoteSource != null && source != null && _remoteSource != source)
+                        changes.Add($"{RemoteSwitchPatch.Label(source.Value)} → {RemoteSwitchPatch.Label(_remoteSource.Value)}");
+                    return changes.Count == 0 ? null
+                        : $"Convert the remote switch: {string.Join(", ", changes)}. Apply patches to convert, or set the dropdown back.";
+            }
+        }
+
+        /// <summary>
+        /// Two dropdowns. "Remote switch" — Keep both or Implement new — once there is UseMetica
+        /// code (the old code, or the tool's switch); a project where the switch was never
+        /// integrated reads MainAdNetwork only, with no question. "Remote value" — Parameter or
+        /// JSON — always. Before the switch is written they start on "Pick one…"; once it is in
+        /// place they show what it is, and picking the other converts it.
         /// </summary>
         internal override IEnumerable<StepControl> Controls(VerifyResult result)
         {
+            if (!RemoteSwitchPatch.Present) yield break;
+
+            const string pickOne = "Pick one…";
             var form = RemoteSwitchPatch.Form();
-            var caption = RemoteSwitchPatch.KeepBothSummary + "\n" + RemoteSwitchPatch.NewSummary;
+            var source = RemoteSwitchPatch.Source();
+            var formCaption = RemoteSwitchPatch.KeepBothSummary + "\n" + RemoteSwitchPatch.NewSummary;
+            var sourceCaption = RemoteSwitchPatch.ParameterSummary + "\n" + RemoteSwitchPatch.JsonSummary;
 
             if (form == RemoteSwitchForm.Old)
                 yield return new StepChoice("Remote switch",
-                    new[] { "Pick one…", RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
+                    new[] { pickOne, RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
                     _remoteSwitch == RemoteSwitchForm.Both ? 1 : _remoteSwitch == RemoteSwitchForm.New ? 2 : 0,
                     index => _remoteSwitch = index == 1 ? RemoteSwitchForm.Both : index == 2 ? RemoteSwitchForm.New : (RemoteSwitchForm?)null,
-                    caption);
-            else if (form == RemoteSwitchForm.Both)
+                    formCaption);
+            else if (form != RemoteSwitchForm.None)
                 yield return new StepChoice("Remote switch",
                     new[] { RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
-                    _remoteSwitch == RemoteSwitchForm.New ? 1 : 0,
-                    index => _remoteSwitch = index == 1 ? RemoteSwitchForm.New : RemoteSwitchForm.Both,
-                    caption);
+                    (_remoteSwitch ?? form) == RemoteSwitchForm.Both ? 0 : 1,
+                    index => _remoteSwitch = index == 0 ? RemoteSwitchForm.Both : RemoteSwitchForm.New,
+                    formCaption);
+
+            if (source == null)
+                yield return new StepChoice("Remote value",
+                    new[] { pickOne, RemoteSwitchPatch.ParameterLabel, RemoteSwitchPatch.JsonLabel },
+                    _remoteSource == RemoteSwitchSource.Parameter ? 1 : _remoteSource == RemoteSwitchSource.Json ? 2 : 0,
+                    index => _remoteSource = index == 1 ? RemoteSwitchSource.Parameter : index == 2 ? RemoteSwitchSource.Json : (RemoteSwitchSource?)null,
+                    sourceCaption);
+            else
+                yield return new StepChoice("Remote value",
+                    new[] { RemoteSwitchPatch.ParameterLabel, RemoteSwitchPatch.JsonLabel },
+                    (_remoteSource ?? source) == RemoteSwitchSource.Parameter ? 0 : 1,
+                    index => _remoteSource = index == 0 ? RemoteSwitchSource.Parameter : RemoteSwitchSource.Json,
+                    sourceCaption);
         }
 
         public override void Apply()
         {
-            MeticaIntegrationLog.Record(Title, ApplyPatches(_remoteSwitch));
+            MeticaIntegrationLog.Record(Title, ApplyPatches(_remoteSwitch, _remoteSource));
             AssetDatabase.Refresh();
         }
 
@@ -245,11 +304,9 @@ namespace GameDistrict.MeticaIntegrationTools
         /// The edits themselves, through <see cref="SourcePatcher"/> only, so they run the same
         /// on disk or in memory (<see cref="MeticaPatchSet"/>). Returns what happened.
         /// </summary>
-        /// <param name="remoteSwitch">
-        /// The remote switch to end up with, New or Both; null leaves a project that has the old
-        /// code as it is. See <see cref="RemoteSwitchPatch.Apply"/>.
-        /// </param>
-        internal static List<string> ApplyPatches(RemoteSwitchForm? remoteSwitch)
+        /// <param name="remoteSwitch">Keep both or Implement new, as picked; null: as the code has it (Implement new for a new switch).</param>
+        /// <param name="remoteSource">Parameter or JSON, as picked; null: as the code has it, and no new switch is written.</param>
+        internal static List<string> ApplyPatches(RemoteSwitchForm? remoteSwitch, RemoteSwitchSource? remoteSource)
         {
             var log = new List<string>();
 
@@ -276,7 +333,7 @@ namespace GameDistrict.MeticaIntegrationTools
             PatchAdRevenueInfo(log);
             PatchAdUnitsConfiguration(log);
             PatchPreferences(log);
-            RemoteSwitchPatch.Apply(log, remoteSwitch);
+            RemoteSwitchPatch.Apply(log, remoteSwitch, remoteSource);
             PatchAdsManager(log);
             PatchAnalyticsManager(log);
             PatchAdjustAnalyticsNetwork(log);

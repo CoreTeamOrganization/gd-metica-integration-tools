@@ -19,9 +19,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public override string Why =>
             "So the GD SDK's own Remove SDK menu also deletes Metica. After this, set \"MainAdNetwork\" in " +
-            "Firebase Remote Config's AdsSettings JSON to \"Metica\", \"MAX\" or \"Unassigned\" — e.g. " +
-            "{\"MainAdNetwork\":\"Metica\"}; paste it, a misspelt value is refused on the device (the old " +
-            "\"UseMetica\": true / false only works in a project whose patch step kept both). Ads start about 2s " +
+            "Firebase Remote Config to \"Metica\", \"MAX\" or \"Unassigned\" — where the patch step's Remote value " +
+            "says: a string Parameter of its own, or in the AdsSettings JSON, e.g. {\"MainAdNetwork\":\"Metica\"}. " +
+            "Paste it; a misspelt value is refused on the device (the old \"UseMetica\" only works in a project " +
+            "whose patch step kept both). Ads start about 2s " +
             "after launch, before the fetch lands, so a changed value applies on the next launch. Then build to a " +
             "device and look for the Metica tag: SDK version, \"Metica initialization completed\" and the " +
             "TRIAL / HOLDOUT user group.";

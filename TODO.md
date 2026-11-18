@@ -49,26 +49,37 @@ cover all of the list below.
       one of Unassigned, MAX, Metica, MainAdNetwork stays …`, pref unchanged.
 - [ ] No MainAdNetwork in AdsSettings → "Remote AdsSettings has no MainAdNetwork, MainAdNetwork
       stays …", pref unchanged — also right after a fetch that had it, in the same session.
-- [ ] A first-time game (GD SDK 5.x – 6.2.0): no question in the patch step; the code has
-      `PersistMainAdNetwork` and nothing about UseMetica (RemoteConfiguration has no UseMetica
-      field); `{"UseMetica":true}` in Firebase does nothing ("has no MainAdNetwork").
+- [ ] A first-time game (GD SDK 5.x – 6.2.0): only the **Remote value** dropdown, on "Pick one…";
+      the step says "Pick where the remote value is (Parameter or JSON (AdsSettings)) in Firebase…".
+      Apply with nothing picked: everything else patched, RemoteConfigManager untouched.
+      Pick JSON → Apply: `PersistMainAdNetwork(string adsSettings)`, nothing about UseMetica, no
+      UseMetica on RemoteConfiguration; `{"UseMetica":true}` in Firebase does nothing.
+      Pick Parameter instead: `PersistMainAdNetwork()` reading the `MainAdNetwork` parameter.
+- [ ] Parameter, on device: Firebase parameter `MainAdNetwork` (String) = `Metica` → "Remote Switch
+      saved: Metica as pref"; no such parameter → "Remote config has no MainAdNetwork parameter…";
+      an in-app default for it doesn't count.
 - [ ] A game with old remote switch code — patched by the earlier tool (the game integrated on
       2026-11-16 has the form with logs), or stock GD SDK 6.2.1+: the step says "Old remote switch
-      code found… Pick Keep both or Implement new", and shows the Remote switch dropdown with both
-      one-line summaries. Apply patches with nothing picked: everything else is patched,
-      RemoteConfigManager untouched, the step still asks.
-- [ ] Pick **Implement new** → Apply: PersistRemoteToggles is the two lines, PersistMainAdNetwork
-      added, no EarlierUseMetica; it compiles; lines the game added in PersistRemoteToggles stay;
-      the dropdown is gone; the step notes "Remote switch: MainAdNetwork only".
-- [ ] Pick **Keep both** → Apply: the same plus the `EarlierUseMetica` line and method; it
+      code found… Pick Keep both or Implement new, and where the remote value is…", and shows both
+      dropdowns with their one-line summaries. Apply with only one picked, or none: everything else
+      is patched, RemoteConfigManager untouched, the step still asks.
+- [ ] Pick **Implement new** (+ JSON or Parameter) → Apply: PersistRemoteToggles is the two lines,
+      PersistMainAdNetwork added, no EarlierUseMetica; it compiles; lines the game added in
+      PersistRemoteToggles stay; the step notes "Remote switch: MainAdNetwork only — from the …".
+- [ ] Pick **Keep both** + JSON → Apply: the same plus the `EarlierUseMetica` line and method; it
       compiles; `{"UseMetica":true}` alone → "Remote AdsSettings has the old UseMetica key, not
       MainAdNetwork: Metica" then "Remote Switch saved: Metica as pref"; with
-      `"MainAdNetwork":"MAX"` next to it → MAX. The dropdown stays, on Keep both; the step passes.
-- [ ] A Keep both project later: pick Implement new → the step shows "Implement new picked — the
-      old UseMetica key is still read"; Apply removes the line and the method; it compiles.
+      `"MainAdNetwork":"MAX"` next to it → MAX. Keep both + Parameter: the same with the
+      `UseMetica` Boolean parameter ("Remote config has the old UseMetica parameter…").
+- [ ] Converting, on a done step: both dropdowns still there, showing what the code has. Change
+      Remote value JSON → Parameter → the step says "Convert the remote switch: JSON (AdsSettings) →
+      Parameter. Apply patches to convert…"; Apply converts it and it compiles; set it back to JSON →
+      converts back. The same for Keep both ↔ Implement new, and both at once.
+- [ ] A PersistMainAdNetwork edited by hand + a conversion picked: Apply reports "isn't converted",
+      the file is unchanged.
 - [ ] From the bool preference (GD SDK 6.2.1+, the first tool patch): every user starts Unassigned.
 - [ ] Compare with original GD SDK: RemoteConfigManager / RemoteConfiguration show as the tool's
-      on both forms.
+      on all four (Keep both / Implement new × Parameter / JSON).
 - [ ] GD SDK 6.0–6.2.0: Remote Metica switch writes the MainAdNetwork read and a GameData event.
 - [ ] Standalone: at ads init, once per session, `[Metica] MainAdNetwork = Metica from saved pref →
       Metica this session` (`Unassigned` / `MAX` → AppLovin), from the patched init too.
