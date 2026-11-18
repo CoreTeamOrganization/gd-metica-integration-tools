@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Standalone: the remote switch uses a `MainAdNetwork` enum (`Unassigned`, `MAX`, `Metica`). The
+  runtime step writes a new `MainAdNetwork.cs` (global namespace): the enum and
+  `MainAdNetworkPref`, which saves it under the PlayerPrefs key `MainAdNetwork` and parses it in
+  any casing. `MeticaRemoteConfig` stores through it; `MeticaRemoteConfig.MainAdNetwork` is now the
+  enum, its string constants are gone, and `Apply(MainAdNetwork)` is new. Game code can use the
+  same enum and pref. A game with its own `MainAdNetwork` keeps it — the step skips the file and
+  says so. Existing runtimes are untouched (the step never overwrites); a regenerated one starts
+  every device Unassigned, since the key changed from `Metica_MainAdNetwork`.
+- Commit section: a step committed once offered only **Push** from then on, even with new
+  uncommitted changes in its files, or after switching branch or resetting (the record is kept per
+  project folder, in EditorPrefs). The commit is now offered whenever git reports changes in the
+  step's files, and a recorded commit counts only while it is in the current branch's history.
 - Standalone: the generated `OnMeticaAdRevenue` stub now says `info.Format` is the
   `AdFormat` enum (Interstitial, Rewarded, Banner, MRec) and must not be compared to MAX's
   `"INTER"` / `"BANNER"` strings; the integration review flags that mistake. A custom SDK game

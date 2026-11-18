@@ -55,6 +55,9 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>Commits the current branch's remote lacks; null until asked, -1 when unknown. Emptied on every re-check.</summary>
         private int? _unpushed;
 
+        /// <summary>Each shown step's recorded commit, when still in this branch's history (see CommittedHere). Emptied on every re-check.</summary>
+        private readonly Dictionary<string, string> _committedHere = new Dictionary<string, string>();
+
         /// <summary>The commit summary and description as typed, by step id, so a rebuild keeps them.</summary>
         private readonly Dictionary<string, string> _commitSummary = new Dictionary<string, string>();
         private readonly Dictionary<string, string> _commitBody = new Dictionary<string, string>();
@@ -207,6 +210,7 @@ namespace GameDistrict.MeticaIntegrationTools
             {
                 MeticaPaths.ForgetCache();
                 _commitChanges.Clear();
+                _committedHere.Clear();
                 _unpushed = null;
                 _installRead = false;
 
@@ -672,7 +676,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var status = El("mi-notes");
             if (state == StepState.Done && !result.Waiting)
             {
-                var sha = MeticaIntegrationProgress.CommittedAs(step.Id);
+                var sha = CommittedHere(step.Id);
                 status.Add(Box("mi-success", MiIcon.Kind.Check, sha == null
                     ? "Done — verified and signed off."
                     : $"Done — verified, signed off and committed ({sha})."));
@@ -806,15 +810,15 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary>
         /// Commit this step's changes, prefilled: the files git reports as changed under the
-        /// step's paths, a summary and a description — edit them or just press Commit. Null
-        /// once the step has been committed, and outside the review panel whenever there is
-        /// nothing to commit.
+        /// step's paths, a summary and a description — edit them or just press Commit. Offered
+        /// whenever those files have uncommitted changes, even if the step was committed
+        /// before (re-applied, converted, or on a branch the old commit isn't in). With nothing
+        /// to commit: the Push button once the step's commit is in this branch, else null
+        /// outside the review panel.
         /// </summary>
         private VisualElement CommitSection(MeticaFlow flow, int index, bool inReview)
         {
             var step = flow.Steps[index];
-            var committed = MeticaIntegrationProgress.CommittedAs(step.Id);
-            if (committed != null) return PushSection(committed);
 
             if (!_commitChanges.TryGetValue(step.Id, out var pending))
             {
@@ -824,6 +828,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
             if (pending.unavailable != null || pending.changes.Count == 0)
             {
+                var committed = pending.unavailable == null ? CommittedHere(step.Id) : null;
+                if (committed != null) return PushSection(committed);
+
                 if (!inReview) return null;
 
                 var quiet = El("mi-commit");
@@ -890,8 +897,24 @@ namespace GameDistrict.MeticaIntegrationTools
         }
 
         /// <summary>
+        /// The commit recorded for a step, while it is still in the current branch's history;
+        /// null when none was recorded, or when the recorded one isn't here — made on another
+        /// branch, dropped by a reset, or from an earlier clone in the same folder (the record
+        /// is kept per project folder, not per branch). When git cannot tell, the record stands.
+        /// </summary>
+        private string CommittedHere(string stepId)
+        {
+            if (_committedHere.TryGetValue(stepId, out var cached)) return cached;
+
+            var sha = MeticaIntegrationProgress.CommittedAs(stepId);
+            if (sha != null && StepCommit.IsInHistory(sha) == false) sha = null;
+            _committedHere[stepId] = sha;
+            return sha;
+        }
+
+        /// <summary>
         /// A committed step whose branch has commits its remote does not: one Push button. Null
-        /// once everything is pushed, or when git cannot tell.
+        /// once everything is pushed.
         /// </summary>
         private VisualElement PushSection(string sha)
         {

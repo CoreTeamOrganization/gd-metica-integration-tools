@@ -16,12 +16,12 @@ namespace MeticaIntegration
     /// config says, and the next session reads it at boot. The same trade the GD Monetization
     /// SDK makes — a change takes effect on the session after the one that received it.</para>
     ///
-    /// <para>What is stored is the main ad network: <see cref="Unassigned"/> until a fetch
-    /// carrying the switch lands, then what it says — <see cref="Max"/>, <see cref="Metica"/>,
-    /// or Unassigned again. Remote config carries those same three words, and nothing else is
-    /// ever stored. Users still Unassigned get the config's default network, but are reported
-    /// as Unassigned, so a Metica-vs-MAX comparison can leave them out instead of counting
-    /// them as MAX.</para>
+    /// <para>What is stored is the main ad network, a <see cref="global::MainAdNetwork"/>
+    /// saved through <see cref="MainAdNetworkPref"/>: Unassigned until a fetch carrying the
+    /// switch lands, then what it says — MAX, Metica, or Unassigned again. Remote config
+    /// carries those same three words, and nothing else is ever stored. Users still Unassigned
+    /// get the config's default network, but are reported as Unassigned, so a Metica-vs-MAX
+    /// comparison can leave them out instead of counting them as MAX.</para>
     ///
     /// <para>Metica is off by default: MeticaAdsConfig has <c>UseRemoteSwitch</c> on and
     /// <c>DefaultUseMetica</c> off, so Metica stays off until your remote config calls
@@ -31,19 +31,6 @@ namespace MeticaIntegration
     /// </summary>
     public static class MeticaRemoteConfig
     {
-        public const string Unassigned = "Unassigned";
-        public const string Max = "MAX";
-        public const string Metica = "Metica";
-
-        /// <summary>The three values remote config may carry — the only ones ever stored.</summary>
-        private static readonly string[] Names = { Unassigned, Max, Metica };
-
-        /// <summary>
-        /// Holds "Unassigned", "MAX" or "Metica". An earlier version stored a bool under
-        /// "Metica_UseMetica"; that is left unread, so every user starts Unassigned.
-        /// </summary>
-        private const string Key = "Metica_MainAdNetwork";
-
         private static bool _reported;
         private static bool _logged;
 
@@ -56,10 +43,10 @@ namespace MeticaIntegration
         }
 
         /// <summary>True once remote config has said anything on this device — an explicit Unassigned included.</summary>
-        public static bool HasStoredValue => PlayerPrefs.HasKey(Key);
+        public static bool HasStoredValue => MainAdNetworkPref.HasValue;
 
-        /// <summary>"Unassigned", "MAX" or "Metica" — what this device has stored.</summary>
-        public static string MainAdNetwork => HasStoredValue ? PlayerPrefs.GetString(Key, Unassigned) : Unassigned;
+        /// <summary>What this device has stored; Unassigned until remote config has said otherwise.</summary>
+        public static MainAdNetwork MainAdNetwork => MainAdNetworkPref.Get();
 
         /// <summary>
         /// Records what your remote config says the main ad network is: "Unassigned", "MAX" or
@@ -80,24 +67,28 @@ namespace MeticaIntegration
                 return false;
             }
 
-            var value = Array.Find(Names, name => string.Equals(name, mainAdNetwork.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (value == null)
+            if (!MainAdNetworkPref.TryParse(mainAdNetwork, out var network))
             {
-                MeticaAdsLog.LogError($"Remote MainAdNetwork \"{mainAdNetwork}\" is not one of {string.Join(", ", Names)}, " +
+                MeticaAdsLog.LogError($"Remote MainAdNetwork \"{mainAdNetwork}\" is not one of " +
+                                      $"{string.Join(", ", Enum.GetNames(typeof(MainAdNetwork)))}, " +
                                       $"MainAdNetwork stays {MainAdNetwork}");
                 return false;
             }
 
-            Store(value, null);
+            Store(network, null);
             return true;
         }
 
+        /// <summary>Records a network the game has already parsed, as <see cref="Apply(string)"/> does.</summary>
+        public static void Apply(MainAdNetwork network) => Store(network, null);
+
         /// <summary>
-        /// The earlier switch, a bool: true stores "Metica", false stores "MAX" — for a remote
+        /// The earlier switch, a bool: true stores Metica, false stores MAX — for a remote
         /// config that has a true / false flag. Only call it when the fetched config actually
         /// has the flag: a user outside the test should stay Unassigned.
         /// </summary>
-        public static void Apply(bool useMetica) => Store(useMetica ? Metica : Max, null);
+        public static void Apply(bool useMetica) =>
+            Store(useMetica ? global::MainAdNetwork.Metica : global::MainAdNetwork.MAX, null);
 
         /// <summary>
         /// Reads the switch out of an AdsSettings JSON — the Firebase parameter GD SDK games
@@ -126,7 +117,8 @@ namespace MeticaIntegration
             var useMetica = settings?.UseMetica?.Trim().ToLowerInvariant();
             if (useMetica == "true" || useMetica == "1" || useMetica == "false" || useMetica == "0")
             {
-                Store(useMetica == "true" || useMetica == "1" ? Metica : Max, " (from the earlier UseMetica key)");
+                Store(useMetica == "true" || useMetica == "1" ? global::MainAdNetwork.Metica : global::MainAdNetwork.MAX,
+                    " (from the earlier UseMetica key)");
                 return true;
             }
 
@@ -149,12 +141,11 @@ namespace MeticaIntegration
             public string UseMetica = null;
         }
 
-        private static void Store(string value, string note)
+        private static void Store(MainAdNetwork value, string note)
         {
             var changed = MainAdNetwork != value;
 
-            PlayerPrefs.SetString(Key, value);
-            PlayerPrefs.Save();
+            MainAdNetworkPref.Set(value);
 
             MeticaAdsLog.Log((changed
                 ? $"Remote switch stored: MainAdNetwork = {value}"
@@ -164,7 +155,7 @@ namespace MeticaIntegration
         /// <summary>Forgets the stored value, so the next session is Unassigned again.</summary>
         public static void Clear()
         {
-            PlayerPrefs.DeleteKey(Key);
+            PlayerPrefs.DeleteKey(MainAdNetworkPref.Key);
             PlayerPrefs.Save();
             MeticaAdsLog.Log("Remote switch cleared");
         }
@@ -172,7 +163,7 @@ namespace MeticaIntegration
         /// <summary>
         /// Whether Metica should come up this session. With the switch off this is always
         /// true; with it on it is the network stored last session, or the config's default
-        /// until a fetch has ever landed.
+        /// while that is Unassigned.
         ///
         /// <para>The first call in a session logs the saved pref ("MainAdNetwork = Metica from
         /// saved pref → Metica this session") and reports the network, through
@@ -182,20 +173,22 @@ namespace MeticaIntegration
         public static bool ShouldInitialize(MeticaAdsConfig config)
         {
             bool useMetica;
-            string reported;
+            MainAdNetwork reported;
             if (config == null || !config.UseRemoteSwitch)
             {
                 useMetica = true;
-                reported = Metica;
+                reported = global::MainAdNetwork.Metica;
             }
             else
             {
                 reported = MainAdNetwork;
-                useMetica = reported == Unassigned ? config.DefaultUseMetica : reported == Metica;
+                useMetica = reported == global::MainAdNetwork.Unassigned
+                    ? config.DefaultUseMetica
+                    : reported == global::MainAdNetwork.Metica;
             }
 
-            // Once per session, at ads init: the saved pref as stored ("Unassigned", "MAX" or
-            // "Metica"), and the network it gives this session. A warning, so it prints with
+            // Once per session, at ads init: the saved pref as stored (Unassigned, MAX or
+            // Metica), and the network it gives this session. A warning, so it prints with
             // logging off too.
             if (!_logged)
             {
@@ -209,7 +202,7 @@ namespace MeticaIntegration
             if (!_reported && MeticaAdsHooks.OnEvent != null)
             {
                 _reported = true;
-                MeticaAdsHooks.ReportEvent("GameData", new Dictionary<string, object> { { "MainAdNetwork", reported } });
+                MeticaAdsHooks.ReportEvent("GameData", new Dictionary<string, object> { { "MainAdNetwork", reported.ToString() } });
             }
 
             return useMetica;

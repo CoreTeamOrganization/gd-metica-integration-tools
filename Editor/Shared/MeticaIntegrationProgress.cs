@@ -48,8 +48,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary>
         /// The commit a step's changes went into, from the window's commit section; null if
-        /// none. Once set the section is not offered again for that step. Not cleared when the
-        /// step stops verifying — the commit still exists.
+        /// none. Kept per project folder, not per branch, so the window only trusts it while
+        /// the commit is in the current branch's history, and offers the commit section again
+        /// whenever the step's files have new uncommitted changes. Not cleared when the step
+        /// stops verifying — the commit still exists.
         /// </summary>
         public static string CommittedAs(string stepId)
         {

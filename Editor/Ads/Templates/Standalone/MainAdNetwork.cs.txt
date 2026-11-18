@@ -1,0 +1,61 @@
+using System;
+using UnityEngine;
+
+/// <summary>
+/// The main ad network, as remote config sends it ("MainAdNetwork": "Unassigned", "MAX" or
+/// "Metica", any casing). Every place that names a network uses these values.
+/// </summary>
+public enum MainAdNetwork
+{
+    Unassigned,
+    MAX,
+    Metica
+}
+
+/// <summary>
+/// The saved main ad network. Remote config writes it after each fetch (through
+/// MeticaRemoteConfig.Apply); ads init reads it, so a change takes effect on the next session.
+/// </summary>
+public static class MainAdNetworkPref
+{
+    /// <summary>The remote config key, and the PlayerPrefs key it is saved under.</summary>
+    public const string Key = "MainAdNetwork";
+
+    /// <summary>True once a value has been saved on this device (Unassigned included).</summary>
+    public static bool HasValue => PlayerPrefs.HasKey(Key);
+
+    /// <summary>The saved network; Unassigned when nothing (or nothing valid) is saved.</summary>
+    public static MainAdNetwork Get()
+    {
+        return TryParse(PlayerPrefs.GetString(Key, string.Empty), out var network)
+            ? network
+            : MainAdNetwork.Unassigned;
+    }
+
+    public static void Set(MainAdNetwork network)
+    {
+        PlayerPrefs.SetString(Key, network.ToString());
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>
+    /// Matches an enum name, ignoring case and spaces around it ("metica", " MAX "). Numbers and
+    /// any other text are refused.
+    /// </summary>
+    public static bool TryParse(string value, out MainAdNetwork network)
+    {
+        network = MainAdNetwork.Unassigned;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var trimmed = value.Trim();
+        foreach (MainAdNetwork candidate in Enum.GetValues(typeof(MainAdNetwork)))
+        {
+            if (string.Equals(candidate.ToString(), trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                network = candidate;
+                return true;
+            }
+        }
+        return false;
+    }
+}

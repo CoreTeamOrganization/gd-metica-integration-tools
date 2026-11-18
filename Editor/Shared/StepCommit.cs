@@ -181,6 +181,22 @@ namespace GameDistrict.MeticaIntegrationTools
         // ── Push ───────────────────────────────────────────────────────────────
 
         /// <summary>
+        /// Whether <paramref name="sha"/> is in the current branch's history (HEAD or an
+        /// ancestor of it). False for a commit made on another branch, dropped by a reset, or
+        /// unknown to this clone; null when git cannot tell (no git, no repository, a timeout).
+        /// </summary>
+        public static bool? IsInHistory(string sha)
+        {
+            if (string.IsNullOrWhiteSpace(sha) || !TryRepo(out var top, out _, out _)) return null;
+
+            // 0: an ancestor. 1: not one. 128: no such commit here.
+            var check = Git(top, $"merge-base --is-ancestor {Quote(sha.Trim())} HEAD", StatusTimeoutMs);
+            if (check.exit == 0) return true;
+            if (check.exit == 1 || check.exit == 128) return false;
+            return null;
+        }
+
+        /// <summary>
         /// Commits on the current branch that its upstream does not have yet; -1 when there is
         /// no upstream (never pushed) or git cannot tell.
         /// </summary>

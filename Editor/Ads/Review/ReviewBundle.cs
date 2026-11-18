@@ -297,7 +297,7 @@ namespace GameDistrict.MeticaIntegrationTools
             md.AppendLine("| File | State |");
             md.AppendLine("|---|---|");
             var files = new List<Json>();
-            foreach (var name in StandaloneRuntimeStep.Files)
+            foreach (var name in StandaloneRuntimeStep.FilesToWrite)
             {
                 var path = $"{MeticaPaths.StandaloneRoot}/{name}.cs";
                 var state = check?.Files.FirstOrDefault(f => f.Path == path)?.State.ToString()
@@ -431,7 +431,7 @@ namespace GameDistrict.MeticaIntegrationTools
 
             var written = MeticaPaths.HasGDSdk
                 ? WrapperFilesStep.Files().Select(f => f.target)
-                : StandaloneRuntimeStep.Files.Select(n => $"{MeticaPaths.StandaloneRoot}/{n}.cs");
+                : StandaloneRuntimeStep.FilesToWrite.Select(n => $"{MeticaPaths.StandaloneRoot}/{n}.cs");
             var paths = string.Join(" ", written.Select(p => "\"" + p + "\""));
             var added = StepCommit.Git(dir, $"log --diff-filter=A --format=%H -- {paths}", GitTimeoutMs);
             var first = Lines(added.output).LastOrDefault();

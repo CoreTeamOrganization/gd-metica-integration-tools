@@ -23,6 +23,10 @@ cover all of the list below.
       with the prefilled summary and description; nothing is pushed.
 - [ ] Commit and push pushes the current branch (sets upstream the first time); Push shows on
       a committed step while there are unpushed commits, and disappears once pushed.
+- [ ] A committed step with new changes in its files (re-applied, converted) shows the commit
+      section again, not only Push.
+- [ ] Commit a step, then `git reset --hard HEAD~1` (or switch to a branch without that commit):
+      the step offers Commit again, and its status line no longer says "committed (sha)".
 
 ### Analytics abstractions in the Metica SDK step (GD SDK v5)
 
@@ -91,6 +95,13 @@ cover all of the list below.
       `Apply(true)` compiles and works as before.
 - [ ] Logs (GD SDK): next launch after a saved value, "Using Metica as main AdNetwork (Metica)".
       GD 6.x shows the value in brackets too.
+- [ ] Standalone, fresh project: the runtime step writes `MainAdNetwork.cs` (enum + `MainAdNetworkPref`);
+      compiles; `Apply(MainAdNetwork.Metica)` and `Apply("metica")` both save `"Metica"` under the
+      PlayerPrefs key `MainAdNetwork`.
+- [ ] Standalone, game with its own global `MainAdNetwork` + `MainAdNetworkPref` (e.g. the moto
+      game): step skips `MainAdNetwork.cs`, notes it, compiles against the game's.
+- [ ] Standalone, runtime from an older tool (string `MeticaRemoteConfig`, no `MainAdNetwork.cs`):
+      step still verifies, notes the old MeticaRemoteConfig; no "missing" / "Not compiled".
 
 ### GD SDK 5.0.0-beta5 banner (IsTopPriority never set)
 

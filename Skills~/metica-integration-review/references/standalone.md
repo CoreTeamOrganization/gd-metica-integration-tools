@@ -19,10 +19,17 @@ Metica runtime to `Assets/MeticaAds/` and (optionally) patched the game's own ad
   `Apply(string)` — `"Unassigned"`, `"MAX"` or `"Metica"`, any casing; anything else is refused
   (returns false, error log), an empty value changes nothing; `ApplyAdsSettings(json)` — the same
   out of an `AdsSettings` JSON (`{"MainAdNetwork":"Metica"}`), falling back to the earlier
-  `{"UseMetica":true}`; and `Apply(bool)` for a true / false flag. An older runtime has only
-  `Apply(bool)`. `ShouldInitialize(config)` is what the patched init reads. Stored as
-  `MainAdNetwork` (`Unassigned` until `Apply`, or when remote says so), reported once per session
-  through `MeticaAdsHooks.OnEvent` as `GameData { MainAdNetwork }`.
+  `{"UseMetica":true}`; `Apply(MainAdNetwork)` for an already-parsed enum; and `Apply(bool)` for a
+  true / false flag. An older runtime has only `Apply(bool)`. `ShouldInitialize(config)` is what the
+  patched init reads. Stored as `MainAdNetwork` (`Unassigned` until `Apply`, or when remote says
+  so), reported once per session through `MeticaAdsHooks.OnEvent` as `GameData { MainAdNetwork }`.
+- `MainAdNetwork.cs` — global `enum MainAdNetwork { Unassigned, MAX, Metica }` and
+  `MainAdNetworkPref` (PlayerPrefs key `MainAdNetwork`; `Get`, `Set`, `HasValue`, `TryParse` any
+  casing). Not written when the game has its own `MainAdNetwork`; then the game's must also have
+  `MainAdNetworkPref`. Runtimes written before this stored the value as a string under
+  `Metica_MainAdNetwork`, with string constants on `MeticaRemoteConfig` — either form is fine, but
+  game code must not mix them (e.g. reading `PlayerPrefs "MainAdNetwork"` against an older runtime
+  reads nothing).
 - Stand-ins for the GD SDK pieces the units lean on (`AdUnitBase`, logger, `AdRevenueInfo`,
   `ThreadDispatcher` via `MeticaAdsRunner`).
 

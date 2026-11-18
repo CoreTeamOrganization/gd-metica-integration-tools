@@ -97,7 +97,7 @@ namespace GameDistrict.MeticaIntegrationTools
             }
             else
             {
-                CheckWrappers(StandaloneRuntimeStep.Files
+                CheckWrappers(StandaloneRuntimeStep.FilesToWrite
                     .Where(name => name != EditableStandaloneFile)
                     .Select(name => ($"Standalone/{name}.cs.txt", $"{MeticaPaths.StandaloneRoot}/{name}.cs")), check);
             }

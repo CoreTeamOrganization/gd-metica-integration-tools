@@ -115,7 +115,17 @@ MeticaRemoteConfig.ApplyAdsSettings(FirebaseRemoteConfig.DefaultInstance.GetValu
 
 // Or a value of your own: "Unassigned", "MAX" or "Metica". Empty (no such key) changes nothing.
 MeticaRemoteConfig.Apply(myRemoteConfig.GetString("MainAdNetwork"));
+
+// Or the enum, when the game has parsed it itself.
+MeticaRemoteConfig.Apply(MainAdNetwork.Metica);
 ```
+
+The three values are the `MainAdNetwork` enum (`Unassigned`, `MAX`, `Metica`), written by the
+runtime step as `MainAdNetwork.cs` in the global namespace, with `MainAdNetworkPref` — the saved
+value under the PlayerPrefs key `MainAdNetwork`, plus `TryParse` (any casing). Game code uses the
+same enum and pref. A game that already has its own `MainAdNetwork` keeps it: the step doesn't
+write `MainAdNetwork.cs`, and the runtime compiles against the game's (which must have
+`MainAdNetworkPref` too).
 
 The value is one of three words, in any casing: `Metica`, `MAX`, or `Unassigned` (which takes the
 device back out of the test). Anything else is refused — nothing is stored, and an error is logged
@@ -127,7 +137,7 @@ The value applies from the **next** session — Metica initializes long before a
 returns, so the network is persisted and read at boot, the same trade the GD SDK makes with
 `MonetizationPreferences.MainAdNetwork`. So a first install runs its first session without
 Metica. Unticking **Use Remote Switch** makes Metica always on. What is stored is the main ad
-network, `MeticaRemoteConfig.MainAdNetwork`: `Unassigned` until `Apply` is called, then what remote
+network, `MeticaRemoteConfig.MainAdNetwork` (the enum): `Unassigned` until `Apply` is called, then what remote
 config said; at the first ads start of a session it is reported through `MeticaAdsHooks.OnEvent` as
 `GameData` { `MainAdNetwork` } — wire `OnEvent` before ads start.
 
