@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Analytics Integration (new integrations): no genre code in GD SDK files any more, so upgrading a
+  game to GD SDK 6.2.6+ loses nothing.
+  - **Connect Adjust to Metica** (GD SDK) adds to `AdjustAnalyticsNetwork.cs` only GD SDK 6.2.x's own
+    lines: `AppToken` / `AdId` statics, `AppToken` from AdjustConfiguration, `ExternalDeviceId` and
+    `muid`, `Adjust.GetAdid` → `AdId`. No genre load, `UpdateAdjustInfo` or events there.
+  - **Send the Firebase instance ID** (GD SDK) adds only GD SDK 6.2.6's lines to
+    `FirebaseAnalyticsNetwork.cs`: `AppInstanceId` and `SendInstanceIdToAdjust()`. No
+    `UpdateFirebaseInfo` there.
+  - **Start Metica analytics** no longer edits `AnalyticsManager.cs`. It writes
+    `Assets/MeticaGenreAnalytics/MeticaGenreAnalytics.cs` (GD and custom SDK): `Genre` — the game's
+    `<Game>Analytics` from Resources, for logging every genre event — initialized before the first
+    scene; install (first launch) and sessionStart when the game leaves its first scene, once per
+    launch (an `_initialized` bool); GD SDK: hands the genre `AdId` / `AppToken` / `AppInstanceId` as
+    they become known. Replaces the custom-SDK `MeticaAnalyticsStartup.cs`.
+  - Projects integrated by an earlier version are left as they are (the three steps pass with a note).
+  - Checked by applying the patch logic to every GD SDK release 5.0.1 – 6.0.1: the result matches
+    6.2.x / 6.2.6, and a second run changes nothing. Not yet compiled in Unity.
 - Standalone: the generated `OnMeticaAdRevenue` stub now says `info.Format` is the
   `AdFormat` enum (Interstitial, Rewarded, Banner, MRec) and must not be compared to MAX's
   `"INTER"` / `"BANNER"` strings; the integration review flags that mistake. A custom SDK game

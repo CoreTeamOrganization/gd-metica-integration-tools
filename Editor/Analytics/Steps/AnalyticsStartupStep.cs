@@ -9,75 +9,91 @@ using UnityEngine;
 namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
-    /// Starts Metica analytics and sends the install (first launch) and sessionStart events.
+    /// Writes MeticaGenreAnalytics.cs, the game's one place for Metica genre analytics. It lives
+    /// in its own folder, outside the GD SDK and the genre folder, so an SDK upgrade never touches
+    /// it. It:
+    /// <list type="bullet">
+    /// <item>holds the genre — <c>MeticaGenreAnalytics.Genre</c>, loaded from Resources — which game
+    /// code logs every genre event through;</item>
+    /// <item>initializes it before the first scene loads;</item>
+    /// <item>sends install (first launch only) and sessionStart (once per launch) when the game
+    /// leaves its first scene — the splash — guarded by a bool, so going back to the splash sends
+    /// nothing again;</item>
+    /// <item>GD SDK only: hands the genre AdjustAnalyticsNetwork.AdId / AppToken and
+    /// FirebaseAnalyticsNetwork.AppInstanceId — the statics <see cref="AdjustWiringStep"/> and
+    /// <see cref="FirebaseWiringStep"/> add, as GD SDK 6.2.x has them — as they become known.
+    /// install and sessionStart may go out before the Adjust ID; later events carry it.</item>
+    /// </list>
     ///
-    /// <para>GD SDK: no new script. The genre's analytics asset is initialized at the top of
-    /// AnalyticsManager.Initialize(), before Adjust starts; the two events are sent from
-    /// AdjustAnalyticsNetwork's Adjust ID callback, written by <see cref="AdjustWiringStep"/>.
-    /// A startup script left by an earlier version is removed, so nothing runs twice.</para>
+    /// <para>GD SDK files get no genre code at all, AnalyticsManager.cs included. Upgrading to
+    /// GD SDK 6.2.6+ then means: remake the genre with the SDK's Genre Creator, and in this one file
+    /// change the using and GenrePath and delete the lines marked "below GD SDK 6.2.0 only".</para>
     ///
-    /// <para>Custom SDK: one script in the genre folder that runs before the first scene loads,
-    /// initializes the asset and sends both events.</para>
-    ///
-    /// <para>Either way, a game that already does any of this itself (Pistols Fight does it in
-    /// its splash screen) keeps its own: the step finds the calls and writes nothing, so nothing
-    /// is sent twice.</para>
+    /// <para>For new integrations only: a project the tool integrated before (genre code in the
+    /// GD SDK's files, or the old MeticaAnalyticsStartup.cs) is left as it is. A game whose own code
+    /// already initializes the genre or sends install / sessionStart gets nothing written.</para>
     /// </summary>
     public sealed class AnalyticsStartupStep : MeticaStep
     {
         public const string StepTitle = "Start Metica analytics";
 
-        public static string ScriptPath => MeticaPaths.GenresRoot + "/MeticaAnalyticsStartup.cs";
+        public const string ScriptFolder = "Assets/MeticaGenreAnalytics";
+        public const string ClassName = "MeticaGenreAnalytics";
+        public static string ScriptPath => ScriptFolder + "/" + ClassName + ".cs";
 
         /// <summary>The PlayerPrefs key that marks the install event as sent on this device.</summary>
         public const string InstallLoggedKey = "Metica_InstallLogged";
 
-        private const string InitMarker = "Metica analytics: initialize the genre's analytics asset";
+        /// <summary>Where the genre asset sits in GD SDK 6.2.x's Resources (its Genre Creator).</summary>
+        public const string GdSdkGenreFolder = "Configurations/Game Genres";
+
+        // An earlier version of the tool: its startup script, and its marker in AnalyticsManager.
+        private static string OldScriptPath => MeticaPaths.GenresRoot + "/MeticaAnalyticsStartup.cs";
+        private const string OldInitMarker = "Metica analytics: initialize the genre's analytics asset";
+
+        private const string BelowSdk62 = "below GD SDK 6.2.0 only";
 
         public override string Title => StepTitle;
 
-        public override string Summary => MeticaPaths.HasGDSdk
-            ? "Initialize analytics in AnalyticsManager.Initialize(); install and sessionStart follow once Adjust has its ID."
-            : "Initialize analytics at app start, and send the install (first launch) and sessionStart events.";
+        public override string Summary =>
+            $"Add {ClassName}.cs: the genre for game code, install and sessionStart when the splash scene ends.";
 
-        public override string Why => MeticaPaths.HasGDSdk
-            ? $"Adds a few lines at the top of {MeticaPaths.AnalyticsManager}'s Initialize(): load <Game>Analytics from " +
-              "Resources and call Initialize() — before Adjust starts, so the asset is ready when Adjust reports its ID. " +
-              "The install event (first launch only, PlayerPrefs " + InstallLoggedKey + ") and sessionStart are sent " +
-              "from AdjustAnalyticsNetwork's Adjust ID callback (the Connect Adjust step), so both carry the Adjust ID; " +
-              "on a first launch with no network they wait for it. No new script — one left by an earlier version is " +
-              "deleted. If the game already initializes the asset itself, nothing is added. Backed up first."
-            : $"Writes {ScriptPath}: before the first scene loads it loads <Game>Analytics from Resources, calls " +
-              "Initialize(), sends LogInstallEvent once per install (PlayerPrefs " + InstallLoggedKey + ") and " +
-              "LogSessionStartEvent on every launch. Metica buffers early events, so they are sent at start-up; the " +
-              "Adjust ID reaches the asset a moment later, so the first ones may go without it. If the game already " +
-              "calls Initialize, LogInstallEvent or LogSessionStartEvent itself, nothing is written.";
+        public override string Why =>
+            $"Writes {ScriptPath} — the game's own file, outside the SDK, so an SDK upgrade never touches it. " +
+            $"Game code logs every genre event through {ClassName}.Genre (<Game>Analytics, loaded from Resources). " +
+            "Before the first scene loads it initializes the genre; when the game leaves its first scene (the " +
+            $"splash) it sends install (first launch only, PlayerPrefs {InstallLoggedKey}) and sessionStart — " +
+            "once per launch, a bool keeps a return to the splash from sending them again. " +
+            (MeticaPaths.HasGDSdk
+                ? "It also hands the genre AdjustAnalyticsNetwork.AdId / AppToken and FirebaseAnalyticsNetwork.AppInstanceId " +
+                  "(added by the two steps before, as GD SDK 6.2.x has them) once they are known — install and " +
+                  "sessionStart may go out without the Adjust ID, later events carry it. No genre code goes in any GD SDK " +
+                  "file. Upgrading to GD SDK 6.2.6+: remake the genre with the SDK's Genre Creator, then in this file " +
+                  $"change the using and GenrePath and delete the lines marked \"{BelowSdk62}\". "
+                : "") +
+            "If the game's own code already initializes the genre or sends install / sessionStart, nothing is written.";
 
         public override string ActionLabel
         {
             get
             {
                 var game = GenreFilesStep.GameName;
-                if (!GenreReady(game)) return null;
-
-                if (MeticaPaths.HasGDSdk)
-                {
-                    if (MeticaPaths.FileExists(ScriptPath)) return "Remove the old startup script";
-                    return GameCodeInitializes() || InitPatched(game) ? null : "Initialize in AnalyticsManager";
-                }
-
-                if (GameCodeCalls().Count > 0) return null;
-                return Written(game) ? null : "Add the startup script";
+                if (!GenreReady(game) || EarlierIntegration != null || GameCodeCalls().Count > 0) return null;
+                if (MeticaPaths.HasGDSdk && MissingSdkLines().Count > 0) return null;
+                return Written(game) ? null : $"Add {ClassName}.cs";
             }
         }
 
-        public override IEnumerable<string> TouchedPaths => MeticaPaths.HasGDSdk
-            ? new[] { MeticaPaths.AnalyticsManager, ScriptPath }
-            : new[] { ScriptPath };
+        public override IEnumerable<string> TouchedPaths
+        {
+            get
+            {
+                var asmdef = AdjustWiringStep.AsmdefFor(ScriptPath);
+                return asmdef == null ? new[] { ScriptPath } : new[] { ScriptPath, asmdef };
+            }
+        }
 
-        public override string ReviewHint => MeticaPaths.HasGDSdk
-            ? "A few lines at the top of AnalyticsManager.Initialize()."
-            : "One new script in Assets/MeticaGenres — nothing in the game's own code.";
+        public override string ReviewHint => $"One new script, {ScriptPath} — nothing in the SDK or the game's own code.";
 
         // ── Verify ─────────────────────────────────────────────────────────────
 
@@ -88,70 +104,52 @@ namespace GameDistrict.MeticaIntegrationTools
             var game = GenreFilesStep.GameName;
             if (!GenreReady(game)) return result.Problem("Create the genre files first.").Seal();
 
-            return MeticaPaths.HasGDSdk ? VerifyGdSdk(result, game) : VerifyScript(result, game);
-        }
-
-        private static VerifyResult VerifyGdSdk(VerifyResult result, string game)
-        {
-            if (MeticaPaths.FileExists(ScriptPath))
+            var earlier = EarlierIntegration;
+            if (earlier != null)
             {
-                result.Problem($"{ScriptPath} is from an earlier version — GD SDK games start analytics in " +
-                               "AnalyticsManager and AdjustAnalyticsNetwork now, so it would run everything twice.");
+                result.Note($"Integrated by an earlier version of the tool ({earlier}) — left as it is.");
                 return result.Seal();
             }
 
-            foreach (var call in GameCodeCalls()) result.Note($"Game code: {call}");
-
-            if (!GameCodeInitializes())
-            {
-                if (!InitPatched(game))
-                {
-                    result.Problem(MeticaPaths.FileExists(MeticaPaths.AnalyticsManager)
-                        ? "Not set up yet."
-                        : $"{MeticaPaths.AnalyticsManager} not found.");
-                    return result.Seal();
-                }
-
-                result.Note($"{Path.GetFileName(MeticaPaths.AnalyticsManager)} — {game}Analytics.Initialize()");
-
-                var asmdef = AdjustWiringStep.AsmdefFor(MeticaPaths.AnalyticsManager);
-                if (asmdef != null && !AdjustWiringStep.References(asmdef))
-                    result.Problem($"{Path.GetFileName(asmdef)} needs a reference to {GenreCreatorPackage.RuntimeAssembly}.");
-            }
-
-            // The events belong to the Connect Adjust step; say where they are, or that they're not.
-            var adjust = MeticaPaths.AdjustAnalyticsNetwork;
-            if (MeticaPaths.FileExists(adjust) && AdjustWiringStep.EventsMissing(adjust))
-                result.Warning("install and sessionStart aren't sent yet — run Connect Adjust to Metica again.");
-            else if (GameCodeEvents().Count == 0)
-                result.Note($"install and sessionStart — in {Path.GetFileName(adjust)}, once Adjust has its ID");
-
-            return result.Seal();
-        }
-
-        private static VerifyResult VerifyScript(VerifyResult result, string game)
-        {
             var calls = GameCodeCalls();
             var written = Written(game);
-
             if (calls.Count > 0)
             {
                 foreach (var call in calls) result.Note($"Game code: {call}");
                 if (written)
                     result.Warning($"The game already starts analytics itself, and {ScriptPath} does too — " +
                                    "events would be sent twice. Delete one.");
+                else if (MeticaPaths.HasGDSdk)
+                    result.Warning("The game starts analytics itself — it must also hand AdjustAnalyticsNetwork.AdId / " +
+                                   "AppToken to the genre (UpdateAdjustInfo), or Metica events go without the Adjust ID.");
                 return result.Seal();
+            }
+
+            if (MeticaPaths.HasGDSdk)
+            {
+                var missing = MissingSdkLines();
+                if (missing.Count > 0)
+                    return result.Problem($"Run {string.Join(" and ", missing)} first — {ClassName}.cs reads what they add.").Seal();
             }
 
             if (!written)
             {
                 result.Problem(MeticaPaths.FileExists(ScriptPath)
-                    ? $"{ScriptPath} starts a different genre — rewrite it for {game}."
+                    ? $"{ScriptPath} is for a different genre — rewrite it for {game}."
                     : "Not set up yet.");
                 return result.Seal();
             }
 
-            result.Note($"{ScriptPath} — {game}Analytics: Initialize, install (first launch), sessionStart");
+            result.Note($"{ScriptPath} — {ClassName}.Genre ({game}Analytics); install (first launch) and sessionStart " +
+                        "when the splash scene ends" + (MeticaPaths.HasGDSdk ? "; Adjust / Firebase IDs handed to the genre" : ""));
+
+            var asmdef = AdjustWiringStep.AsmdefFor(ScriptPath);
+            if (asmdef != null && MeticaPaths.HasGDSdk)
+                result.Warning($"{ScriptPath} is inside {asmdef}, which can't see the GD SDK's AdjustAnalyticsNetwork — " +
+                               "move the script out of it.");
+            else if (asmdef != null && !AdjustWiringStep.References(asmdef))
+                result.Problem($"{Path.GetFileName(asmdef)} needs a reference to {GenreCreatorPackage.RuntimeAssembly}.");
+
             return result.Seal();
         }
 
@@ -160,147 +158,198 @@ namespace GameDistrict.MeticaIntegrationTools
         public override void Apply()
         {
             var game = GenreFilesStep.GameName;
-            if (!GenreReady(game)) return;
+            if (!GenreReady(game) || EarlierIntegration != null || GameCodeCalls().Count > 0) return;
+            if (MeticaPaths.HasGDSdk && MissingSdkLines().Count > 0) return;
 
-            if (MeticaPaths.HasGDSdk) ApplyGdSdk(game);
-            else WriteScript(game);
-        }
-
-        private void ApplyGdSdk(string game)
-        {
-            if (MeticaPaths.FileExists(ScriptPath))
-            {
-                AssetDatabase.DeleteAsset(ScriptPath);
-                MeticaIntegrationLog.Record(Title, $"Deleted {ScriptPath} — GD SDK games start analytics in AnalyticsManager");
-            }
-
-            if (GameCodeInitializes() || InitPatched(game)) return;
-
-            MeticaIntegrationLog.Record(Title, PatchInitialize(game));
-
-            var asmdef = AdjustWiringStep.AsmdefFor(MeticaPaths.AnalyticsManager);
-            if (asmdef != null && !AdjustWiringStep.References(asmdef)) AdjustWiringStep.AddReference(asmdef);
-
-            AssetDatabase.ImportAsset(MeticaPaths.AnalyticsManager);
-        }
-
-        /// <summary>The init lines, first thing in AnalyticsManager.Initialize()'s body.</summary>
-        internal static string PatchInitialize(string game)
-        {
-            var path = MeticaPaths.AnalyticsManager;
-            if (!SourcePatcher.Exists(path)) return $"{path} not found.";
-
-            var text = SourcePatcher.ReadAll(path);
-            if (text.Contains(InitMarker)) return $"{path} already initializes Metica analytics";
-
-            var newline = text.Contains("\r\n") ? "\r\n" : "\n";
-            var lines = text.Replace("\r\n", "\n").Split('\n').ToList();
-
-            var head = lines.FindIndex(line => line.Contains("static void Initialize()"));
-            if (head < 0) return $"No Initialize() in {path} — add {game}Analytics.Initialize() by hand.";
-
-            var open = lines.FindIndex(head, line => line.Contains("{"));
-            if (open < 0) return $"Initialize() in {path} has no body — add {game}Analytics.Initialize() by hand.";
-
-            var outer = lines[head].Substring(0, lines[head].Length - lines[head].TrimStart().Length);
-            var i = outer + "    ";
-            lines.InsertRange(open + 1, new[]
-            {
-                $"{i}// {InitMarker} — install and sessionStart follow in AdjustAnalyticsNetwork, once Adjust has its ID.",
-                $"{i}var meticaAnalytics = UnityEngine.Resources.Load<GameDistrict.MeticaAnalytics.GDMeticaAnalytics>(\"{game}Analytics\");",
-                $"{i}if (meticaAnalytics != null) meticaAnalytics.Initialize();",
-                $"{i}else UnityEngine.Debug.LogWarning(\"[MeticaAnalytics] {game}Analytics not found in Resources — Metica analytics not started.\");",
-                ""
-            });
-
-            SourcePatcher.WriteWithBackup(path, string.Join(newline, lines));
-            return $"{path}: {game}Analytics.Initialize() at the top of Initialize()";
-        }
-
-        private void WriteScript(string game)
-        {
             var path = MeticaPaths.ToAbsolute(ScriptPath);
             Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-            File.WriteAllText(path, Script(game), new UTF8Encoding(false));
+            var firebase = MeticaPaths.HasGDSdk && FirebaseWiringStep.HasFirebaseAnalytics;
+            File.WriteAllText(path, Script(game, MeticaPaths.HasGDSdk, firebase), new UTF8Encoding(false));
             AssetDatabase.ImportAsset(ScriptPath);
-
             MeticaIntegrationLog.Record(Title, $"Wrote {ScriptPath} for {game}Analytics");
+
+            if (!MeticaPaths.HasGDSdk) AdjustWiringStep.AddReference(AdjustWiringStep.AsmdefFor(ScriptPath));
         }
 
-        internal static string Script(string game) =>
-            "// Written by the Metica Integration Tools (Analytics Integration → Start Metica analytics).\n" +
-            "using UnityEngine;\n" +
-            "\n" +
-            "namespace GameDistrict.MeticaAnalytics\n" +
-            "{\n" +
-            "    /// <summary>\n" +
-            "    /// Starts Metica analytics before the first scene loads: initializes the genre's analytics\n" +
-            "    /// asset, then sends the install event (first launch only) and the sessionStart event.\n" +
-            "    /// </summary>\n" +
-            "    internal static class MeticaAnalyticsStartup\n" +
-            "    {\n" +
-            $"        private const string InstallLoggedKey = \"{InstallLoggedKey}\";\n" +
-            "\n" +
-            "        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]\n" +
-            "        private static void Start()\n" +
-            "        {\n" +
-            $"            var analytics = Resources.Load<GDMeticaAnalytics>(\"{game}Analytics\");\n" +
-            "            if (analytics == null)\n" +
-            "            {\n" +
-            $"                Debug.LogWarning(\"[MeticaAnalytics] {game}Analytics not found in Resources — analytics not started.\");\n" +
-            "                return;\n" +
-            "            }\n" +
-            "\n" +
-            "            analytics.Initialize();\n" +
-            "\n" +
-            "            if (PlayerPrefs.GetInt(InstallLoggedKey, 0) == 0)\n" +
-            "            {\n" +
-            "                analytics.LogInstallEvent(null);\n" +
-            "                PlayerPrefs.SetInt(InstallLoggedKey, 1);\n" +
-            "                PlayerPrefs.Save();\n" +
-            "            }\n" +
-            "\n" +
-            "            analytics.LogSessionStartEvent(null);\n" +
-            "        }\n" +
-            "    }\n" +
-            "}\n";
+        /// <summary>
+        /// The script. <paramref name="gdSdk"/> adds the ID hand-over from GD SDK's statics, and
+        /// <paramref name="firebase"/> the Firebase part of it.
+        /// </summary>
+        internal static string Script(string game, bool gdSdk, bool firebase)
+        {
+            var type = game + "Analytics";
+            var s = new StringBuilder();
+
+            s.Append("// Written by the Metica Integration Tools (Analytics Integration → Start Metica analytics).\n");
+            s.Append("// The game's own file: SDK upgrades never touch it.\n");
+            if (gdSdk)
+            {
+                s.Append("//\n");
+                s.Append("// Upgrading to GD SDK 6.2.6+: remake the genre with the SDK's Genre Creator (same name, same Excel),\n");
+                s.Append($"// then here: delete the GameDistrict.MeticaAnalytics using, set GenrePath to \"{GdSdkGenreFolder}/{type}\",\n");
+                s.Append($"// and delete every line marked \"{BelowSdk62}\".\n");
+            }
+            s.Append("using UnityEngine;\n");
+            s.Append("using UnityEngine.SceneManagement;\n");
+            s.Append(gdSdk ? $"using GameDistrict.MeticaAnalytics; // {BelowSdk62}\n" : "using GameDistrict.MeticaAnalytics;\n");
+            if (gdSdk) s.Append("using Monetization.Runtime.Analytics;\n");
+            s.Append("\n");
+            s.Append("/// <summary>\n");
+            s.Append("/// The game's Metica genre analytics: log every genre event through <see cref=\"Genre\"/>.\n");
+            s.Append("/// Sends install (first launch only) and sessionStart (once per launch) when the game leaves\n");
+            s.Append("/// its first scene, the splash.\n");
+            s.Append("/// </summary>\n");
+            s.Append($"public static class {ClassName}\n");
+            s.Append("{\n");
+            s.Append($"    private const string GenrePath = \"{type}\";\n");
+            s.Append($"    private const string InstallKey = \"{InstallLoggedKey}\"; // never change it: a new key sends install again\n");
+            s.Append("\n");
+            s.Append($"    private static {type} _genre;\n");
+            s.Append("    private static bool _initialized;\n");
+            s.Append("\n");
+            s.Append("    /// <summary>Log every genre event through this.</summary>\n");
+            if (gdSdk)
+            {
+                s.Append($"    public static {type} Genre\n");
+                s.Append("    {\n");
+                s.Append("        get\n");
+                s.Append("        {\n");
+                s.Append($"            SyncIds(); // {BelowSdk62}\n");
+                s.Append("            return _genre;\n");
+                s.Append("        }\n");
+                s.Append("    }\n");
+            }
+            else
+            {
+                s.Append($"    public static {type} Genre => _genre;\n");
+            }
+            s.Append("\n");
+            s.Append("    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]\n");
+            s.Append("    private static void Setup()\n");
+            s.Append("    {\n");
+            s.Append($"        _genre = Resources.Load<{type}>(GenrePath);\n");
+            s.Append("        if (_genre == null)\n");
+            s.Append("        {\n");
+            s.Append($"            Debug.LogWarning(\"[{ClassName}] \" + GenrePath + \" not found in Resources — Metica genre analytics not started.\");\n");
+            s.Append("            return;\n");
+            s.Append("        }\n");
+            s.Append("\n");
+            s.Append(gdSdk
+                ? $"        _genre.Initialize(); // {BelowSdk62} — 6.2.0+ starts Metica itself\n"
+                : "        _genre.Initialize();\n");
+            s.Append("        SceneManager.activeSceneChanged += OnSceneChanged;\n");
+            s.Append("    }\n");
+            s.Append("\n");
+            s.Append("    // Leaving the first scene (the splash): install and sessionStart.\n");
+            s.Append("    // Once per launch, even if the game goes back to the splash.\n");
+            s.Append("    private static void OnSceneChanged(Scene from, Scene to)\n");
+            s.Append("    {\n");
+            s.Append("        if (_initialized || !from.IsValid()) return;\n");
+            s.Append("        _initialized = true;\n");
+            s.Append("\n");
+            s.Append("        if (PlayerPrefs.GetInt(InstallKey, 0) == 0)\n");
+            s.Append("        {\n");
+            s.Append("            Genre.LogInstallEvent(null);\n");
+            s.Append("            PlayerPrefs.SetInt(InstallKey, 1);\n");
+            s.Append("            PlayerPrefs.Save();\n");
+            s.Append("        }\n");
+            s.Append("        Genre.LogSessionStartEvent(null);\n");
+            s.Append("    }\n");
+
+            if (gdSdk)
+            {
+                s.Append("\n");
+                s.Append($"    // ── {BelowSdk62}: from here to the end of the class. 6.2.0+'s genre reads these itself. ──\n");
+                s.Append(firebase ? "    private static string _adid, _firebaseId;\n" : "    private static string _adid;\n");
+                s.Append("\n");
+                s.Append("    // Hands the genre the Adjust ID and app token" + (firebase ? ", and the Firebase app instance ID," : "") +
+                         " once known.\n");
+                s.Append("    private static void SyncIds()\n");
+                s.Append("    {\n");
+                s.Append("        if (_genre == null) return;\n");
+                s.Append("\n");
+                s.Append("        var adid = AdjustAnalyticsNetwork.AdId;\n");
+                s.Append("        if (!string.IsNullOrEmpty(adid) && adid != _adid)\n");
+                s.Append("        {\n");
+                s.Append("            _adid = adid;\n");
+                s.Append("            _genre.UpdateAdjustInfo(adid, AdjustAnalyticsNetwork.AppToken);\n");
+                s.Append("        }\n");
+                if (firebase)
+                {
+                    s.Append("\n");
+                    s.Append("        var firebaseId = FirebaseAnalyticsNetwork.AppInstanceId;\n");
+                    s.Append("        if (!string.IsNullOrEmpty(firebaseId) && firebaseId != _firebaseId)\n");
+                    s.Append("        {\n");
+                    s.Append("            _firebaseId = firebaseId;\n");
+                    s.Append("            _genre.UpdateFirebaseInfo(firebaseId);\n");
+                    s.Append("        }\n");
+                }
+                s.Append("    }\n");
+            }
+
+            s.Append("}\n");
+            return s.ToString();
+        }
 
         // ── Reading the project ────────────────────────────────────────────────
 
         private static bool GenreReady(string game) =>
             GenreFilesStep.NameError(game) == null && MeticaPaths.FileExists(GenreFilesStep.AssetPath(game));
 
-        /// <summary>The startup script is there, for this genre.</summary>
+        /// <summary>The script is there, for this genre.</summary>
         private static bool Written(string game) =>
             MeticaPaths.FileExists(ScriptPath)
-            && SourcePatcher.ReadAll(ScriptPath).Contains($"Resources.Load<GDMeticaAnalytics>(\"{game}Analytics\")");
+            && SourcePatcher.ReadAll(ScriptPath).Contains($"Resources.Load<{game}Analytics>(");
 
-        /// <summary>AnalyticsManager initializes this genre's asset.</summary>
-        private static bool InitPatched(string game) =>
-            MeticaPaths.FileExists(MeticaPaths.AnalyticsManager)
-            && SourcePatcher.ReadAll(MeticaPaths.AnalyticsManager) is var text
-            && text.Contains(InitMarker)
-            && text.Contains($"GDMeticaAnalytics>(\"{game}Analytics\")");
+        /// <summary>
+        /// Where an earlier version of the tool integrated this project, or null. Those projects
+        /// are left as they are: this flow's new shape is for new integrations only.
+        /// </summary>
+        internal static string EarlierIntegration
+        {
+            get
+            {
+                if (MeticaPaths.FileExists(OldScriptPath)) return OldScriptPath;
+                if (!MeticaPaths.HasGDSdk) return null;
 
-        private static bool GameCodeInitializes() => GameCodeCalls().Any(call => call.Contains("Initialize"));
+                if (SourcePatcher.Contains(MeticaPaths.AnalyticsManager, OldInitMarker))
+                    return "genre code in " + Path.GetFileName(MeticaPaths.AnalyticsManager);
+                if (SourcePatcher.Contains(MeticaPaths.AdjustAnalyticsNetwork, AdjustWiringStep.AfterMarker))
+                    return "genre code in " + Path.GetFileName(MeticaPaths.AdjustAnalyticsNetwork);
+                if (SourcePatcher.Contains(FirebaseWiringStep.GdFirebaseFile, FirebaseWiringStep.Marker))
+                    return "genre code in " + Path.GetFileName(FirebaseWiringStep.GdFirebaseFile);
+                return null;
+            }
+        }
 
-        /// <summary>Where the game's own code sends install or sessionStart — "file — what".</summary>
-        internal static List<string> GameCodeEvents() =>
-            GameCodeCalls().Where(call => call.Contains("install") || call.Contains("sessionStart")).ToList();
+        /// <summary>GD SDK: the steps whose lines the script reads, while they're still missing.</summary>
+        private static List<string> MissingSdkLines()
+        {
+            var missing = new List<string>();
+            var adjust = MeticaPaths.AdjustAnalyticsNetwork;
+            if (!MeticaPaths.FileExists(adjust) || AdjustWiringStep.GdMissing(adjust).Count > 0)
+                missing.Add(AdjustWiringStep.StepTitle);
+            if (FirebaseWiringStep.HasFirebaseAnalytics && FirebaseWiringStep.GdMissing().Count > 0)
+                missing.Add(FirebaseWiringStep.StepTitle);
+            return missing;
+        }
 
         private static readonly Dictionary<string, (DateTime written, string[] code)> Cache =
             new Dictionary<string, (DateTime, string[])>();
 
         /// <summary>
         /// Where the game's own code already starts analytics: "file — what" for every script
-        /// outside the genre folder and the SDKs that calls Initialize on a genre analytics object,
-        /// LogInstallEvent or LogSessionStartEvent.
+        /// outside the genre folder, this step's script and the SDKs that calls Initialize on a genre
+        /// analytics object, LogInstallEvent or LogSessionStartEvent.
         /// </summary>
         private static List<string> GameCodeCalls()
         {
             var found = new List<string>();
             var assets = Application.dataPath;
-            var skipped = new[] { MeticaPaths.GenresRoot + "/", MeticaPaths.MeticaSdkRoot + "/", "Assets/GDMonetization/" };
+            var skipped = new[]
+            {
+                MeticaPaths.GenresRoot + "/", ScriptFolder + "/", MeticaPaths.MeticaSdkRoot + "/", "Assets/GDMonetization/"
+            };
 
             foreach (var file in Directory.EnumerateFiles(assets, "*.cs", SearchOption.AllDirectories))
             {

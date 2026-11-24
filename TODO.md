@@ -247,17 +247,23 @@ cover all of the list below.
       prefab); Metica App ID / API Key prefilled from MeticaSettings (build target's platform) or
       MeticaAdsConfig; typing (even clearing) wins; values land in the asset.
 - [ ] Secret fields show a Show / Hide text button (genre step and Metica settings step).
-- [ ] Step 6, custom SDK: startup script written (or skipped when the game does it); on device,
-      install once, sessionStart every launch.
-- [ ] Step 6, GD SDK: no script — `<Game>Analytics.Initialize()` at the top of
-      AnalyticsManager.Initialize(); an old MeticaAnalyticsStartup.cs is deleted; compiles.
-- [ ] Step 5, GD SDK: install (first launch) and sessionStart in the GetAdid callback after
-      UpdateAdjustInfo; a file wired by the earlier version gets just those lines; on device,
-      install once, sessionStart every launch, both after the Adjust ID.
+- [ ] Step 6: `Assets/MeticaGenreAnalytics/MeticaGenreAnalytics.cs` written (or skipped when the
+      game's code does it) and compiles — GD SDK and custom SDK; nothing added to AnalyticsManager.cs.
+- [ ] Step 6, on device: install once (first launch), sessionStart once per launch when the splash
+      ends; going back to the splash sends nothing; events logged through
+      `MeticaGenreAnalytics.Genre` reach Metica.
+- [ ] Step 6, GD SDK, on device: install / sessionStart may lack adid; later events carry adid,
+      appToken and firebaseAppInstanceId.
+- [ ] Steps 5 / 5a, GD SDK 5.0–5.2, 5.3+ and 6.0.1: only 6.2.x / 6.2.6's lines added
+      (diff the files against 6.2.6); re-running adds nothing; compiles.
+- [ ] A project integrated by the earlier version (genre code in the SDK files, or
+      MeticaAnalyticsStartup.cs): steps 5, 5a, 6 pass with "left as it is" and change nothing.
+- [ ] Upgrade a GD SDK 5.x test game to 6.2.6+ with the README's steps: compiles, install not sent
+      again, events still carry adid.
 - [ ] Add Genre Creator's commit includes ProjectSettings.asset (METICA_ANALYTICS); no
       MeticaIntegrationBackups file left uncommitted.
-- [ ] Step 5: GD SDK — AdjustAnalyticsNetwork.cs patched and compiles; custom SDK — the
-      Adjust.InitSdk file found / picked; .asmdef reference added when inside one.
+- [ ] Step 5, custom SDK: the Adjust.InitSdk file found / picked; .asmdef reference added when
+      inside one.
 - [ ] On device: Adjust callbacks carry `muid`; the genre asset gets the Adjust ID.
 - [ ] Genre creator 2.0.0 installed: step 3 says it's older than 2.1.0; Update to v2.1.1 moves the
       manifest entry and it compiles.
