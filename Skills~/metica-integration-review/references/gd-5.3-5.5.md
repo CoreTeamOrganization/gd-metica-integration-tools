@@ -33,6 +33,10 @@ used MAX's ad info.
   - A value that is none of the three is refused: nothing stored, error log
     `Remote MainAdNetwork "…" is not one of Unassigned, MAX, Metica, MainAdNetwork stays …`.
   - Without the key: nothing stored, log `Remote AdsSettings has no MainAdNetwork, MainAdNetwork stays …`.
+  - JSON: `RemoteConfiguration` has an empty `public string MainAdNetwork;` (tooltip: set it in
+    Firebase, not here), so DefaultRemoteSettings / ClipboardJson carry the key. A **value** in the
+    DefaultRemoteSettings asset is a **warning**: it is the in-app AdsSettings, saved on every fetch
+    while Firebase has none. Parameter: no such field.
   The project is in one of three states — say which in an **info** finding:
   - **New**: only the above. `"UseMetica"` in Firebase does nothing here.
   - **Keep both**: `PersistMainAdNetwork` has one more line,

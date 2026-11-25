@@ -126,8 +126,11 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private void OnFocus() => QueueRefresh();
 
-        public void AddItemsToMenu(GenericMenu menu) =>
+        public void AddItemsToMenu(GenericMenu menu)
+        {
+            menu.AddItem(new GUIContent("Remote Switch…"), false, RemoteSwitchWindow.Open);
             menu.AddItem(new GUIContent("Remove Metica Integration Tools…"), false, ToolRemover.Remove);
+        }
 
         public void CreateGUI()
         {
@@ -359,6 +362,8 @@ namespace GameDistrict.MeticaIntegrationTools
                 _menu.Add(MenuRow(MiIcon.Kind.Home, "Back to home", GoHome));
                 _menu.Add(El("mi-menu__divider"));
             }
+
+            _menu.Add(MenuRow(MiIcon.Kind.Toggle, "Remote switch…", RemoteSwitchWindow.Open));
 
             if (MeticaPaths.HasGDSdk)
                 _menu.Add(MenuRow(MiIcon.Kind.Columns, "Compare with original GD SDK…", SdkCompareWindow.Open));

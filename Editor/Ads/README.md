@@ -180,6 +180,28 @@ move the value in Firebase (keep the old one too while older builds are live).
   it as false and switch to MAX.
 - Stock GD SDK 6.2.1+ (not patched by this tool) reads only `UseMetica`, from the `AdsSettings` JSON.
 
+**DefaultRemoteSettings (JSON only).** With **JSON (AdsSettings)**, `RemoteConfiguration` also gets an
+empty `public string MainAdNetwork;` (with a tooltip), right after `UseMetica` when that is there. So
+`DefaultRemoteSettings` shows the field, and **GameDistrict → Monetization → Firebase → Remote →
+ClipboardJson** copies `"MainAdNetwork":""` — fill it in Firebase, not in the asset. Leave it empty:
+`DefaultRemoteSettings` is the in-app `AdsSettings`, used when Firebase has none, and the switch
+doesn't check where `AdsSettings` came from — a value in the asset would be saved after every such
+fetch. Empty reads as "no MainAdNetwork", so nothing changes. Converting to **Parameter** removes the
+field; a JSON project patched before this shows it as missing, and Apply patches adds it.
+
+**The remote switch on its own.** **GameDistrict → Metica → Remote Switch…**, or **Remote switch…** in
+the window's ⋮ menu, opens a small window for just this, without walking the Ads integration:
+
+- **GD SDK games:** the same two dropdowns and the same patch as the step — write, keep, or convert
+  the switch — and nothing else. It needs what the patch step puts around the switch (the
+  `MainAdNetwork` enum and preference, `AdsManager` reading it); without that it says which, and
+  changes nothing.
+- **Custom SDK games:** the game's own fetch code calls `MeticaRemoteConfig`, and the tool never
+  edits it. The window brings `Assets/MeticaAds/MeticaRemoteConfig.cs` up to this tool's version
+  (after a confirm, with a backup in `MeticaIntegrationBackups/`) and, for the picked **Remote value**
+  (and, for a Parameter, **Keep both** or **Implement new**), gives the lines to paste into the fetch
+  handler, with a Copy button. Firebase is shown; only a value that came from the fetch counts.
+
 - **Compare per session, not per user**: a user's first session (or the one before a fetch lands)
   is `Unassigned`, later ones `MAX` / `Metica`.
 - **Leave `Unassigned` out.** They are served by MAX, but counting them as MAX would grow the MAX
@@ -426,7 +448,8 @@ project and needs nothing from the package at runtime.
 ```
 AdsFlow.cs                   the two step lists (GD SDK / standalone)
 MeticaPatchSet.cs            every GD SDK edit, in step order (runs on disk or in memory)
-RemoteSwitchPatch.cs         the remote switch in RemoteConfigManager: Keep both / Implement new × Parameter / JSON, and conversions
+RemoteSwitchPatch.cs         the remote switch in RemoteConfigManager: Keep both / Implement new × Parameter / JSON, and conversions;
+                             its two dropdowns, shared by the patch step and the Remote Switch window (UI/RemoteSwitchWindow.cs)
 ModifiedFileCheck.cs         stock / patched / modified / missing, per patched file
 SdkCompare.cs                the whole GD SDK against its original release (Compare window)
 StockFiles.cs                reads Stock/ (the untouched GD SDK copies, every v5 and v6 release)

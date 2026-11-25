@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using O = GameDistrict.MeticaIntegrationTools.SourcePatcher.Outcome;
@@ -88,6 +89,110 @@ namespace GameDistrict.MeticaIntegrationTools
 
         public static string Label(RemoteSwitchSource source) => source == RemoteSwitchSource.Parameter ? ParameterLabel : JsonLabel;
 
+        // ── The two dropdowns: the patch step's and the Remote switch window's ──
+
+        /// <summary>
+        /// "Remote switch" — Keep both or Implement new — once there is UseMetica code (the old
+        /// code, or the tool's switch); a project where the switch was never integrated reads
+        /// MainAdNetwork only, with no question. "Remote value" — Parameter or JSON — always.
+        /// Before the switch is written they start on "Pick one…"; once it is in place they show
+        /// what it is, and picking the other converts it. Null picks mean "as the code has it".
+        /// </summary>
+        internal static IEnumerable<StepChoice> Choices(RemoteSwitchForm? pickedForm, RemoteSwitchSource? pickedSource,
+            Action<RemoteSwitchForm?> pickForm, Action<RemoteSwitchSource?> pickSource)
+        {
+            const string pickOne = "Pick one…";
+            var form = Form();
+            var source = Source();
+            const string formCaption = KeepBothSummary + "\n" + NewSummary;
+            const string sourceCaption = ParameterSummary + "\n" + JsonSummary;
+
+            if (form == RemoteSwitchForm.Old)
+                yield return new StepChoice("Remote switch",
+                    new[] { pickOne, KeepBothLabel, NewLabel },
+                    pickedForm == RemoteSwitchForm.Both ? 1 : pickedForm == RemoteSwitchForm.New ? 2 : 0,
+                    index => pickForm(index == 1 ? RemoteSwitchForm.Both : index == 2 ? RemoteSwitchForm.New : (RemoteSwitchForm?)null),
+                    formCaption);
+            else if (form != RemoteSwitchForm.None)
+                yield return new StepChoice("Remote switch",
+                    new[] { KeepBothLabel, NewLabel },
+                    (pickedForm ?? form) == RemoteSwitchForm.Both ? 0 : 1,
+                    index => pickForm(index == 0 ? RemoteSwitchForm.Both : RemoteSwitchForm.New),
+                    formCaption);
+
+            if (source == null)
+                yield return new StepChoice("Remote value",
+                    new[] { pickOne, ParameterLabel, JsonLabel },
+                    pickedSource == RemoteSwitchSource.Parameter ? 1 : pickedSource == RemoteSwitchSource.Json ? 2 : 0,
+                    index => pickSource(index == 1 ? RemoteSwitchSource.Parameter : index == 2 ? RemoteSwitchSource.Json : (RemoteSwitchSource?)null),
+                    sourceCaption);
+            else
+                yield return new StepChoice("Remote value",
+                    new[] { ParameterLabel, JsonLabel },
+                    (pickedSource ?? source) == RemoteSwitchSource.Parameter ? 0 : 1,
+                    index => pickSource(index == 0 ? RemoteSwitchSource.Parameter : RemoteSwitchSource.Json),
+                    sourceCaption);
+        }
+
+        /// <summary>
+        /// The one line about the remote switch the developer has to act on: what to pick, or the
+        /// conversion the dropdowns ask for, ending with <paramref name="action"/>. Null when there is nothing.
+        /// </summary>
+        internal static string Todo(RemoteSwitchForm? pickedForm, RemoteSwitchSource? pickedSource, string action)
+        {
+            const string where = "where the remote value is (" + ParameterLabel + " or " + JsonLabel + ")";
+            const string which = KeepBothLabel + " or " + NewLabel;
+            var form = Form();
+            var source = Source();
+
+            switch (form)
+            {
+                case RemoteSwitchForm.None:
+                    return pickedSource == null ? $"Pick {where} in Firebase below, then {action}." : null;
+
+                case RemoteSwitchForm.Old:
+                    var picks = new[] { pickedForm == null ? which : null, pickedSource == null ? where : null }
+                        .Where(pick => pick != null).ToList();
+                    return picks.Count == 0 ? null
+                        : $"Old remote switch code found — it reads only UseMetica. Pick {string.Join(", and ", picks)} below, then {action}.";
+
+                default:
+                    var changes = new List<string>();
+                    if (pickedForm != null && pickedForm != form)
+                        changes.Add($"{Label(form)} → {Label(pickedForm.Value)}");
+                    if (pickedSource != null && source != null && pickedSource != source)
+                        changes.Add($"{Label(source.Value)} → {Label(pickedSource.Value)}");
+                    return changes.Count == 0 ? null
+                        : $"Convert the remote switch: {string.Join(", ", changes)}. {action} to convert, or set the dropdown back.";
+            }
+        }
+
+        /// <summary>True when what has to be asked is picked, so Apply would write the switch.</summary>
+        internal static bool Picked(RemoteSwitchForm? pickedForm, RemoteSwitchSource? pickedSource)
+        {
+            switch (Form())
+            {
+                case RemoteSwitchForm.None: return pickedSource != null;
+                case RemoteSwitchForm.Old: return pickedForm != null && pickedSource != null;
+                default: return true;
+            }
+        }
+
+        /// <summary>What the project's switch is now, in a few words.</summary>
+        internal static string Describe()
+        {
+            var form = Form();
+            var source = Source();
+            switch (form)
+            {
+                case RemoteSwitchForm.None: return "Not in place yet.";
+                case RemoteSwitchForm.Old: return "Old code — it reads only UseMetica.";
+                default:
+                    return (form == RemoteSwitchForm.Both ? "MainAdNetwork, and the old UseMetica when it's missing" : "MainAdNetwork only") +
+                           (source != null ? $" — from the {Label(source.Value)}." : ".");
+            }
+        }
+
         // ── What is in the file ────────────────────────────────────────────────
 
         private const string Hook = "PersistRemoteToggles;";
@@ -98,6 +203,20 @@ namespace GameDistrict.MeticaIntegrationTools
 
         /// <summary>RemoteConfiguration's bool, which the JSON EarlierUseMetica reads.</summary>
         private const string RemoteFlag = "public bool UseMetica";
+
+        /// <summary>
+        /// JSON only: RemoteConfiguration's MainAdNetwork, so DefaultRemoteSettings (the in-app
+        /// AdsSettings) and Firebase → Remote → ClipboardJson carry the key. Left empty: the reader
+        /// takes an empty value as "no MainAdNetwork", so the in-app default never changes a device.
+        /// </summary>
+        private const string JsonField = "public string MainAdNetwork;";
+
+        /// <summary>The field's tooltip, which also marks it as the tool's.</summary>
+        private const string JsonFieldTooltip = "[Tooltip(\"MainAdNetwork: set it in Firebase's AdsSettings";
+
+        private const string JsonFieldLines =
+            "        " + JsonFieldTooltip + " (Unassigned, MAX or Metica), not here. Leave it empty: a value here is saved on every fetch while Firebase has no AdsSettings.\")]\n" +
+            "        " + JsonField;
 
         /// <summary>PersistRemoteToggles' one line, which hands over to PersistMainAdNetwork.</summary>
         internal static string CallStatement(RemoteSwitchSource source) =>
@@ -333,6 +452,8 @@ namespace GameDistrict.MeticaIntegrationTools
                     if (converting) break;
 
                     if (!SourcePatcher.Contains(Path, ReaderDeclaration(source))) missing.Add("PersistMainAdNetwork method");
+                    if (source == RemoteSwitchSource.Json && !SourcePatcher.Contains(MeticaPaths.RemoteConfiguration, JsonField))
+                        missing.Add("RemoteConfiguration.MainAdNetwork — so DefaultRemoteSettings and Firebase → Remote → ClipboardJson carry the key");
                     if (form != RemoteSwitchForm.Both || !wantBoth) break;
 
                     if (!SourcePatcher.Contains(Path, OldKeyCall(source))) missing.Add("PersistMainAdNetwork's call to EarlierUseMetica");
@@ -405,6 +526,7 @@ namespace GameDistrict.MeticaIntegrationTools
                         "add a PersistRemoteToggles method that calls " + CallStatement(source));
                     AddReader(log, source);
                     if (targetForm == RemoteSwitchForm.Both) AddOldKey(log, source);
+                    if (source == RemoteSwitchSource.Json) AddJsonField(log);
                     break;
                 }
 
@@ -429,7 +551,9 @@ namespace GameDistrict.MeticaIntegrationTools
 
                     Run(log, "PersistRemoteToggles saves the remote MainAdNetwork", RewriteOldLines(source), Path,
                         "in PersistRemoteToggles, replace the lines that save UseMetica / MainAdNetwork with " + CallStatement(source));
-                    if (targetForm == RemoteSwitchForm.Both && SourcePatcher.Contains(Path, CallStatement(source))) AddOldKey(log, source);
+                    if (!SourcePatcher.Contains(Path, CallStatement(source))) break;
+                    if (targetForm == RemoteSwitchForm.Both) AddOldKey(log, source);
+                    if (source == RemoteSwitchSource.Json) AddJsonField(log);
                     break;
                 }
 
@@ -445,6 +569,10 @@ namespace GameDistrict.MeticaIntegrationTools
                     if (wantBoth) AddOldKey(log, source);
                     else if (HasOldKey() && RemoveOldKey(source))
                         log.Add($"{Path}: the old UseMetica is no longer read ({NewLabel})");
+
+                    if (source == RemoteSwitchSource.Json) AddJsonField(log);
+                    else if (RemoveJsonField())
+                        log.Add($"{MeticaPaths.RemoteConfiguration}: MainAdNetwork removed — the value is a Firebase parameter now, not in AdsSettings");
                     break;
                 }
             }
@@ -481,6 +609,29 @@ namespace GameDistrict.MeticaIntegrationTools
             Run(log, "EarlierUseMetica method",
                 SourcePatcher.InsertBeforeLine(Path, OldKeyDeclaration(source), Anchor, OldKeyBlock(source)),
                 Path, "add the EarlierUseMetica method to RemoteConfigManager");
+        }
+
+        /// <summary>
+        /// JSON: RemoteConfiguration's empty MainAdNetwork — after the UseMetica bool when there
+        /// is one, so it lands in the same place whichever went in first.
+        /// </summary>
+        private static void AddJsonField(List<string> log)
+        {
+            var path = MeticaPaths.RemoteConfiguration;
+            Run(log, "RemoteConfiguration.MainAdNetwork",
+                SourcePatcher.InsertAfterLine(path, JsonField,
+                    SourcePatcher.Contains(path, RemoteFlag) ? RemoteFlag : "NextInterstitialDelay", JsonFieldLines),
+                path, "add an empty field: public string MainAdNetwork;");
+        }
+
+        /// <summary>The tool's MainAdNetwork field, once the value is a parameter. True when it went.</summary>
+        private static bool RemoveJsonField()
+        {
+            var path = MeticaPaths.RemoteConfiguration;
+            if (!SourcePatcher.Contains(path, JsonFieldTooltip)) return false;
+            SourcePatcher.RemoveLinesContaining(path, JsonFieldTooltip);
+            SourcePatcher.RemoveLinesContaining(path, JsonField);
+            return true;
         }
 
         /// <summary>

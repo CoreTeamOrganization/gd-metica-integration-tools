@@ -30,7 +30,9 @@ namespace GameDistrict.MeticaIntegrationTools
             "casing), saved after each fetch — \"Unassigned\" takes a device back out of the test, a value that is " +
             "none of the three is refused with an error log, and without it nothing is saved, so users outside the " +
             "test stay as they are. Remote value: where it is in Firebase — a Parameter of its own, or a field of " +
-            "the AdsSettings JSON — always asked before the switch is written. Remote switch: a project that already " +
+            "the AdsSettings JSON — always asked before the switch is written; with the JSON, RemoteConfiguration also gets " +
+            "an empty MainAdNetwork field, so DefaultRemoteSettings and ClipboardJson carry the key (leave it empty: it " +
+            "is the in-app AdsSettings). Remote switch: a project that already " +
             "has the old code (it reads only \"UseMetica\": this tool's earlier patch, or GD SDK 6.2.1+'s own) is " +
             "asked, never decided for — Keep both (MainAdNetwork, and the old UseMetica when it's missing: for a " +
             "game already live on UseMetica) or Implement new (MainAdNetwork only); a first-time integration gets " +
@@ -187,17 +189,35 @@ namespace GameDistrict.MeticaIntegrationTools
             }
 
             // What the developer has to do about the remote switch comes first: pick, or convert.
-            var remoteSwitchTodo = RemoteSwitchTodo(remoteSwitch, remoteSource);
+            var remoteSwitchTodo = RemoteSwitchTodo();
             if (remoteSwitchTodo != null) result.Problem(remoteSwitchTodo);
 
             // One count up front; the list itself goes under "Why?" as the extra problems.
             // The direct-invoke rule and the Adjust ad source count as patches too, and the
-            // remote switch as three (the subscription, PersistRemoteToggles, PersistMainAdNetwork).
-            result.Problem($"{missing.Count} of {checks.Length + 4 + 3 + (ConsentListIsFixed ? 1 : 0)} patches missing.");
+            // remote switch as three (the subscription, PersistRemoteToggles, PersistMainAdNetwork),
+            // and four from the JSON (RemoteConfiguration.MainAdNetwork).
+            var jsonField = (_remoteSource ?? remoteSource) == RemoteSwitchSource.Json ? 1 : 0;
+            result.Problem($"{missing.Count} of {checks.Length + 4 + 3 + jsonField + (ConsentListIsFixed ? 1 : 0)} patches missing.");
             foreach (var what in missing)
                 result.Problem($"Missing: {what}");
 
             return result.Seal();
+        }
+
+        /// <summary>
+        /// Why the remote switch can't go in on its own yet, or null when it can: it saves
+        /// MonetizationPreferences.MainAdNetwork (the enum and the preference) and AdsManager has
+        /// to read it — the Ads integration's patch steps put those in.
+        /// </summary>
+        internal static string RemoteSwitchBlocker()
+        {
+            if (MeticaPaths.RuntimeScripts == null) return "GD SDK not found.";
+            if (!RemoteSwitchPatch.Present) return "RemoteConfigManager.cs not found in the GD SDK.";
+            if (!SourcePatcher.Contains(MeticaPaths.Preferences, MarkerEnum) || !SourcePatcher.Contains(MeticaPaths.Preferences, MarkerPreference))
+                return "MonetizationPreferences has no MainAdNetwork yet — run the Ads integration's \"Patch the existing SDK files\" step first.";
+            if (!SourcePatcher.Contains(MeticaPaths.AdsManager, MainAdNetworkRead))
+                return "AdsManager doesn't read MainAdNetwork yet (it reads the old UseMetica, or a build-time flag) — run the Ads integration's patch steps first.";
+            return null;
         }
 
         /// <summary>The old line is there and its replacement's marker isn't — what ReplaceFirst would still change.</summary>
@@ -219,80 +239,14 @@ namespace GameDistrict.MeticaIntegrationTools
         /// </summary>
         private RemoteSwitchSource? _remoteSource;
 
-        /// <summary>
-        /// The one line about the remote switch the developer has to act on: what to pick, or the
-        /// conversion the dropdowns ask for. Null when there is nothing.
-        /// </summary>
-        private string RemoteSwitchTodo(RemoteSwitchForm form, RemoteSwitchSource? source)
-        {
-            const string where = "where the remote value is (" + RemoteSwitchPatch.ParameterLabel + " or " + RemoteSwitchPatch.JsonLabel + ")";
-            const string which = RemoteSwitchPatch.KeepBothLabel + " or " + RemoteSwitchPatch.NewLabel;
+        /// <summary>The one line about the remote switch the developer has to act on; null when there is nothing.</summary>
+        private string RemoteSwitchTodo() => RemoteSwitchPatch.Todo(_remoteSwitch, _remoteSource, ActionLabel);
 
-            switch (form)
-            {
-                case RemoteSwitchForm.None:
-                    return _remoteSource == null ? $"Pick {where} in Firebase below, then Apply patches." : null;
-
-                case RemoteSwitchForm.Old:
-                    var picks = new[] { _remoteSwitch == null ? which : null, _remoteSource == null ? where : null }
-                        .Where(pick => pick != null).ToList();
-                    return picks.Count == 0 ? null
-                        : $"Old remote switch code found — it reads only UseMetica. Pick {string.Join(", and ", picks)} below, then Apply patches.";
-
-                default:
-                    var changes = new List<string>();
-                    if (_remoteSwitch != null && _remoteSwitch != form)
-                        changes.Add($"{RemoteSwitchPatch.Label(form)} → {RemoteSwitchPatch.Label(_remoteSwitch.Value)}");
-                    if (_remoteSource != null && source != null && _remoteSource != source)
-                        changes.Add($"{RemoteSwitchPatch.Label(source.Value)} → {RemoteSwitchPatch.Label(_remoteSource.Value)}");
-                    return changes.Count == 0 ? null
-                        : $"Convert the remote switch: {string.Join(", ", changes)}. Apply patches to convert, or set the dropdown back.";
-            }
-        }
-
-        /// <summary>
-        /// Two dropdowns. "Remote switch" — Keep both or Implement new — once there is UseMetica
-        /// code (the old code, or the tool's switch); a project where the switch was never
-        /// integrated reads MainAdNetwork only, with no question. "Remote value" — Parameter or
-        /// JSON — always. Before the switch is written they start on "Pick one…"; once it is in
-        /// place they show what it is, and picking the other converts it.
-        /// </summary>
-        internal override IEnumerable<StepControl> Controls(VerifyResult result)
-        {
-            if (!RemoteSwitchPatch.Present) yield break;
-
-            const string pickOne = "Pick one…";
-            var form = RemoteSwitchPatch.Form();
-            var source = RemoteSwitchPatch.Source();
-            var formCaption = RemoteSwitchPatch.KeepBothSummary + "\n" + RemoteSwitchPatch.NewSummary;
-            var sourceCaption = RemoteSwitchPatch.ParameterSummary + "\n" + RemoteSwitchPatch.JsonSummary;
-
-            if (form == RemoteSwitchForm.Old)
-                yield return new StepChoice("Remote switch",
-                    new[] { pickOne, RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
-                    _remoteSwitch == RemoteSwitchForm.Both ? 1 : _remoteSwitch == RemoteSwitchForm.New ? 2 : 0,
-                    index => _remoteSwitch = index == 1 ? RemoteSwitchForm.Both : index == 2 ? RemoteSwitchForm.New : (RemoteSwitchForm?)null,
-                    formCaption);
-            else if (form != RemoteSwitchForm.None)
-                yield return new StepChoice("Remote switch",
-                    new[] { RemoteSwitchPatch.KeepBothLabel, RemoteSwitchPatch.NewLabel },
-                    (_remoteSwitch ?? form) == RemoteSwitchForm.Both ? 0 : 1,
-                    index => _remoteSwitch = index == 0 ? RemoteSwitchForm.Both : RemoteSwitchForm.New,
-                    formCaption);
-
-            if (source == null)
-                yield return new StepChoice("Remote value",
-                    new[] { pickOne, RemoteSwitchPatch.ParameterLabel, RemoteSwitchPatch.JsonLabel },
-                    _remoteSource == RemoteSwitchSource.Parameter ? 1 : _remoteSource == RemoteSwitchSource.Json ? 2 : 0,
-                    index => _remoteSource = index == 1 ? RemoteSwitchSource.Parameter : index == 2 ? RemoteSwitchSource.Json : (RemoteSwitchSource?)null,
-                    sourceCaption);
-            else
-                yield return new StepChoice("Remote value",
-                    new[] { RemoteSwitchPatch.ParameterLabel, RemoteSwitchPatch.JsonLabel },
-                    (_remoteSource ?? source) == RemoteSwitchSource.Parameter ? 0 : 1,
-                    index => _remoteSource = index == 0 ? RemoteSwitchSource.Parameter : RemoteSwitchSource.Json,
-                    sourceCaption);
-        }
+        /// <summary>The two remote switch dropdowns (<see cref="RemoteSwitchPatch.Choices"/>).</summary>
+        internal override IEnumerable<StepControl> Controls(VerifyResult result) =>
+            RemoteSwitchPatch.Present
+                ? RemoteSwitchPatch.Choices(_remoteSwitch, _remoteSource, form => _remoteSwitch = form, source => _remoteSource = source)
+                : Enumerable.Empty<StepControl>();
 
         public override void Apply()
         {

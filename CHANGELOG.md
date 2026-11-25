@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Remote switch, JSON (AdsSettings): `RemoteConfiguration` gets an empty `MainAdNetwork` string field,
+  so `DefaultRemoteSettings` and Firebase → Remote → ClipboardJson carry the key. Left empty (its
+  tooltip says so): the in-app `AdsSettings` must not change a device. Converting to Parameter removes
+  it; a JSON project patched earlier shows it as missing in the patch step, and Apply adds it.
+- New **Remote Switch** window (GameDistrict → Metica → Remote Switch…, and the window's ⋮ menu):
+  the remote switch on its own. GD SDK: the patch step's two dropdowns and patch, nothing else — it
+  refuses, saying why, until the MainAdNetwork preference and AdsManager's read are in. Custom SDK:
+  updates `MeticaRemoteConfig.cs` to the tool's version (confirm, backup) and gives the fetch-handler
+  lines for Parameter / JSON with a Copy button. The dropdown code moved into `RemoteSwitchPatch`, shared.
 - Standalone: the generated `OnMeticaAdRevenue` stub now says `info.Format` is the
   `AdFormat` enum (Interstitial, Rewarded, Banner, MRec) and must not be compared to MAX's
   `"INTER"` / `"BANNER"` strings; the integration review flags that mistake. A custom SDK game

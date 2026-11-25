@@ -77,6 +77,19 @@ cover all of the list below.
       converts back. The same for Keep both ↔ Implement new, and both at once.
 - [ ] A PersistMainAdNetwork edited by hand + a conversion picked: Apply reports "isn't converted",
       the file is unchanged.
+- [ ] JSON: RemoteConfiguration has `public string MainAdNetwork;` with its tooltip (after
+      `UseMetica` when there); DefaultRemoteSettings shows it empty; Firebase → Remote →
+      ClipboardJson has `"MainAdNetwork":""`; with no AdsSettings in Firebase the device logs
+      "Remote AdsSettings has no MainAdNetwork…" and keeps its value. Convert to Parameter: the
+      field goes. A JSON project patched before this: the step lists it missing; Apply adds it.
+- [ ] Remote Switch window, GD SDK: opens from GameDistrict → Metica → Remote Switch… and from ⋮.
+      On a project without the patch step done it says why and Apply is off. Otherwise the same
+      dropdowns as the step; Apply writes / converts the switch only (git diff: RemoteConfigManager
+      and RemoteConfiguration only); the main window's step agrees afterwards.
+- [ ] Remote Switch window, custom SDK: no runtime → says so. An older MeticaRemoteConfig.cs →
+      "isn't this tool's version" → Update asks, backs up, replaces. Pick Parameter / JSON (and Keep
+      both for Parameter) → the snippet; Copy; pasted into the game's fetch handler it compiles with
+      `using Firebase.RemoteConfig;` and logs "Remote switch stored: MainAdNetwork = …".
 - [ ] From the bool preference (GD SDK 6.2.1+, the first tool patch): every user starts Unassigned.
 - [ ] Compare with original GD SDK: RemoteConfigManager / RemoteConfiguration show as the tool's
       on all four (Keep both / Implement new × Parameter / JSON).
