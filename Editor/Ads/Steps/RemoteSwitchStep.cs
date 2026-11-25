@@ -23,6 +23,10 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private const string RemoteRead = PatchCoreFilesStep.MainAdNetworkRead;
 
+        /// <summary>The build-time flag AdsManager still reads (v6.0.0–v6.2.0), or null.</summary>
+        internal static string LegacyFlag() =>
+            LegacyFlags.FirstOrDefault(flag => SourcePatcher.Contains(MeticaPaths.AdsManager, flag));
+
         public override string Title => "Remote Metica switch";
 
         public override string Summary => "Read the Metica on/off switch from remote config.";

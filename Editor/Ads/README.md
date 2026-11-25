@@ -189,13 +189,23 @@ doesn't check where `AdsSettings` came from — a value in the asset would be sa
 fetch. Empty reads as "no MainAdNetwork", so nothing changes. Converting to **Parameter** removes the
 field; a JSON project patched before this shows it as missing, and Apply patches adds it.
 
-**The remote switch on its own.** **GameDistrict → Metica → Remote Switch…**, or **Remote switch…** in
-the window's ⋮ menu, opens a small window for just this, without walking the Ads integration:
+**The remote switch on its own.** The **Remote Switch** card on Home, **GameDistrict → Metica →
+Remote Switch…**, or **Remote switch…** in the window's ⋮ menu opens a small window for just this,
+without walking the Ads integration:
 
 - **GD SDK games:** the same two dropdowns and the same patch as the step — write, keep, or convert
   the switch — and nothing else. It needs what the patch step puts around the switch (the
-  `MainAdNetwork` enum and preference, `AdsManager` reading it); without that it says which, and
-  changes nothing.
+  `MainAdNetwork` enum and preference, `AdsManager` reading it).
+  - **GD SDK 6.x without the Ads integration** (stock 6.0.0–6.2.5: Metica is there, but the network
+    comes from a build-time flag, or from the `UseMetica` bool on 6.2.1+): **Prepare** adds just
+    that — the preference and its enum, and `AdsManager` reading `MainAdNetwork` and sending it in
+    `GameData` (to Firebase, AppMetrica and Metica) — with the very edits the Ads integration
+    makes (on 6.0.0–6.2.0 also the dead `SDKConfiguration` flag goes). Then the dropdowns show.
+    Every user starts `Unassigned` (AppLovin) until a fetch carrying the switch lands; it applies
+    from the next launch. On 6.2.1+ the old `UseMetica` remote code is there, so the switch asks
+    **Keep both** or **Implement new** — Keep both while builds on `UseMetica` are live.
+  - Anywhere else without them (v5 before the Ads integration, an `AdsManager` the tool doesn't
+    know): it says which, and changes nothing.
 - **Custom SDK games:** the game's own fetch code calls `MeticaRemoteConfig`, and the tool never
   edits it. The window brings `Assets/MeticaAds/MeticaRemoteConfig.cs` up to this tool's version
   (after a confirm, with a backup in `MeticaIntegrationBackups/`) and, for the picked **Remote value**
@@ -372,8 +382,11 @@ the tool ever writes. `IAsyncAdNetworkService` only existed because Metica shipp
 | Project | Has Metica | Has async | Metica switch | What it needs |
 |---|---|---|---|---|
 | v5.0.0 – v5.5.0 | no | no | — | the full install (steps 1–3, 5–8) |
-| v6.0.0 – v6.2.0 | yes | yes | build-time | the remote switch (step 4) |
-| v6.2.1 – v6.2.4 | yes | yes | remote | nothing — every step verifies as already done |
+| v6.0.0 – v6.2.0 | yes | yes | build-time | the remote switch (step 4), and `MainAdNetwork` (patch step) |
+| v6.2.1 – v6.2.5 | yes | yes | remote (`UseMetica` bool) | `AdsManager` moved to `MainAdNetwork`, and the switch (patch step) |
+
+For only the remote switch on these, the **Remote Switch** window's **Prepare** does the
+`MainAdNetwork` part on its own (see "The remote switch on its own").
 
 The tool's `MeticaInitializer` is for v5 only: the wrapper step skips it when the project
 already declares a `MeticaInitializer` (v6.2.x ships `Analytics.MeticaInitializer`) or has an

@@ -9,7 +9,7 @@ using UnityEngine.UIElements;
 namespace GameDistrict.MeticaIntegrationTools
 {
     /// <summary>
-    /// The one Metica Integration window: Home picks a flow (Ads or Analytics Integration),
+    /// The one Metica Integration window: Home picks a flow (Ads or Analytics Integration, or the Remote Switch window),
     /// then the flow runs one step per screen. Built with UI Toolkit against
     /// Editor/UI/MeticaTheme.uss; the flows themselves (<see cref="MeticaFlow"/>) hold no UI.
     ///
@@ -400,7 +400,7 @@ namespace GameDistrict.MeticaIntegrationTools
         {
             var intro = El();
             intro.Add(Text("What do you want to set up?", "mi-home-title"));
-            intro.Add(Text("Two separate jobs. Pick one — you can come back to the other.", "mi-home-sub"));
+            intro.Add(Text("Separate jobs. Pick one — you can come back to the others.", "mi-home-sub"));
             _content.Add(intro);
 
             if (!_installRead)
@@ -436,6 +436,15 @@ namespace GameDistrict.MeticaIntegrationTools
                     ? $"GD Monetization SDK {GdSdkVersion.Reported()} — {_analytics.Steps.Length} steps"
                     : $"Custom SDK — {_analytics.Steps.Length} steps"),
                 notCovered == null, () => ShowPage(Page.Analytics)));
+
+            (string text, bool ok) remoteSwitch;
+            try { remoteSwitch = RemoteSwitchWindow.HomeCheck(); }
+            catch (Exception e) { Debug.LogException(e); remoteSwitch = ("Couldn't read the project — see the Console", false); }
+            var remoteCard = Card(MiIcon.Kind.Toggle, "Remote Switch", "Open",
+                "Let Firebase pick each user's ad network — MainAdNetwork = Unassigned, MAX or Metica — without the full Ads integration.",
+                remoteSwitch.text, remoteSwitch.ok, RemoteSwitchWindow.Open, out _);
+            remoteCard.SetEnabled(!_busy);
+            _content.Add(remoteCard);
         }
 
         /// <summary>
@@ -538,30 +547,10 @@ namespace GameDistrict.MeticaIntegrationTools
         private Button FlowCard(MeticaFlow flow, MiIcon.Kind icon, string description, string check, bool checkOk,
             Action open)
         {
-            var card = new Button(open).With("mi-card");
+            var card = Card(icon, flow.Name, !flow.Started ? "Start" : flow.Finished ? "Review" : "Continue",
+                description, check, checkOk, open, out var body);
             // A flow with nothing to run here (Analytics on GD SDK 6.2+) stays shut.
             card.SetEnabled(!_busy && flow.Steps.Length > 0);
-
-            var tile = El("mi-card__tile");
-            tile.Add(new MiIcon(icon, 1.75f, "mi-icon--24"));
-            card.Add(tile);
-
-            var body = El("mi-card__body");
-            var head = El("mi-card__head");
-            head.Add(Text(flow.Name, "mi-card__title"));
-            var cta = El("mi-card__cta");
-            cta.Add(Text(!flow.Started ? "Start" : flow.Finished ? "Review" : "Continue"));
-            cta.Add(new MiIcon(MiIcon.Kind.ChevronRight, 2f));
-            head.Add(cta);
-            body.Add(head);
-
-            body.Add(Text(description, "mi-card__desc"));
-
-            var checkRow = El("mi-card__check");
-            if (!checkOk) checkRow.AddToClassList("mi-card__check--missing");
-            checkRow.Add(new MiIcon(checkOk ? MiIcon.Kind.Check : MiIcon.Kind.Error, 2f));
-            checkRow.Add(Text(check));
-            body.Add(checkRow);
 
             var total = flow.Steps.Length;
             if (flow.Started)
@@ -582,6 +571,36 @@ namespace GameDistrict.MeticaIntegrationTools
             body.Add(Text(!flow.Started ? "Not started"
                 : flow.Finished ? skipped == 0 ? $"All {total} done" : $"All done — {flow.DoneCount} done, {skipped} skipped"
                 : $"{flow.DoneCount} of {total} done", "mi-card__status"));
+
+            return card;
+        }
+
+        /// <summary>A Home card: icon tile, title with its call to action, description and check line. <paramref name="body"/> takes anything more.</summary>
+        private static Button Card(MiIcon.Kind icon, string title, string cta, string description, string check, bool checkOk,
+            Action open, out VisualElement body)
+        {
+            var card = new Button(open).With("mi-card");
+
+            var tile = El("mi-card__tile");
+            tile.Add(new MiIcon(icon, 1.75f, "mi-icon--24"));
+            card.Add(tile);
+
+            body = El("mi-card__body");
+            var head = El("mi-card__head");
+            head.Add(Text(title, "mi-card__title"));
+            var action = El("mi-card__cta");
+            action.Add(Text(cta));
+            action.Add(new MiIcon(MiIcon.Kind.ChevronRight, 2f));
+            head.Add(action);
+            body.Add(head);
+
+            body.Add(Text(description, "mi-card__desc"));
+
+            var checkRow = El("mi-card__check");
+            if (!checkOk) checkRow.AddToClassList("mi-card__check--missing");
+            checkRow.Add(new MiIcon(checkOk ? MiIcon.Kind.Check : MiIcon.Kind.Error, 2f));
+            checkRow.Add(Text(check));
+            body.Add(checkRow);
 
             card.Add(body);
             return card;

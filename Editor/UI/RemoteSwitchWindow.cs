@@ -15,8 +15,8 @@ namespace GameDistrict.MeticaIntegrationTools
     /// <para><b>GD SDK games:</b> the same two dropdowns and patch as the "Patch the existing SDK
     /// files" step (<see cref="RemoteSwitchPatch"/>), so it writes, converts and keeps the switch
     /// exactly as the step would — and nothing else. It needs what the step adds around the switch
-    /// (the MainAdNetwork preference, AdsManager reading it); without that it says so and changes
-    /// nothing.</para>
+    /// (the MainAdNetwork preference, AdsManager reading it). On GD SDK 6.x, which has Metica but
+    /// not those, Prepare adds just them; anywhere else it says so and changes nothing.</para>
     ///
     /// <para><b>Custom SDK games:</b> the game's own fetch code calls MeticaRemoteConfig, and the
     /// tool never edits it. This brings MeticaRemoteConfig.cs up to the tool's version (after a
@@ -55,6 +55,24 @@ namespace GameDistrict.MeticaIntegrationTools
 
         private void OnFocus() => Rebuild();
 
+        /// <summary>The Home card's check line: where this project stands, and whether the window can act on it.</summary>
+        internal static (string text, bool ok) HomeCheck()
+        {
+            if (!MeticaPaths.HasGDSdk)
+                return MeticaPaths.FileExists(RemoteConfigPath)
+                    ? ("Custom SDK — MeticaRemoteConfig and the lines for your fetch handler", true)
+                    : ("Custom SDK — needs the Metica ads runtime first (Ads integration)", false);
+
+            var sdk = "GD Monetization SDK " + (GdSdkVersion.Reported() is string v ? v + " " : "");
+            if (PatchCoreFilesStep.RemoteSwitchBlocker() == null)
+                return (sdk + "— remote switch: " + RemoteSwitchPatch.Describe().TrimEnd('.'), true);
+
+            var prep = PatchCoreFilesStep.RemoteSwitchPrep();
+            return prep != null && prep.Count > 0
+                ? (sdk + "— Prepare first, then the switch", true)
+                : (sdk + "— needs the Ads integration first", false);
+        }
+
         public void CreateGUI()
         {
             _root = rootVisualElement;
@@ -79,7 +97,7 @@ namespace GameDistrict.MeticaIntegrationTools
             var head = El();
             head.Add(Text("Remote switch", "mi-title"));
             head.Add(Text("Firebase picks each user's ad network: MainAdNetwork = Unassigned, MAX or Metica. " +
-                          "Only the remote switch — nothing else in the project changes.", "mi-summary"));
+                          "Only the remote switch and what it needs — nothing else in the project changes.", "mi-summary"));
             _content.Add(head);
 
             try
@@ -100,6 +118,13 @@ namespace GameDistrict.MeticaIntegrationTools
         private void BuildGdSdk()
         {
             var blocker = PatchCoreFilesStep.RemoteSwitchBlocker();
+            var prep = blocker == null ? null : PatchCoreFilesStep.RemoteSwitchPrep();
+            if (prep != null && prep.Count > 0)
+            {
+                BuildPrepare(prep);
+                return;
+            }
+
             if (blocker != null)
             {
                 _content.Add(Box("mi-warning", MiIcon.Kind.Error, blocker));
@@ -140,6 +165,56 @@ namespace GameDistrict.MeticaIntegrationTools
 
             _content.Add(Text("Check on a device: the logs show \"Remote Switch saved: Metica as pref\" after the fetch, " +
                               "then \"Using Metica as main AdNetwork (Metica)\" at ads init.", "mi-caption"));
+        }
+
+        /// <summary>
+        /// GD SDK 6.x without the Ads integration's patches: the switch would save MainAdNetwork
+        /// with nothing to read it. Prepare adds just that — the preference, its enum, and
+        /// AdsManager reading it — then the dropdowns show.
+        /// </summary>
+        private void BuildPrepare(List<string> prep)
+        {
+            var legacy = RemoteSwitchStep.LegacyFlag() != null;
+            _content.Add(Line($"GD Monetization SDK {GdSdkVersion.Reported()} picks the network " +
+                              (legacy ? "with a build-time flag" : "from the old UseMetica bool") +
+                              ". The switch saves MainAdNetwork, so first this project needs:"));
+
+            var list = El();
+            foreach (var what in prep) list.Add(Text("• " + what, "mi-caption"));
+            _content.Add(list);
+
+            _content.Add(Text("Prepare makes only these edits, the same as the Ads integration's — in MonetizationPreferences.cs " +
+                              "and AdsManager.cs" + (legacy ? ", and SDKConfiguration.cs" : "") +
+                              "; originals are backed up to MeticaIntegrationBackups/. Every user starts Unassigned (AppLovin) " +
+                              "until a fetch carrying the switch lands, and it applies from the next launch.", "mi-caption"));
+
+            var buttons = El("mi-row");
+            buttons.Add(IconTextButton(MiIcon.Kind.Check, "Prepare", PrepareGdSdk, "mi-btn--primary"));
+            buttons.Add(OpenIntegrationButton());
+            _content.Add(buttons);
+
+            ShowLastLog();
+        }
+
+        private void PrepareGdSdk()
+        {
+            NextTick(() =>
+            {
+                var log = new List<string>();
+                try
+                {
+                    log = PatchCoreFilesStep.PrepareRemoteSwitch();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e);
+                    log.Add("Failed — see the Console: " + e.Message);
+                }
+
+                MeticaIntegrationLog.Record(LogTitle + " — prepare", log);
+                AssetDatabase.Refresh();
+                Finish(log);
+            });
         }
 
         private void ApplyGdSdk()

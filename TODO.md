@@ -86,6 +86,13 @@ cover all of the list below.
       On a project without the patch step done it says why and Apply is off. Otherwise the same
       dropdowns as the step; Apply writes / converts the switch only (git diff: RemoteConfigManager
       and RemoteConfiguration only); the main window's step agrees afterwards.
+- [ ] Remote Switch window, stock GD SDK 6.0.x / 6.2.0 / 6.2.1+ (no Ads integration): lists what
+      Prepare adds; Prepare → git diff only MonetizationPreferences, AdsManager (and SDKConfiguration
+      on 6.0–6.2.0); compiles; the dropdowns show (6.2.1+: Keep both / Implement new asked). On a
+      device: "Using AppLovin as main AdNetwork (Unassigned)" first, GameData with MainAdNetwork in
+      AppMetrica; after a fetch with MainAdNetwork = Metica and a relaunch, Metica.
+- [ ] Home: third card "Remote Switch" opens the window; its line matches the project (custom SDK,
+      Prepare first, needs the Ads integration, or the switch's state) and updates after Apply.
 - [ ] Remote Switch window, custom SDK: no runtime → says so. An older MeticaRemoteConfig.cs →
       "isn't this tool's version" → Update asks, backs up, replaces. Pick Parameter / JSON (and Keep
       both for Parameter) → the snippet; Copy; pasted into the game's fetch handler it compiles with

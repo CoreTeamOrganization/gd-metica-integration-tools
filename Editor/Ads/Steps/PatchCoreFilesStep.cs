@@ -220,6 +220,60 @@ namespace GameDistrict.MeticaIntegrationTools
             return null;
         }
 
+        /// <summary>
+        /// What the remote switch needs around it that this GD SDK 6.x project doesn't have yet,
+        /// for the Remote Switch window to add on its own (<see cref="PrepareRemoteSwitch"/>) — or
+        /// null when it can't be added that way: not 6.x, no Metica network in AdsManager, or a
+        /// network switch the tool doesn't know. Empty: nothing is missing.
+        /// </summary>
+        internal static List<string> RemoteSwitchPrep()
+        {
+            if (MeticaPaths.RuntimeScripts == null || !RemoteSwitchPatch.Present) return null;
+
+            var version = GdSdkVersion.Parse(GdSdkVersion.Reported());
+            if (version == null || version.Major != 6) return null;
+
+            var ads = MeticaPaths.AdsManager;
+            if (!SourcePatcher.Contains(ads, MarkerAdsManager)) return null;
+
+            var legacy = RemoteSwitchStep.LegacyFlag();
+            var reads = SourcePatcher.Contains(ads, MainAdNetworkRead);
+            if (!reads && legacy == null && !SourcePatcher.Contains(ads, OldAdsManagerRead)) return null;
+
+            var missing = new List<string>();
+            if (!SourcePatcher.Contains(MeticaPaths.Preferences, MarkerPreference))
+                missing.Add("MonetizationPreferences.MainAdNetwork — where the switch's value is saved");
+            if (!SourcePatcher.Contains(MeticaPaths.Preferences, MarkerEnum))
+                missing.Add("the MainAdNetwork enum (Unassigned / MAX / Metica)");
+            if (!reads)
+                missing.Add(legacy != null
+                    ? $"AdsManager reads MainAdNetwork at ads init in place of the build-time {legacy}, and sends it in GameData; " +
+                      "SDKConfiguration's dead field goes"
+                    : "AdsManager reads MainAdNetwork at ads init in place of the UseMetica bool");
+            if (SourcePatcher.Contains(ads, OldGameData))
+                missing.Add("AdsManager's GameData event sends MainAdNetwork in place of UseMetica");
+            if (reads && OldFormWithoutMarker(ads, OldMainNetworkLog, MarkerMainNetworkLog))
+                missing.Add("AdsManager's \"as main AdNetwork\" log shows MainAdNetwork");
+            return missing;
+        }
+
+        /// <summary>
+        /// Adds what <see cref="RemoteSwitchPrep"/> lists, with the same edits the Ads integration
+        /// makes (this step's preference and AdsManager patches, and the Remote Metica switch step
+        /// on 6.0.0–6.2.0) — nothing else.
+        /// </summary>
+        internal static List<string> PrepareRemoteSwitch()
+        {
+            var log = new List<string>();
+            PatchPreferences(log);
+
+            var path = MeticaPaths.AdsManager;
+            SourcePatcher.EnsureUsing(path, "using System.Collections.Generic;");
+            if (RemoteSwitchStep.LegacyFlag() != null) log.AddRange(RemoteSwitchStep.ApplyPatches());
+            PatchAdsManagerSwitch(log);
+            return log;
+        }
+
         /// <summary>The old line is there and its replacement's marker isn't — what ReplaceFirst would still change.</summary>
         private static bool OldFormWithoutMarker(string path, string oldForm, string marker) =>
             SourcePatcher.Contains(path, oldForm) && !SourcePatcher.Contains(path, marker);
@@ -425,6 +479,17 @@ namespace GameDistrict.MeticaIntegrationTools
                 path,
                 "build an AdNetworkController for the four Metica units and pick it when " +
                 "MonetizationPreferences.MainAdNetwork is Metica");
+
+            PatchAdsManagerSwitch(log);
+        }
+
+        /// <summary>
+        /// AdsManager's network switch moved from the UseMetica bool to MainAdNetwork (an earlier
+        /// patch, or GD SDK 6.2.1+), its GameData key, and its "which network" log.
+        /// </summary>
+        private static void PatchAdsManagerSwitch(List<string> log)
+        {
+            var path = MeticaPaths.AdsManager;
 
             // Reading the bool (an earlier patch, or GD SDK 6.2.1+): MainAdNetwork instead.
             if (SourcePatcher.Contains(path, OldAdsManagerRead))

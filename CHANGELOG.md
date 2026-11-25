@@ -6,6 +6,12 @@
   so `DefaultRemoteSettings` and Firebase → Remote → ClipboardJson carry the key. Left empty (its
   tooltip says so): the in-app `AdsSettings` must not change a device. Converting to Parameter removes
   it; a JSON project patched earlier shows it as missing in the patch step, and Apply adds it.
+- Remote Switch window, GD SDK 6.x (6.0.0–6.2.5) without the Ads integration: **Prepare** adds only
+  what the switch needs — the `MainAdNetwork` preference and enum, and `AdsManager` reading it (in
+  place of the build-time flag, or of the `UseMetica` bool on 6.2.1+) and sending it in `GameData` —
+  with the Ads integration's own edits, then the switch's dropdowns show. Other projects missing
+  them are still sent to the Ads integration. Home has a third card, **Remote Switch**, that opens
+  the window and says where the project stands. README: the v6 table row for 6.2.1+ said "nothing".
 - New **Remote Switch** window (GameDistrict → Metica → Remote Switch…, and the window's ⋮ menu):
   the remote switch on its own. GD SDK: the patch step's two dropdowns and patch, nothing else — it
   refuses, saying why, until the MainAdNetwork preference and AdsManager's read are in. Custom SDK:

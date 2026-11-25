@@ -22,7 +22,7 @@ namespace GameDistrict.MeticaIntegrationTools
         /// <summary>The Version string MonetizationInitializeOnLoad reports, or null.</summary>
         public static string Reported()
         {
-            if (!MeticaPaths.FileExists(MeticaPaths.InitializeOnLoad)) return null;
+            if (!SourcePatcher.Exists(MeticaPaths.InitializeOnLoad)) return null;
 
             var match = Declared.Match(SourcePatcher.ReadAll(MeticaPaths.InitializeOnLoad));
             return match.Success ? match.Groups[1].Value : null;
